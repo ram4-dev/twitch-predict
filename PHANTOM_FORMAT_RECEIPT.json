@@ -1,0 +1,20 @@
+{
+  "sourceBranch": "feat/phantom-onboarding",
+  "sourceCommit": "8e23f97",
+  "branch": "fix/phantom-message-format",
+  "worktree": "/Users/ramiro/.t3/projects/twitch-predict.fix-phantom-message-format",
+  "cause": "SIWS statement contained non-ASCII accented character rejected by Phantom ABNF parser",
+  "fix": "ASCII login statement; origin, nonce, expiry and Ed25519 verification retained",
+  "checks": {
+    "typecheck": "pass",
+    "lint": "pass",
+    "unit": "22 passed",
+    "build": "pass",
+    "e2e": "7 passed, 1 failed, 4 legacy Solana skipped",
+    "authE2E": "3 passed",
+    "failedE2E": "points.e2e.ts MV3 bet expected 250 but debited 100; reproduced on focused rerun"
+  },
+  "live": "HTTPS server returns corrected message; real Phantom 26.34.0 displays Sign In and Confirm without formatting error; signature left for user",
+  "runtime": "launchctl dev.twitchpredict.bridge now runs this worktree with shared existing data; extension files unchanged",
+  "cleanup": "preserved for resumption; no merge or worktree removal"
+}

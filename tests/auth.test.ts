@@ -6,10 +6,20 @@ import {tmpdir} from 'node:os';
 import {getAddressDecoder} from '@solana/kit';
 import {Points} from '../src/points.js';
 import {Auth} from '../src/auth.js';
+import {parseSignInMessageText,createSignInMessageText} from '@solana/wallet-standard-util';
 import {demoPrediction} from '../src/mirror.js';
 function wallet(){const key=generateKeyPairSync('ed25519');const bytes=key.publicKey.export({format:'der',type:'spki'});return {address:getAddressDecoder().decode(bytes.subarray(-32)),signature:(message:string)=>sign(null,Buffer.from(message),key.privateKey).toString('base64')};}
 async function fixture(run:(p:Points,a:Auth,dir:string,tick:(ms:number)=>void)=>Promise<void>){const dir=await mkdtemp(`${tmpdir()}/phantom-auth-`);let clock=Date.now();try{const p=new Points(dir);await p.load();await run(p,new Auth(p,()=>clock),dir,ms=>{clock+=ms;});}finally{await rm(dir,{recursive:true,force:true});}}
 const origin='https://twitch-predict.localhost:1357';
+test('login message follows SIWS grammar accepted by Phantom, including ASCII statement',()=>fixture(async(_p,a)=>{
+  const w=wallet();const c=a.challenge(w.address,origin);
+  const parsed=parseSignInMessageText(c.message);assert.ok(parsed);
+  assert.equal(parsed.domain,new URL(origin).host);assert.equal(parsed.uri,origin);assert.equal(parsed.address,w.address);
+  assert.match(parsed.statement!,/^[\x20-\x7e]+$/);
+  assert.equal(createSignInMessageText(parsed),c.message);
+  assert.match(parsed.nonce!,/^[a-zA-Z0-9]{8,}$/);
+  assert.equal(Date.parse(parsed.expirationTime!)-Date.parse(parsed.issuedAt!),300000);
+}));
 test('wallet signature identifies one persistent account across sessions without a second welcome grant',()=>fixture(async(p,a,dir)=>{
   const w=wallet();const c=a.challenge(w.address,origin);const first=await a.authenticate(c.challengeId,w.signature(c.message),origin);
   const market=await p.accept(demoPrediction(),true);await p.bet(first.token,market.key,'victory',300,randomUUID());
