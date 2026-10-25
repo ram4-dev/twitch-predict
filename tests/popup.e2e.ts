@@ -36,3 +36,22 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
     await popup.screenshot({path:'test-results/popup-offline.png',fullPage:true});
   } finally {await context.close();await rm(profile,{recursive:true,force:true});}
 });
+
+test('native action popup is 780px wide without resizing the browser window',async()=>{
+  const profile=await mkdtemp(`${tmpdir()}/mirror-native-popup-`);const extension=resolve('extension');
+  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,viewport:null,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+  try {
+    const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
+    // This tab only inspects the separate native action popup through the extension API.
+    const inspector=context.pages()[0];await inspector.goto(`chrome-extension://${id}/popup.html`);
+    const browserSize=await inspector.evaluate(()=>({width:outerWidth,height:outerHeight}));
+    await worker.evaluate(()=> (globalThis as unknown as {chrome:{action:{openPopup():Promise<void>}}}).chrome.action.openPopup());
+    const measure=()=>inspector.evaluate(()=>{
+      const views=(globalThis as unknown as {chrome:{extension:{getViews(options:{type:string}):Window[]}}}).chrome.extension.getViews({type:'popup'});
+      const popup=views[0];
+      return popup?{width:popup.innerWidth,body:popup.document.body.getBoundingClientRect().width,html:popup.document.documentElement.getBoundingClientRect().width,overflow:popup.document.documentElement.scrollWidth>popup.innerWidth}:null;
+    });
+    await expect.poll(measure).toEqual({width:780,body:780,html:780,overflow:false});
+    expect(await inspector.evaluate(()=>({width:outerWidth,height:outerHeight}))).toEqual(browserSize);
+  } finally {await context.close();await rm(profile,{recursive:true,force:true});}
+});

@@ -5,7 +5,7 @@ const extension = resolve('extension');
 const channel = process.argv[2] ?? 'xarola_';
 if (!/^[a-zA-Z0-9_]{1,40}$/.test(channel)) throw new Error('Invalid Twitch channel');
 const context = await chromium.launchPersistentContext(resolve('data/chromium'), {
-  channel: 'chromium', headless: false,
+  channel: 'chromium', headless: false, viewport: null,
   args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
 });
 const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
@@ -20,6 +20,7 @@ const result = await dashboard.evaluate(async id => {
 }, extensionId);
 if (!result?.ok) throw new Error('Extension pairing failed');
 const twitch = await context.newPage(); await twitch.goto(`https://www.twitch.tv/${channel}`);
+await worker.evaluate(() => (globalThis as unknown as {chrome:{action:{openPopup():Promise<void>}}}).chrome.action.openPopup());
 console.log(`Chromium abierto con extensión conectada. Canal: ${channel}. Panel: ${base}`);
 process.on('SIGINT', () => { void context.close(); });
 await new Promise<void>(resolve => context.on('close', () => resolve()));

@@ -47,3 +47,11 @@ Se retomó este mismo worktree identificado en el recibo para el ajuste visual d
 Verificación: typecheck, lint, 12 pruebas unitarias, build, E2E de popup (1 prueba) y git diff --check aprobados. Se revisó visualmente test-results/popup-offline.png. El CSS actualizado se carga al cerrar y volver a abrir el popup de la instalación que usa esta carpeta.
 
 Segundo ajuste solicitado: ancho de 680 a 780 px. Typecheck, lint, build, 12 pruebas unitarias y E2E de popup aprobados. Se conserva la distribución de resultados en dos columnas y el alto de 600 px.
+
+## Corrección del ancho del popup nativo
+
+Las verificaciones anteriores abrieron popup.html como pestaña y no demostraban el tamaño del popup nativo. Se reprodujo el fallo abriendo chrome.action.openPopup(): el viewport, html y body medían 254 px pese a width:780px, por max-width:100vw. La ventana anfitriona mantuvo 1200 × 879 px.
+
+Se eliminó ese límite y se fijó width/min-width de html y body en 780 px. La nueva prueba E2E abre el popup nativo mediante chrome.action.openPopup() y lo mide mediante chrome.extension.getViews({type:'popup'}): viewport/html/body de 780 px, sin overflow horizontal y sin cambiar el tamaño de la ventana anfitriona. Las dos E2E de popup, typecheck, lint, 12 unitarias, build y diff --check pasan.
+
+El lanzador de Chrome for Testing usa viewport:null para respetar la ventana y abre el popup nativo tras emparejar y abrir Twitch. Se reinició únicamente el proceso de prueba administrado por este proyecto con el perfil persistente existente para cargar esta corrección.
