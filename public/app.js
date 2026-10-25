@@ -1,93 +1,39 @@
-const $ = selector => document.querySelector(selector);
-let token;
-let busy = false;
-let selectedKey;
-let selectedOutcome;
-let pendingQuote;
-let lastFingerprint = '';
-async function authorize() { if (!token) { const r = await fetch('/api/pair'); if (!r.ok) throw new Error('No se pudo conectar al puente'); token = (await r.json()).token; } return token; }
-async function api(path, body) {
-  const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await authorize()}` }, body: JSON.stringify(body) });
-  const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Falló la operación'); return result;
+import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
+const $=s=>document.querySelector(s);const el=(tag,value,className)=>{const n=document.createElement(tag);if(value!=null)n.textContent=value;if(className)n.className=className;return n;};
+const client=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async token=>localStorage.setItem('pointsToken',token)});
+const forms=new Map();let account,markets=[],token,refreshing=false;
+async function admin(path,body){if(!token){const r=await fetch('/api/pair');if(!r.ok)throw new Error('Abrí el panel local para conectar');token=(await r.json()).token;}return client.request(path,body,token);}
+function card(m){
+  const node=el('article',null,'market-card');node.dataset.key=m.key;const head=el('div',null,'market-heading');const channel=el('a',`@${m.prediction.channel}`);if(!m.demo){channel.href=`https://www.twitch.tv/${m.prediction.channel}`;channel.target='_blank';channel.rel='noopener';}head.append(channel,el('span',m.demo?'Ejemplo de prueba':`Cierre: ${new Date(Date.parse(m.prediction.createdAt)+m.prediction.predictionWindowSeconds*1000).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})}`));node.append(head,el('h3',m.prediction.title),bettingView(m,account,a=>performPointsAction(a,client,refresh),forms));
+  if(m.demo&&!['resolved','void'].includes(m.phase)){const details=el('details',null,'demo-controls');details.append(el('summary','Resolver este ejemplo'));details.append(el('p','Simulá el resultado para probar el cobro. Los mercados reales se resuelven con Twitch.'));for(const o of m.outcomes){const button=el('button',`Dar ganador: ${o.title}`,'secondary');button.onclick=()=>void operate(async()=>{await admin('/api/demo/resolve',{key:m.key,winnerId:o.id});});details.append(button);}const cancel=el('button','Cancelar y reembolsar','secondary');cancel.onclick=()=>void operate(async()=>{await admin('/api/demo/resolve',{key:m.key,winnerId:null});});details.append(cancel);node.append(details);}
+  return node;
 }
-function text(tag, value, className) { const node = document.createElement(tag); node.textContent = value; if (className) node.className = className; return node; }
-async function refresh() {
-  try {
-    const [health, markets] = await Promise.all([fetch('/api/health').then(r => r.json()), fetch('/api/markets').then(r => r.json())]);
-    $('#network').textContent = health.network === 'localnet' ? 'Solana local · fondos de prueba' : 'Solana devnet';
-    $('#wallet').textContent = health.wallet ? `${health.wallet.slice(0,6)}…${health.wallet.slice(-6)}` : 'RPC no disponible'; $('#wallet').title = health.wallet ?? '';
-    $('#balance').textContent = health.balance !== undefined ? `${health.balance.toFixed(3)} SOL` : '—';
-    $('#count').textContent = markets.filter(m => ['open', 'resolved', 'void', 'resolving'].includes(m.phase)).length;
-    $('#total').textContent = String(markets.length).padStart(2, '0');
-    if (health.error) $('#notice').textContent = health.error;
-    const fingerprint = JSON.stringify(markets);
-    if (fingerprint !== lastFingerprint && markets.length) {
-      lastFingerprint = fingerprint;
-      $('#markets').replaceChildren(...markets.map(m => {
-        const article = text('article', '', 'market-card'); article.dataset.key = m.key;
-        const head = text('div', '', 'market-head');
-        head.append(text('span', `${m.prediction.id.startsWith('demo-') ? 'DEMO · ' : ''}@${m.prediction.channel}`, 'channel'), text('span', ({creating:'Creando en cadena',open:'Creado en cadena',resolving:'Liquidando',resolved:'Resuelto',void:'Reembolso',failed:'Error de creación'})[m.phase], `pill ${m.phase === 'failed' ? 'error' : ''}`));
-        article.append(head, text('h3', m.prediction.title));
-        const options = text('div', '', 'outcomes'); m.outcomes.forEach(o => { const node = text('div', `${m.winnerId === o.id ? '✓ ' : ''}${o.title}`, 'outcome'); node.title = o.mint ?? 'Token pendiente'; options.append(node); }); article.append(options);
-        const details = text('p', `${m.network} · ${m.signatures.length} transacciones de creación · `, 'details');
-        if (m.market) { const a = text('a', `Mercado ${m.market.slice(0,8)}… ↗`); a.href = `https://explorer.solana.com/address/${m.market}?cluster=${m.network === 'localnet' ? 'custom&customUrl=http%3A%2F%2F127.0.0.1%3A8899' : 'devnet'}`; a.target = '_blank'; a.rel = 'noopener'; details.append(a); } article.append(details);
-        if (m.error) article.append(text('p', m.error, 'error details'));
-        if (m.tradingError) article.append(text('p', m.tradingError, 'error details'));
-        if (['open', 'resolved', 'void', 'resolving'].includes(m.phase)) {
-          const button = text('button', 'Apostar / resolver / cobrar ↗', 'trade-open'); button.onclick = () => openTrade(m); article.append(button);
-          const actions = m.actions ?? []; const recent = actions.at(-1);
-          if (recent) article.append(text('p', `${({buy:'Apuesta',resolve:'Resolución',claim:'Cobro',refund:'Reembolso'})[recent.kind]}: ${recent.status === 'done' ? 'confirmada' : recent.status === 'pending' ? 'pendiente' : 'fallida'}${recent.paidLamports ? ` · ${(Number(recent.paidLamports)/1e9).toFixed(6)} SOL` : ''}`, 'details'));
-        }
-        return article;
-      }));
-    }
-  } catch (e) { $('#notice').textContent = e.message; }
+function render(){
+  disposePointsViews();
+  $('#account-name').textContent=account?.name??'Sin conexión';$('#own-balance').textContent=account?number(account.balance):'—';$('#market-count').textContent=`${markets.length} mercados`;
+  $('#markets').replaceChildren(...(markets.length?markets.map(card):[el('div','Todavía no hay predicciones. Seguí un canal o creá un ejemplo para probar.','empty')]));
+  const history=$('#history');history.replaceChildren();if(account?.bets.length){history.append(el('h2','Tus apuestas recientes'));for(const b of account.bets.slice(-10).reverse()){const row=el('div',null,'history-row');row.append(el('strong',b.title),el('span',`${b.outcome} · ${number(b.amount)} pts · ${b.claimed?'Cobrado':b.payout?`${number(b.payout)} pts por cobrar`:['resolved','void'].includes(b.phase)?'Finalizada':'En juego'}`));history.append(row);}}
 }
-async function operation(fn) {
-  if (busy) return; busy = true;
-  document.querySelectorAll('#trade-dialog button:not([data-close]), #trade-dialog input, #trade-dialog select').forEach(b => b.disabled = true);
-  $('#trade-message').textContent = 'Esperando confirmación en Solana…';
-  try { await fn(); await loadPosition(); await refresh(); }
-  catch (e) { $('#trade-message').textContent = e.message; }
-  finally { busy = false; document.querySelectorAll('#trade-dialog button:not([data-close]), #trade-dialog input, #trade-dialog select').forEach(b => b.disabled = false); }
+async function refresh(){
+  if(refreshing)return;refreshing=true;const focused=document.activeElement;const key=focused?.matches('input[aria-label="Puntos a apostar"]')?focused.closest('[data-market-key]')?.dataset.marketKey:null;
+  try{const [nextMarkets,nextAccount,channels]=await Promise.all([client.request('/api/markets'),client.me(),client.request('/api/channels')]);markets=nextMarkets;account=nextAccount;render();$('#watched').replaceChildren(...channels.channels.map(c=>{const row=el('div',null,'watch-row');row.append(el('span',`@${c}`));const stop=el('button','Dejar de seguir','secondary');stop.onclick=async()=>{await authorizeDelete(c);await refresh();};row.append(stop);return row;}));$('#source-status').textContent=channels.sourceError?`Twitch: ${channels.sourceError}`:'';if(key)document.querySelector(`[data-market-key="${CSS.escape(key)}"] input`)?.focus();}
+  catch(e){account=undefined;document.querySelectorAll('.points-bet,.points-claim').forEach(b=>b.disabled=true);$('#notice').textContent=e.message;}
+  finally{refreshing=false;}
 }
-async function openTrade(m) {
-  if (busy) return;
-  selectedKey = m.key; pendingQuote = null; selectedOutcome = m.outcomes[0].id;
-  $('#trade-title').textContent = m.prediction.title; $('#trade-channel').textContent = `@${m.prediction.channel} · ${m.network}`;
-  $('#trade-options').replaceChildren(...m.outcomes.map(o => {
-    const button = text('button', o.title, 'pick-outcome'); button.dataset.outcomeId = o.id; button.setAttribute('aria-pressed', String(o.id === selectedOutcome));
-    button.onclick = () => { selectedOutcome = o.id; pendingQuote = null; $('#quote-result').textContent = ''; $('#confirm-bet').hidden = true; document.querySelectorAll('.pick-outcome').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.outcomeId === selectedOutcome))); }; return button;
-  }));
-  $('#resolve-confirm').checked = false;
-  $('#resolve-winner').replaceChildren(...m.outcomes.map(o => { const option = text('option', o.title); option.value = o.id; return option; }));
-  $('#quote-result').textContent = ''; $('#confirm-bet').hidden = true; $('#trade-message').textContent = ''; $('#claim-result').textContent = '';
-  $('#trade-dialog').showModal(); await loadPosition();
+async function authorizeDelete(channel){await admin('/api/sync',{});const response=await fetch(`/api/channels/${encodeURIComponent(channel)}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new Error('No se pudo dejar de seguir el canal');}
+async function operate(fn){try{$('#notice').textContent='Guardando…';await fn();$('#notice').textContent='Listo.';await refresh();}catch(e){$('#notice').textContent=e.message;}}
+$('#demo').onclick=()=>void operate(async()=>{await admin('/api/demo',{});});
+$('#watch-form').onsubmit=e=>{e.preventDefault();void operate(async()=>{await admin('/api/channels',{channel:$('#watch-channel').value.trim().replace(/^@/,'')});});};
+$('#pair').onsubmit=async e=>{e.preventDefault();try{await admin('/api/sync',{});if(!globalThis.chrome?.runtime?.sendMessage)throw new Error('Abrí este panel en Chrome con la extensión instalada');const response=await chrome.runtime.sendMessage($('#extensionId').value.trim(),{type:'PAIR',bridgeUrl:location.origin,token});if(!response?.ok)throw new Error('No se pudo conectar la extensión');$('#paired').textContent='Extensión conectada. Abrí un canal de Twitch.';}catch(err){$('#paired').textContent=err.message;}};
+await refresh();setInterval(refresh,5000);
+setInterval(()=>{for(const m of markets)if(Date.parse(m.prediction.createdAt)+m.prediction.predictionWindowSeconds*1000<=Date.now()||(!m.demo&&Date.now()-Date.parse(m.sourceCheckedAt)>=30000))document.querySelectorAll(`[data-market-key="${CSS.escape(m.key)}"] .points-bet`).forEach(b=>b.disabled=true);},1000);
+
+function setView(){
+  const view=['history','channels','connect'].includes(location.hash.slice(1))?location.hash.slice(1):'markets';
+  const operator=view==='channels'||view==='connect';
+  $('#market-section').hidden=view!=='markets';$('#history').hidden=view!=='history';$('#channels').hidden=!operator;
+  document.querySelectorAll('[data-view]').forEach(a=>{if(a.dataset.view===(operator?'channels':view))a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
+  $('#page-title').textContent=operator?'Canales y extensión':view==='history'?'Mis apuestas':'Predicciones de la comunidad';
+  $('#page-description').textContent=operator?'Elegí qué comunidades seguir. Cada apuesta abierta se replica automáticamente.':view==='history'?'Tus puntos en juego y los resultados de tus apuestas.':'Las mismas opciones del stream. Un pozo propio para jugar.';
 }
-async function loadPosition() {
-  const p = await api('/api/trade/position', {key:selectedKey});
-  $('#participant-address').textContent = `${p.wallet.address.slice(0,8)}…${p.wallet.address.slice(-8)}`;
-  $('#participant-balance').textContent = `${p.wallet.balance.toFixed(6)} SOL de prueba`;
-  $('#position-tokens').textContent = p.balances.map(b => { const button = document.querySelector(`[data-outcome-id="${b.id}"]`); return `${button?.textContent}: ${(Number(b.tokens)/1e6).toFixed(4)} tokens`; }).join(' · ');
-  $('#claimable').textContent = `${(Number(p.claimableLamports)/1e9).toFixed(6)} SOL`;
-  $('#pot').textContent = `${(Number(p.potLamports)/1e9).toFixed(6)} SOL`;
-  $('#trade-phase').textContent = ({trading:p.canBet ? 'Apuestas abiertas' : 'Apuestas cerradas',claimable:'Resuelto · listo para cobrar',void:'Mercado sin ganador con tokens · reembolsos',settling:'Liquidando',registering:'Registrando'})[p.protocol.phase];
-  $('#quote-bet').hidden = !p.canBet; $('#resolve-submit').hidden = p.protocol.phase !== 'trading';
-  $('#claim-submit').hidden = !p.protocol.canClaim && !p.protocol.canRefund;
-  $('#fund-participant').hidden = $('#network').textContent.includes('devnet');
-}
-$('#demo').onclick = async () => { $('#demo').disabled = true; try { await api('/api/demo',{}); await refresh(); } catch(e){$('#notice').textContent=e.message;} finally{$('#demo').disabled=false;} };
-$('#pair').onsubmit = async event => { event.preventDefault(); try { if (!globalThis.chrome?.runtime?.sendMessage) throw new Error('Abrí este panel en Chrome después de cargar la extensión.'); const result=await chrome.runtime.sendMessage($('#extensionId').value.trim(),{type:'PAIR',bridgeUrl:location.origin,token:await authorize()}); if(!result?.ok)throw new Error('La extensión no respondió. Revisá el ID.'); $('#paired').textContent='Conectada. Abrí Twitch y mantené el canal abierto.'; }catch(e){$('#paired').textContent=e.message;} };
-$('#trade-close').onclick = () => { if(!busy)$('#trade-dialog').close(); };
-$('#trade-dialog').addEventListener('cancel', e => {if(busy)e.preventDefault();});
-$('#fund-participant').onclick = () => operation(async()=>{await api('/api/faucet',{});$('#trade-message').textContent='Recibiste 2 SOL de prueba del faucet local.';});
-$('#quote-bet').onclick = () => operation(async()=>{
-  pendingQuote=await api('/api/trade/quote',{key:selectedKey,outcomeId:selectedOutcome,amount:$('#stake').value});
-  $('#quote-result').textContent=`Por ${Number(pendingQuote.amount)/1e9} SOL recibís aproximadamente ${(Number(pendingQuote.expectedTokens)/1e6).toFixed(4)} tokens; mínimo ${(Number(pendingQuote.minTokens)/1e6).toFixed(4)}. Tolerancia: 0.5%. Cotización válida por 30 segundos.`;
-  $('#confirm-bet').hidden=false;$('#trade-message').textContent='Revisá el importe y confirmá la apuesta.';
-});
-$('#stake').oninput=()=>{pendingQuote=null;$('#confirm-bet').hidden=true;};
-$('#confirm-bet').onclick = () => operation(async()=>{if(!pendingQuote)throw new Error('Primero cotizá la apuesta');const result=await api('/api/trade/buy',{key:selectedKey,quoteId:pendingQuote.id,requestId:crypto.randomUUID()});if(result.status!=='done')throw new Error(result.error||'Operación pendiente');pendingQuote=null;$('#confirm-bet').hidden=true;$('#trade-message').textContent='Apuesta confirmada en Solana.';});
-$('#resolve-submit').onclick = () => operation(async()=>{if(!$('#resolve-confirm').checked)throw new Error('Confirmá que vas a fijar el ganador manualmente.');await api('/api/trade/resolve',{key:selectedKey,outcomeId:$('#resolve-winner').value,requestId:crypto.randomUUID()});$('#trade-message').textContent='Ganador fijado y fondo liquidado en Solana.';});
-$('#claim-submit').onclick = () => operation(async()=>{const result=await api('/api/trade/claim',{key:selectedKey,requestId:crypto.randomUUID()});$('#claim-result').textContent=`Cobro confirmado: ${(Number(result.paidLamports)/1e9).toFixed(6)} SOL.`;$('#trade-message').textContent='Los fondos volvieron a la wallet de participante.';});
-refresh();setInterval(refresh,2500);
+window.addEventListener('hashchange',setView);setView();

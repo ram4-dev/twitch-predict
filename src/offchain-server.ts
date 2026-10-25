@@ -1,0 +1,57 @@
+import express from 'express';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
+import { Points } from './points.js';
+import { TwitchSource } from './twitch-source.js';
+import { demoPrediction } from './mirror.js';
+import { predictionSchema } from './prediction.js';
+const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
+const directory=resolve(process.env.DATA_DIR??`${root}/data`);
+await mkdir(directory,{recursive:true,mode:0o700});
+try{await writeFile(`${directory}/bridge-token`,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});}catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
+const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
+const points=new Points(directory);await points.load();const source=new TwitchSource(points);
+const app=express();app.disable('x-powered-by');
+app.use((req,res,next)=>{
+  if(!['twitch-predict.localhost','twitch-points-test.localhost','localhost','127.0.0.1'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
+  const origin=req.headers.origin;
+  if(origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(origin)&&origin!==`${req.protocol}://${req.get('host')}`){res.status(403).json({error:'Untrusted origin'});return;}
+  // A local POC with anonymous points: never allow a foreign website to create accounts or place bets.
+  if(req.get('sec-fetch-site')==='cross-site'&&!origin?.startsWith('chrome-extension://')){res.status(403).json({error:'Untrusted site'});return;}
+  res.set('Cache-Control','no-store');res.set('X-Content-Type-Options','nosniff');
+  res.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'");next();
+});
+app.use(express.json({limit:'16kb'}));
+const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
+const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
+app.get('/api/health',(_req,res)=>res.json({ok:true,network:'offchain',protocol:'Puntos internos',features:['bet','resolve','claim'],sourceError:source.lastError}));
+app.get('/api/markets',(_req,res)=>res.json(points.markets()));
+app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),sourceError:source.lastError}));
+app.get('/api/pair',(req,res)=>{if(req.get('sec-fetch-site')!=='same-origin'){res.status(403).json({error:'Open the dashboard to pair'});return;}res.json({token});});
+app.post('/api/points/session',route(async(_req,res)=>{res.status(201).json(await points.createAccount());}));
+app.get('/api/points/me',route((req,res)=>res.json(points.me(bearer(req)))));
+const betInput=z.object({key:z.string().min(1).max(300),outcomeId:z.string().min(1).max(128),amount:z.number().int().positive().max(1_000_000),requestId:z.string().uuid()});
+app.post('/api/points/bet',route(async(req,res)=>{const i=betInput.parse(req.body);res.json(await points.bet(bearer(req),i.key,i.outcomeId,i.amount,i.requestId));}));
+const claimInput=z.object({key:z.string().min(1).max(300),requestId:z.string().uuid()});
+app.post('/api/points/claim',route(async(req,res)=>{const i=claimInput.parse(req.body);res.json(await points.claim(bearer(req),i.key,i.requestId));}));
+app.use('/api',(req,res,next)=>{const given=Buffer.from(bearer(req));const expected=Buffer.from(token);if(given.length!==expected.length||!timingSafeEqual(given,expected)){res.status(401).json({error:'Bridge pairing required'});return;}next();});
+app.post('/api/predictions',route(async(req,res)=>{
+  const input=predictionSchema.parse(req.body);
+  // The consumer cannot choose a live result or inject an arbitrary prediction.
+  const verified=await source.prediction(input.id,input.channel);
+  const market=await points.accept(verified);await points.watch(verified.channel);res.status(202).json(market);
+}));
+app.post('/api/channels',route(async(req,res)=>{const channel=z.string().regex(/^[a-zA-Z0-9_]{1,40}$/).parse(req.body.channel);await points.watch(channel);await source.sync();res.json({channels:points.channels(),sourceError:source.lastError});}));
+app.delete('/api/channels/:channel',route(async(req,res)=>res.json({channels:await points.unwatch(String(req.params.channel))})));
+app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.accept(demoPrediction(),true))));
+app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));
+app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
+app.use(express.static(`${root}/public`));
+app.use('/extension',express.static(`${root}/extension`));
+const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',()=>console.log('Prediction Mirror ready (centralized offchain points).'));
+const timer=setInterval(()=>{void source.sync().catch(e=>console.error('Twitch sync failed:',(e as Error).message));},5000);timer.unref();
+void source.sync().catch(e=>console.error('Initial Twitch sync failed:',(e as Error).message));
+process.on('SIGTERM',()=>{clearInterval(timer);server.close();});

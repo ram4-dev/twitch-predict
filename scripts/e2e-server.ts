@@ -1,0 +1,12 @@
+import {mkdtemp,mkdir,writeFile,rm,readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {resolve} from 'node:path';
+import {spawn} from 'node:child_process';
+await mkdir('test-results',{recursive:true});
+const directory=await mkdtemp(`${tmpdir()}/points-e2e-server-`);
+const pidFile=resolve(directory,'server.pid');
+const fixture=resolve('test-results/twitch-fixture.json');await writeFile(fixture,'[]');
+const server=spawn('portless',['twitch-points-test',process.execPath,'--import','tsx','--import',resolve('tests/fixtures/twitch-preload.mjs'),'src/server.ts'],{stdio:'inherit',env:{...process.env,MARKET_MODE:'offchain',PORTLESS_PORT:'1356',PORTLESS_HTTPS:'0',DATA_DIR:directory,TWITCH_FIXTURE_FILE:fixture,E2E_SERVER_PID_FILE:pidFile}});
+let stopping=false;
+for(const signal of ['SIGINT','SIGTERM'] as const)process.on(signal,()=>{if(stopping)return;stopping=true;void (async()=>{try{process.kill(Number(await readFile(pidFile,'utf8')),signal);}catch{/* The child may already have exited. */}server.kill(signal);})();});
+server.on('exit',async code=>{await rm(directory,{recursive:true,force:true});process.exit(code??0);});

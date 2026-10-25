@@ -1,98 +1,66 @@
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
-const $ = selector => document.querySelector(selector);
-const el = (tag, value, className) => { const node = document.createElement(tag); if (value != null) node.textContent = value; if (className) node.className = className; return node; };
-let selectedChannel = '';
-let state = {};
-let snapshot;
-const defaultBridge = 'http://twitch-predict.localhost:1356';
-function bridgeUrl() { try { const u = new URL(state.bridgeUrl || defaultBridge); return u.protocol === 'http:' && u.hostname === 'twitch-predict.localhost' ? u.origin : defaultBridge; } catch { return defaultBridge; } }
-function time(value) { return value ? new Date(value).toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }) : 'Sin informar'; }
-function fact(list, title, value) { list.append(el('dt', title), el('dd', value ?? 'Sin informar')); }
-function marketView(market, prediction) {
-  const box = el('section', null, 'market');
-  const head = el('div', null, 'market-head');
-  const labels = { open:'Mercado creado automáticamente', creating:'Creando el mercado…', pending:'Preparando creación automática…', unpaired:'Creación pendiente de conexión', offline:'Mercado sin conexión', failed:'No se pudo crear el mercado', closed:'Ventana de creación cerrada', resolved:'Mercado resuelto', void:'Mercado con reembolsos', resolving:'Liquidando mercado…' };
-  head.append(el('strong', labels[market?.state] || 'Esperando al puente'));
-  if (market?.network) head.append(el('span', market.network === 'localnet' ? 'PRUEBA LOCAL' : market.network.toUpperCase(), 'network'));
-  box.append(head);
-  if (market?.address) {
-    box.append(el('p', `${market.signatures ?? 0} transacciones de creación · mismo título y resultados`, 'market-summary'));
-    const link = el('a', 'Ver mercado ↗'); link.href = `${bridgeUrl()}/#markets`; link.target = '_blank'; link.rel = 'noopener'; box.append(link);
-  } else if (market?.state === 'closed') box.append(el('p', 'Esta apuesta ya no acepta puntos. La creación automática se activa mientras está abierta.'));
-  else box.append(el('p', isOpen(prediction) ? 'Se crea una sola vez por apuesta, sin confirmación manual.' : 'La apuesta de Twitch está cerrada.'));
-  if (market?.error) box.append(el('p', market.error, 'market-error'));
-  return box;
-}
-function predictionCard(item) {
-  const p = item.prediction;
-  const card = el('article', null, 'prediction'); card.dataset.predictionId = p.id;
-  const line = el('div', null, 'topline');
-  const open = isOpen(p);
-  const status = el('span', `● ${open ? 'Abierta en Twitch' : p.status === 'ACTIVE' ? 'Cerrada por tiempo' : statusLabel(p.status)}`, `status ${open ? '' : 'closed'}`); status.dataset.state = p.id; line.append(status);
-  const timer = el('span', countdown(p), 'countdown'); timer.dataset.timer = p.id; line.append(timer);
-  card.append(line, el('h1', p.title));
-  for (const [index, outcome] of p.outcomes.entries()) {
-    const color = outcome.color === 'PINK' || (!outcome.color && index % 2 === 1) ? 'pink' : 'blue';
-    const option = el('section', null, `outcome ${color}`); option.dataset.outcomeId = outcome.id;
-    const title = el('div', null, 'outcome-head'); const share = pointShare(outcome, p.outcomes);
-    title.append(el('strong', outcome.title), el('span', share == null ? '—' : `${share.toLocaleString('es-AR')}%`, 'percentage'));
-    option.append(title, el('p', `${formatNumber(outcome.totalPoints)} puntos · ${formatNumber(outcome.totalUsers)} participantes`));
-    const track = el('div', null, 'track'); const fill = el('div', null, 'fill'); fill.style.width = `${share ?? 0}%`; track.append(fill); option.append(track); card.append(option);
+import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
+const $=s=>document.querySelector(s);
+const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
+const defaultBridge='http://twitch-predict.localhost:1356';
+let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase;
+const forms=new Map();let loading=false,again=false;
+function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return u.protocol==='http:'&&u.hostname==='twitch-predict.localhost'?u.origin:defaultBridge;}catch{return defaultBridge;}}
+function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
+function fact(list,title,value){list.append(el('dt',title),el('dd',value??'Sin informar'));}
+function sourceView(p){
+  const details=el('details',null,'source-reference');details.append(el('summary','Ver puntos de Twitch y datos originales'));
+  for(const [i,o] of p.outcomes.entries()){
+    const option=el('section',null,`outcome ${i%2?'pink':'blue'}`);const head=el('div',null,'outcome-head');const share=pointShare(o,p.outcomes);
+    head.append(el('strong',o.title),el('span',share==null?'—':`${share.toLocaleString('es-AR')}%`,'percentage'));
+    option.append(head,el('p',`${formatNumber(o.totalPoints)} puntos · ${formatNumber(o.totalUsers)} participantes`));details.append(option);
   }
-  card.append(el('p', 'Los porcentajes muestran la distribución de puntos en Twitch.', 'distribution-note'));
-  const totals = el('div', null, 'totals');
-  for (const [label, metric] of [['Puntos en juego','totalPoints'],['Participaciones','totalUsers']]) { const cell = el('div'); cell.append(el('b', formatNumber(totalMetric(p.outcomes, metric))), el('span', label)); totals.append(cell); }
-  card.append(totals);
-  if (p.winningOutcomeId) { const winner = p.outcomes.find(o => o.id === p.winningOutcomeId); card.append(el('p', `Ganador en Twitch: ${winner?.title ?? p.winningOutcomeId}`, 'winner')); }
-  card.append(el('p', 'MERCADO AUTOMÁTICO', 'section-label'), marketView(item.market, p));
-  const details = el('details'); details.append(el('summary', 'Horarios e identificadores'));
-  const list = el('dl'); fact(list, 'Canal', `@${p.channel}`); fact(list, 'Predicción de Twitch', p.id);
-  fact(list, 'Inicio', time(p.createdAt)); fact(list, 'Cierre previsto', time(new Date(Date.parse(p.createdAt) + p.predictionWindowSeconds * 1000).toISOString()));
-  fact(list, 'Ventana de apuestas', `${p.predictionWindowSeconds} segundos`); fact(list, 'Bloqueada en Twitch', p.lockedAt ? time(p.lockedAt) : 'Todavía no'); fact(list, 'Finalizada en Twitch', p.endedAt ? time(p.endedAt) : 'Todavía no');
-  for (const o of p.outcomes) fact(list, `ID · ${o.title}`, o.id);
-  if (item.market?.address) fact(list, 'Dirección del mercado', item.market.address);
-  details.append(list); card.append(details); return card;
+  details.append(el('p',`${formatNumber(totalMetric(p.outcomes,'totalPoints'))} puntos de Twitch. El pozo y tu saldo de arriba usan puntos internos independientes.`,'distribution-note'));
+  const list=el('dl');fact(list,'Predicción de Twitch',p.id);fact(list,'Inicio',time(p.createdAt));fact(list,'Cierre previsto',time(new Date(Date.parse(p.createdAt)+p.predictionWindowSeconds*1000).toISOString()));fact(list,'Estado en Twitch',statusLabel(p.status));details.append(list);return details;
 }
-function tick() {
-  const age = snapshot?.fetchedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(snapshot.fetchedAt)) / 1000)) : null;
-  $('#freshness').textContent = age == null ? 'Esperando la primera consulta…' : age < 15 ? `Actualizado ${age < 2 ? 'ahora' : `hace ${age} s`}` : `Datos de hace ${age} s · esperando actualización`;
-  for (const item of snapshot?.predictions ?? []) { const timer = document.querySelector(`[data-timer="${CSS.escape(item.prediction.id)}"]`); if (timer) timer.textContent = countdown(item.prediction); const status = document.querySelector(`[data-state="${CSS.escape(item.prediction.id)}"]`); if (status) { const open = isOpen(item.prediction); status.textContent = `● ${open ? 'Abierta en Twitch' : item.prediction.status === 'ACTIVE' ? 'Cerrada por tiempo' : statusLabel(item.prediction.status)}`; status.classList.toggle('closed', !open); } }
+function predictionCard(p,market,item){
+  const card=el('article',null,'prediction');card.dataset.predictionId=p.id;
+  const line=el('div',null,'topline');line.append(el('span',`@${p.channel}`,'status'));const timer=el('span',countdown(p),'countdown');timer.dataset.timer=p.id;line.append(timer);card.append(line,el('h1',p.title));
+  if(market)card.append(bettingView(market,account,action=>performPointsAction(action,client,load),forms));
+  else{const pending=el('section',null,'market');const labels={unpaired:'Conectá la extensión para crear la copia',offline:'Mercado sin conexión',closed:'La predicción ya está cerrada',failed:'No se pudo crear el mercado'};pending.append(el('strong',labels[item?.market?.state]||'Creando la copia automáticamente…'));if(item?.market?.error)pending.append(el('p',item.market.error,'market-error'));card.append(pending);}
+  card.append(sourceView(p));return card;
 }
-async function load() {
-  state = await chrome.storage.local.get(null);
-  const channels = Object.keys(state).filter(k => k.startsWith('channel:')).map(k => k.slice(8)).sort();
-  if (!selectedChannel) selectedChannel = state.lastPoll?.channel || channels[0] || '';
-  if (selectedChannel && !channels.includes(selectedChannel)) channels.push(selectedChannel);
-  if (channels.join('|') !== [...$('#channel').options].map(o => o.value).filter(Boolean).join('|')) {
-    $('#channel').replaceChildren(...(channels.length ? channels.map(channel => { const option = el('option', `@${channel}`); option.value = channel; return option; }) : [el('option', 'Esperando un canal…')]));
-  }
-  $('#channel').value = selectedChannel;
-  snapshot = state[`channel:${selectedChannel}`];
-  $('#predictions').replaceChildren(...(snapshot?.predictions ?? []).map(predictionCard));
-  $('#empty').hidden = !!snapshot?.predictions?.length;
-  $('#empty-copy').textContent = selectedChannel ? `No hay apuestas disponibles en @${selectedChannel}. La próxima aparecerá acá automáticamente mientras el canal esté abierto.` : 'Abrí un canal de Twitch. Cuando empiece una apuesta por puntos, aparecerá acá y se creará su mercado automáticamente.';
-  $('#source-error').hidden = !snapshot?.sourceError;
-  $('#source-error').textContent = snapshot?.sourceError ? `No se pudo actualizar Twitch: ${snapshot.sourceError}. Los datos visibles son de la última consulta correcta.` : '';
-  const unpaired = !state.bridgeToken || snapshot?.predictions?.some(p => p.market?.state === 'unpaired');
-  $('#setup').hidden = !unpaired;
-  $('#extension-id').textContent = chrome.runtime.id;
-  $('#connect').href = `${bridgeUrl()}/#connect`; $('#dashboard').href = bridgeUrl();
-  $('#connection').textContent = unpaired ? 'Sin conectar' : 'Auto';
+function render(){
+  disposePointsViews();
+  const current=snapshot?.predictions??[];const visible=markets.filter(m=>m.prediction.channel===selectedChannel&&(current.some(p=>p.prediction.id===m.prediction.id)||['open','locked'].includes(m.phase)||account?.bets.some(b=>b.marketKey===m.key)));
+  const cards=current.map(item=>predictionCard(item.prediction,markets.find(m=>m.prediction.id===item.prediction.id&&m.prediction.channel===selectedChannel),item));
+  for(const m of visible)if(!current.some(p=>p.prediction.id===m.prediction.id))cards.push(predictionCard(m.prediction,m));
+  $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;
+  $('#empty-copy').textContent=selectedChannel?`No hay apuestas disponibles en @${selectedChannel}. La próxima aparecerá automáticamente.`:'Abrí un canal de Twitch. La próxima apuesta se copiará automáticamente.';
+  $('#account-name').textContent=account?.name||'Conexión pendiente';$('#own-balance').textContent=account?number(account.balance):'—';
+  const history=$('#history');history.replaceChildren();const bets=account?.bets??[];
+  if(bets.length){history.append(el('h2','Tus apuestas recientes'));for(const bet of bets.slice(-8).reverse()){const row=el('div',null,'history-row');row.append(el('strong',bet.title),el('span',`${bet.outcome} · ${number(bet.amount)} pts · ${bet.claimed?'Cobrado':bet.payout?`${number(bet.payout)} pts para cobrar`:['resolved','void'].includes(bet.phase)?'Finalizada':'En juego'}`));if(bet.payout&&!bet.claimed){const market=markets.find(m=>m.key===bet.marketKey);const button=el('button','Ver cobro');button.onclick=()=>{selectedChannel=market.prediction.channel;void load();};row.append(button);}history.append(row);}}
   tick();
 }
-async function requestPoll() {
-  if (!selectedChannel) return;
-  $('#refresh').disabled = true;
-  try { await chrome.runtime.sendMessage({ type:'POLL_CHANNEL', channel:selectedChannel }); await load(); }
-  catch (e) { $('#source-error').hidden = false; $('#source-error').textContent = e.message; }
-  finally { $('#refresh').disabled = false; }
+function tick(){
+  const age=snapshot?.fetchedAt?Math.max(0,Math.floor((Date.now()-Date.parse(snapshot.fetchedAt))/1000)):null;
+  $('#freshness').textContent=age==null?'Esperando consulta de Twitch…':`Twitch actualizado hace ${age} s`;
+  for(const p of [...(snapshot?.predictions??[]).map(i=>i.prediction),...markets.map(m=>m.prediction)]){const timer=document.querySelector(`[data-timer="${CSS.escape(p.id)}"]`);if(timer)timer.textContent=countdown(p);}
+  // Deadlines disable betting immediately, without waiting for the next network poll.
+  for(const m of markets){if(!isOpen(m.prediction)||(!m.demo&&Date.now()-Date.parse(m.sourceCheckedAt)>=30000))document.querySelectorAll(`[data-market-key="${CSS.escape(m.key)}"] .points-bet`).forEach(b=>{b.disabled=true;});}
 }
-$('#channel').onchange = async () => { selectedChannel = $('#channel').value; await load(); void requestPoll(); };
-$('#refresh').onclick = requestPoll;
-chrome.storage.onChanged.addListener((_changes, area) => { if (area === 'local') void load(); });
-try {
-  const [active] = await chrome.tabs.query({ active:true, currentWindow:true });
-  const url = active?.url ? new URL(active.url) : null;
-  if (url?.hostname === 'www.twitch.tv' && /^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname)) selectedChannel = url.pathname.split('/')[1].toLowerCase();
-} catch { /* A popup opened as a full tab uses the last selected channel. */ }
-await load(); void requestPoll(); setInterval(tick, 1000); setInterval(requestPoll, 5000);
+async function load(){
+  if(loading){again=true;return;}loading=true;
+  const focused=document.activeElement;const restore=focused?.matches('input[aria-label="Puntos a apostar"]')?focused.closest('[data-market-key]')?.dataset.marketKey:null;
+  try{
+    state=await chrome.storage.local.get(null);const base=bridgeUrl();
+    if(!client||clientBase!==base){clientBase=base;client=createPointsClient(base,{get:async()=> (await chrome.storage.local.get('pointsToken')).pointsToken,set:async token=>chrome.storage.local.set({pointsToken:token})});}
+    try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}
+    const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();
+    if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
+    $('#channel').replaceChildren(...(channels.length?channels.map(c=>{const o=el('option',`@${c}`);o.value=c;return o;}):[el('option','Esperando un canal…')]));$('#channel').value=selectedChannel;snapshot=state[`channel:${selectedChannel}`];
+    $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
+    const unpaired=!state.bridgeToken;$('#setup').hidden=!unpaired;$('#extension-id').textContent=chrome.runtime.id;$('#connect').href=`${base}/#connect`;$('#dashboard').href=base;$('#connection').textContent=unpaired?'Sin conectar':'Puntos';render();
+    if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
+  }finally{loading=false;if(again){again=false;void load();}}
+}
+async function requestPoll(){if(!selectedChannel||selectedChannel==='demo_streamer'){await load();return;}$('#refresh').disabled=true;try{await chrome.runtime.sendMessage({type:'POLL_CHANNEL',channel:selectedChannel});await load();}catch(e){$('#source-error').hidden=false;$('#source-error').textContent=e.message;}finally{$('#refresh').disabled=false;}}
+$('#channel').onchange=async()=>{selectedChannel=$('#channel').value;await load();void requestPoll();};$('#refresh').onclick=requestPoll;
+chrome.storage.onChanged.addListener((_changes,area)=>{if(area==='local')void load();});
+try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
+await load();void requestPoll();setInterval(tick,1000);setInterval(requestPoll,5000);

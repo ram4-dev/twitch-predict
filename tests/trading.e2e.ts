@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { createSolanaRpc, address } from '@solana/kit';
 import { predictionMarkets } from '@whetstone-research/doppler-sdk/solana';
+test.skip(process.env.MARKET_MODE !== 'solana', 'Legacy Solana checks require MARKET_MODE=solana');
 test('participant buys both outcomes, resolver settles, winner receives native SOL and cannot claim twice', async ({ page }) => {
   test.setTimeout(150000);
   await page.goto('/');

@@ -9,3 +9,7 @@ playwright-report/
 # Ignore the local shared dependency/data symlinks as well as directories.
 node_modules
 data
+
+# Local visual audit screenshots and reports
+.taste-skill/before/
+.taste-skill/after/

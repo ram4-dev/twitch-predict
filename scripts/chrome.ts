@@ -20,7 +20,14 @@ const result = await dashboard.evaluate(async id => {
 }, extensionId);
 if (!result?.ok) throw new Error('Extension pairing failed');
 const twitch = await context.newPage(); await twitch.goto(`https://www.twitch.tv/${channel}`);
-await worker.evaluate(() => (globalThis as unknown as {chrome:{action:{openPopup():Promise<void>}}}).chrome.action.openPopup());
+await twitch.bringToFront();
+await worker.evaluate(async () => {
+  const api=(globalThis as unknown as {chrome:{windows:{getAll(options:{windowTypes:string[]}):Promise<{id:number}[]>;update(id:number,options:{focused:boolean}):Promise<unknown>};action:{openPopup(options:{windowId:number}):Promise<void>}}}).chrome;
+  const [window]=await api.windows.getAll({windowTypes:['normal']});
+  if(!window) throw new Error('No Chrome window available');
+  await api.windows.update(window.id,{focused:true});
+  await api.action.openPopup({windowId:window.id});
+});
 console.log(`Chromium abierto con extensión conectada. Canal: ${channel}. Panel: ${base}`);
 process.on('SIGINT', () => { void context.close(); });
 await new Promise<void>(resolve => context.on('close', () => resolve()));

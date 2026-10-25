@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Twitch → Solana · Prediction Mirror",
-  "version": "0.2.0",
-  "description": "Muestra las apuestas por puntos de Twitch y crea su mercado automáticamente en el puente de la POC.",
+  "name": "Prediction Mirror \u00b7 Puntos",
+  "version": "0.3.0",
+  "description": "Replica predicciones de Twitch y apost\u00e1 con tus propios puntos internos.",
   "permissions": [
     "storage",
     "activeTab"
@@ -18,7 +18,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Prediction Mirror · Ver apuesta"
+    "default_title": "Prediction Mirror \u00b7 Ver apuesta"
   },
   "content_scripts": [
     {

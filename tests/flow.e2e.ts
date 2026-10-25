@@ -6,6 +6,7 @@ import { address, createSolanaRpc } from '@solana/kit';
 import { predictionMarkets } from '@whetstone-research/doppler-sdk/solana';
 import { Connection, PublicKey } from '@solana/web3.js';
 const url = process.env.APP_URL ?? 'http://twitch-predict.localhost:1356';
+test.skip(process.env.MARKET_MODE !== 'solana', 'Legacy Solana checks require MARKET_MODE=solana');
 test('dashboard creates a confirmed Doppler market with two actual SPL mints', async ({ page }) => {
   await page.goto('/'); await expect(page.getByRole('heading',{name:'Del stream al mercado.'})).toBeVisible();
   const health = await page.request.get('/api/health'); expect(health.ok()).toBeTruthy();
