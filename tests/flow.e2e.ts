@@ -39,13 +39,27 @@ test('real MV3 extension polls Twitch fixture and automatically creates exactly 
       return (globalThis as unknown as {chrome:{runtime:{sendMessage(id:string,message:unknown):Promise<{ok:boolean}>}}}).chrome.runtime.sendMessage(extensionId,{type:'PAIR',token,bridgeUrl:location.origin});
     },id); expect(paired.ok).toBe(true);
     const predictionId = `e2e-${crypto.randomUUID()}`;
-    const prediction = {id:predictionId,title:'¿Replica automáticamente esta predicción?',status:'ACTIVE',createdAt:new Date().toISOString(),predictionWindowSeconds:1800,outcomes:[{id:'a',title:'Funciona'},{id:'b',title:'Falla'}],winningOutcome:null};
+    const prediction = {id:predictionId,title:'¿Replica automáticamente esta predicción?',status:'ACTIVE',createdAt:new Date().toISOString(),predictionWindowSeconds:1800,outcomes:[{id:'a',title:'Funciona',color:'BLUE',totalPoints:1200,totalUsers:12},{id:'b',title:'Falla',color:'PINK',totalPoints:800,totalUsers:8}],lockedAt:null as string|null,endedAt:null,winningOutcome:null};
     await context.route('https://gql.twitch.tv/gql', route => route.fulfill({json:{data:{channel:{activePredictionEvents:[prediction]}}}}));
     await context.route('https://www.twitch.tv/mirror_e2e',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch fixture</title><h1>Twitch prediction fixture</h1>'}));
     const twitch = await context.newPage(); await twitch.goto('https://www.twitch.tv/mirror_e2e');
     await expect.poll(async()=> { const markets = await dashboard.request.get(`${url}/api/markets`).then(r=>r.json()); return markets.find((m:{prediction:{id:string}})=>m.prediction.id===predictionId)?.phase; },{timeout:90000}).toBe('open');
+    const popup = await context.newPage(); await popup.goto(`chrome-extension://${id}/popup.html`);
+    await expect(popup.getByRole('heading',{name:prediction.title})).toBeVisible();
+    await expect(popup.locator('.outcome').first()).toContainText('1.200 puntos');
+    await expect(popup.locator('.outcome').first()).toContainText('60%');
+    await expect(popup.locator('.market strong')).toHaveText('Mercado creado automáticamente',{timeout:15000});
+    await expect(popup.locator('.network')).toHaveText('PRUEBA LOCAL');
+    prediction.outcomes[0].totalPoints=2400;prediction.outcomes[0].totalUsers=24;
+    await popup.getByRole('button',{name:'Actualizar predicción'}).click();
+    await expect(popup.locator('.outcome').first()).toContainText('2.400 puntos');
+    prediction.status='LOCKED';prediction.lockedAt=new Date().toISOString();
+    await popup.getByRole('button',{name:'Actualizar predicción'}).click();
+    await expect(popup.locator('.countdown')).toHaveText('Apuestas cerradas');
+    await popup.screenshot({path:'test-results/extension-popup.png',fullPage:true});
     await twitch.reload();
     await expect.poll(async()=> { const last = await worker.evaluate(async()=> (globalThis as unknown as {chrome:{storage:{local:{get(keys:string[]):Promise<{lastPoll?:{channel:string}}>}}}}).chrome.storage.local.get(['lastPoll'])); return last.lastPoll?.channel; }).toBe('mirror_e2e');
     const markets = await dashboard.request.get(`${url}/api/markets`).then(r=>r.json()); expect(markets.filter((m:{prediction:{id:string}})=>m.prediction.id===predictionId)).toHaveLength(1);
+    const replicated = markets.find((m:{prediction:{id:string}})=>m.prediction.id===predictionId); expect(replicated.prediction.outcomes[0].totalPoints).toBe(2400); expect(replicated.prediction.status).toBe('LOCKED');
   } finally { await context.close(); await rm(profile,{recursive:true,force:true}); }
 });

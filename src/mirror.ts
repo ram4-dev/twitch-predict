@@ -11,11 +11,24 @@ export class Mirror {
   }
   async accept(input: unknown) {
     const p = predictionSchema.parse(input);
-    if (p.status !== 'ACTIVE') throw new Error('Only ACTIVE predictions can create markets');
     const key = `${this.adapter.network}:${p.channel.toLowerCase()}:${p.id}`;
     // Deduplication occurs before checking expiry; repeated polls can still inspect existing markets.
     const existing = this.store.records[key];
-    if (existing) return existing;
+    if (existing) {
+      const original = existing.prediction;
+      if (original.title !== p.title || original.createdAt !== p.createdAt || original.predictionWindowSeconds !== p.predictionWindowSeconds ||
+          original.outcomes.length !== p.outcomes.length || original.outcomes.some((o, i) => o.id !== p.outcomes[i].id || o.title !== p.outcomes[i].title)) {
+        throw new Error('Prediction identity changed; refusing to alter its market');
+      }
+      const rank = { ACTIVE: 0, LOCKED: 1, RESOLVED: 2, CANCELED: 2 };
+      if (rank[p.status] >= rank[original.status] && !(rank[original.status] === 2 && p.status !== original.status)) {
+        existing.prediction = { ...original, ...p, outcomes: p.outcomes.map((o, i) => ({ ...original.outcomes[i], ...o })) };
+        existing.updatedAt = new Date().toISOString();
+        void this.execute(() => this.store.save()).catch(e => console.error('Prediction snapshot persistence failed:', (e as Error).message));
+      }
+      return existing;
+    }
+    if (p.status !== 'ACTIVE') throw new Error('Only ACTIVE predictions can create markets');
     if (closesAt(p) <= Date.now()) throw new Error('Prediction already closed');
     if (Date.parse(p.createdAt) > Date.now() + 30_000) throw new Error('Prediction starts in the future');
     if (Object.values(this.store.records).filter(r => r.phase === 'creating').length >= 10) throw new Error('Creation queue full');

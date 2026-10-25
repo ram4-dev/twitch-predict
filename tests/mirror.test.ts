@@ -36,3 +36,16 @@ test('rejects expired, locked, malformed, future, and duplicate outcomes', async
   assert.equal(predictionSchema.safeParse({...p,outcomes:[p.outcomes[0],p.outcomes[0]]}).success,false);
   assert.equal(predictionSchema.safeParse({...p,channel:'../evil'}).success,false);
 });
+test('Twitch metrics and lock status update without recreating or changing the market identity', async()=>{
+  const dir=await mkdtemp(`${tmpdir()}/mirror-`);
+  try {
+    const store=new Store(dir);await store.load();let calls=0;
+    const mirror=new Mirror(store,{network:'test',async create(r,persist){calls++;r.phase='open';await persist();}});
+    const p=demoPrediction();const created=await mirror.accept(p);await mirror.idle();
+    const updated={...p,status:'LOCKED',lockedAt:new Date().toISOString(),outcomes:p.outcomes.map(o=>({...o,totalPoints:120,totalUsers:3,color:'BLUE'}))};
+    await mirror.accept(updated);await mirror.idle();assert.equal(calls,1);assert.equal(created.prediction.outcomes[0].totalPoints,120);assert.equal(created.prediction.status,'LOCKED');
+    await mirror.accept(p);await mirror.idle();assert.equal(created.prediction.status,'LOCKED');
+    await assert.rejects(mirror.accept({...updated,title:'Changed question'}),/identity changed/);
+    const disk=new Store(dir);await disk.load();assert.equal(disk.records[created.key].prediction.outcomes[0].totalUsers,3);
+  } finally {await rm(dir,{recursive:true});}
+});

@@ -59,6 +59,18 @@ La suite E2E usa Playwright con Chromium persistente y carga la extensión MV3 r
 
 Una prueba crea desde el panel y verifica el owner del mercado, los dos mints SPL y sus confirmaciones por RPC. Otra conecta la extensión desde el panel, sirve una respuesta controlada de Twitch GraphQL y verifica creación automática y deduplicación tras recargar. Las pruebas de lifecycle usan la UI para comprar ambos resultados, resolver y cobrar; verifican el aumento de SOL nativo, el fondo reclamado on-chain, el rechazo del segundo cobro y los reembolsos de un mercado void. La respuesta Twitch de esa prueba es un fixture; las transacciones de Solana se ejecutan sobre los contratos reales clonados. Las pruebas no demuestran detección de una predicción de un streamer en vivo.
 
+## Vista de la apuesta en la extensión
+
+La versión 0.2.0 muestra la pregunta, todos los resultados, sus puntos y participantes, la distribución porcentual de puntos, el total, el tiempo restante y el estado nativo de Twitch. Los porcentajes representan puntos, no probabilidades de ganar.
+
+El bloque **Mercado automático** indica si el mercado está pendiente, creándose, creado o sin conexión; muestra la red real del puente y permite abrir el mercado. La pregunta y sus resultados se detectan sin claves de Twitch y se muestran incluso sin emparejar el puente. El emparejamiento es necesario para crear mercados.
+
+El popup selecciona el canal de la pestaña activa de Twitch al invocarlo y permite cambiar entre los canales consultados. Cada canal tiene su snapshot separado. Las actualizaciones muestran cuándo se consultó Twitch y conservan el último dato con una advertencia cuando la fuente falla. Si la apuesta desaparece de la lista activa de Twitch, la vista informa que no hay apuestas disponibles; no inventa un ganador.
+
+Se consulta cada cinco segundos con el canal abierto. La pregunta, los IDs, las opciones y el horario inicial se consideran la identidad del mercado; las métricas y el estado de Twitch se actualizan sin crear otro mercado. La resolución on-chain continúa siendo manual.
+
+Para actualizar una instalación descomprimida, cargá la carpeta **extension de este checkout** en chrome://extensions y conectá su ID desde el panel. Al cambiar de worktree cambia el ID de una extensión sin clave fija: desactivá la versión anterior para evitar dos iconos. `npm run chrome -- warthunder_esports` abre un perfil de pruebas con esta versión cargada y emparejada.
+
 ## Apostar, resolver y cobrar
 
 En cada mercado creado, elegí **Apostar / resolver / cobrar**.

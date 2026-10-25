@@ -32,7 +32,7 @@ export class Trading {
     return this.wallet();
   }
   assertOpen(record: MarketRecord) {
-    if (record.network !== this.solana.network || record.phase !== 'open') throw new Error('El mercado no está abierto');
+    if (record.network !== this.solana.network || record.phase !== 'open' || record.prediction.status !== 'ACTIVE') throw new Error('El mercado no está abierto');
     if (closesAt(record.prediction) <= Date.now()) throw new Error('El plazo para apostar terminó');
     if (record.actions?.some(a => a.status === 'pending')) throw new Error('Hay una operación pendiente de reconciliar');
   }
@@ -157,6 +157,6 @@ export class Trading {
       const receipt = await predictionMarkets.fetchPredictionClaimReceipt(this.rpc, address(record.market), payer.address);
       claimable = predictionMarkets.previewClaim({ market: view.market.data, receipt: receipt?.data, burnAmount: balance }).claimableNow;
     }
-    return { wallet: await this.wallet(), balances, claimableLamports: claimable.toString(), protocol: view.status, potLamports: view.market.data.totalPot.toString(), canBet: record.phase === 'open' && closesAt(record.prediction) > Date.now(), quoteMint: WSOL };
+    return { wallet: await this.wallet(), balances, claimableLamports: claimable.toString(), protocol: view.status, potLamports: view.market.data.totalPot.toString(), canBet: record.phase === 'open' && record.prediction.status === 'ACTIVE' && closesAt(record.prediction) > Date.now(), quoteMint: WSOL };
   }
 }

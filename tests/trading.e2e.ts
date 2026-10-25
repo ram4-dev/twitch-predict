@@ -11,8 +11,11 @@ test('participant buys both outcomes, resolver settles, winner receives native S
   const card = page.locator(`[data-key="${created.key}"]`);
   await expect(card.locator('.pill')).toHaveText('Creado en cadena', { timeout: 90000 });
   await card.getByRole('button', { name: 'Apostar / resolver / cobrar' }).click();
-  await page.getByRole('button', { name: 'Recibir 2 SOL de prueba' }).click();
-  await expect(page.locator('#trade-message')).toContainText('Recibiste 2 SOL');
+  await expect(page.locator('#participant-balance')).toContainText('SOL de prueba');
+  if (Number((await page.locator('#participant-balance').innerText()).split(' ')[0]) < .1) {
+    await page.getByRole('button', { name: 'Recibir 2 SOL de prueba' }).click();
+    await expect(page.locator('#trade-message')).toContainText('Recibiste 2 SOL');
+  }
   await page.getByRole('button', {name:'Gana', exact:true}).click();
   await page.getByLabel('Importe en SOL de prueba').fill('0.01');
   await page.getByRole('button', {name:'Cotizar apuesta',exact:true}).click();
