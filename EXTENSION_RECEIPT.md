@@ -45,3 +45,5 @@ La creación en vivo terminó correctamente: mercado A3YTVgTdraaipgRdf4rW4aARczi
 Se retomó este mismo worktree identificado en el recibo para el ajuste visual del popup. Base del ajuste: e036968. El ancho pasó de 408 a 680 px, con texto y espacios más grandes. Los resultados se muestran en dos columnas, con retorno a una columna en vistas menores de 560 px. Se mantiene el alto máximo de 600 px del popup y el desplazamiento interno.
 
 Verificación: typecheck, lint, 12 pruebas unitarias, build, E2E de popup (1 prueba) y git diff --check aprobados. Se revisó visualmente test-results/popup-offline.png. El CSS actualizado se carga al cerrar y volver a abrir el popup de la instalación que usa esta carpeta.
+
+Segundo ajuste solicitado: ancho de 680 a 780 px. Typecheck, lint, build, 12 pruebas unitarias y E2E de popup aprobados. Se conserva la distribución de resultados en dos columnas y el alto de 600 px.
