@@ -37,3 +37,10 @@ test('login uses a server challenge; a forged signature cannot create a session 
   expect(result.status).toBe(400);expect(result.body.token).toBeUndefined();expect(result.body.error).toContain('firma');
   await signIn(page);await expect(page.locator('#own-balance')).toHaveText('10.000');
 });
+
+test('cross-site document links can open consoles while API requests stay blocked',async({request})=>{
+  const headers={'sec-fetch-site':'cross-site','sec-fetch-mode':'navigate','sec-fetch-dest':'document'};
+  expect((await request.get('/',{headers})).status()).toBe(200);
+  expect((await request.get('/api/pair',{headers})).status()).toBe(403);
+  expect((await request.post('/api/points/bet',{headers,data:{}})).status()).toBe(403);
+});

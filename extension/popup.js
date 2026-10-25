@@ -55,7 +55,7 @@ async function load(){
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
     $('#channel').replaceChildren(...(channels.length?channels.map(c=>{const o=el('option',`@${c}`);o.value=c;return o;}):[el('option','Esperando un canal…')]));$('#channel').value=selectedChannel;snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
-    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
+    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){again=false;void load();}}
 }
