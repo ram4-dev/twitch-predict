@@ -1,0 +1,46 @@
+{
+  "name": "twitch-predict",
+  "version": "1.0.0",
+  "description": "<img src=\"assets/icon.svg\" width=\"64\" height=\"64\" alt=\"\">",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "portless twitch-predict tsx src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests scripts extension public/*.js",
+    "test": "tsx --test tests/*.test.ts",
+    "test:e2e": "playwright test",
+    "build": "tsx scripts/build.ts",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "setup": "tsx scripts/setup.ts",
+    "localnet": "bash scripts/localnet.sh",
+    "chrome": "tsx scripts/chrome.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@solana/kit": "^6.10.0",
+    "@solana/web3.js": "^1.98.4",
+    "@whetstone-research/doppler-sdk": "^1.0.43",
+    "express": "^5.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0"
+  },
+  "private": true
+}

@@ -1,0 +1,28 @@
+import { closesAt, predictionSchema, type Prediction } from './prediction.js';
+import { Store, type MarketRecord } from './store.js';
+export interface MarketAdapter { network: string; create(record: MarketRecord, persist: () => Promise<void>): Promise<void> }
+export class Mirror {
+  private queue = Promise.resolve();
+  constructor(readonly store: Store, readonly adapter: MarketAdapter) {}
+  async accept(input: unknown) {
+    const p = predictionSchema.parse(input);
+    if (p.status !== 'ACTIVE') throw new Error('Only ACTIVE predictions can create markets');
+    const key = `${this.adapter.network}:${p.channel.toLowerCase()}:${p.id}`;
+    // Deduplication occurs before checking expiry; repeated polls can still inspect existing markets.
+    const existing = this.store.records[key];
+    if (existing) return existing;
+    if (closesAt(p) <= Date.now()) throw new Error('Prediction already closed');
+    if (Date.parse(p.createdAt) > Date.now() + 30_000) throw new Error('Prediction starts in the future');
+    if (Object.values(this.store.records).filter(r => r.phase === 'creating').length >= 10) throw new Error('Creation queue full');
+    const record: MarketRecord = { key, prediction: p, network: this.adapter.network, phase: 'creating', outcomes: p.outcomes.map(o => ({ ...o })), signatures: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    this.store.records[key] = record;
+    this.queue = this.queue.then(async () => {
+      const persist = async () => { record.updatedAt = new Date().toISOString(); await this.store.save(); };
+      try { await persist(); await this.adapter.create(record, persist); }
+      catch (e) { record.phase = 'failed'; record.error = e instanceof Error ? e.message : 'Creation failed'; await persist(); }
+    });
+    return record;
+  }
+  async idle() { await this.queue; }
+}
+export function demoPrediction(): Prediction { return { id: `demo-${crypto.randomUUID()}`, channel: 'demo_streamer', title: '¿Gana la próxima partida?', status: 'ACTIVE', createdAt: new Date().toISOString(), predictionWindowSeconds: 1800, outcomes: [{ id: 'victory', title: 'Gana' }, { id: 'defeat', title: 'Pierde' }] }; }

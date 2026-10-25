@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Twitch → Solana · Prediction Mirror",
+  "version": "0.1.0",
+  "description": "Replica automáticamente predicciones de Twitch en mercados Doppler de Solana devnet.",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["https://gql.twitch.tv/*", "http://twitch-predict.localhost/*", "http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "action": {"default_popup": "popup.html"},
+  "content_scripts": [{"matches": ["https://www.twitch.tv/*"], "js": ["content.js"], "run_at": "document_idle"}],
+  "externally_connectable": {"matches": ["http://twitch-predict.localhost/*"]}
+}
