@@ -4,13 +4,13 @@ import { closesAt, predictionSchema, type Prediction } from './prediction.js';
 
 export const STARTING_POINTS = 10_000;
 export const SOURCE_MAX_AGE = 30_000;
-type Account = { id:string; name:string; tokenHash:string; balance:number; createdAt:string };
+type Account = { id:string; name:string; tokenHash:string; wallet?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; createdAt:string };
 type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean };
 type Receipt = { fingerprint:string; result:unknown };
 type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'; delta:number; balance:number; marketKey?:string; createdAt:string };
-type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[] };
-const fresh = ():State => ({version:1,accounts:{},markets:{},bets:[],receipts:{},ledger:[],channels:[]});
+type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string> };
+const fresh = ():State => ({version:1,accounts:{},markets:{},bets:[],receipts:{},ledger:[],channels:[],sessions:{}});
 const hash = (token:string) => createHash('sha256').update(token).digest('hex');
 const now = () => new Date().toISOString();
 export class Points {
@@ -19,7 +19,7 @@ export class Points {
   constructor(readonly directory:string) {}
   async load() {
     await mkdir(this.directory,{recursive:true,mode:0o700});
-    try { this.state=JSON.parse(await readFile(`${this.directory}/points.json`,'utf8')); if(this.state.version!==1) throw new Error('Unsupported points database'); }
+    try { this.state=JSON.parse(await readFile(`${this.directory}/points.json`,'utf8')); if(this.state.version!==1) throw new Error('Unsupported points database');this.state.sessions??={}; }
     catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
   }
   // Every operation commits one atomic snapshot; failed persistence never updates the live state.
@@ -33,7 +33,7 @@ export class Points {
     this.queue=task.catch(()=>undefined);return task;
   }
   private account(state:State, token:string) {
-    const account=Object.values(state.accounts).find(a=>a.tokenHash===hash(token));
+    const digest=hash(token);const account=state.accounts[state.sessions[digest]]??Object.values(state.accounts).find(a=>!a.wallet&&a.tokenHash===digest);
     if(!account) throw new Error('Sesión inválida. Volvé a conectar tu cuenta.');return account;
   }
   private ledger(state:State, account:Account, kind:LedgerEntry['kind'], delta:number, marketKey?:string) {
@@ -48,10 +48,20 @@ export class Points {
       return {token,account:{id,name:account.name,balance:account.balance}};
     });
   }
+  async walletLogin(wallet:string,preferredToken?:string) {
+    const token=randomBytes(32).toString('hex');
+    return this.transaction(state=>{
+      let account=Object.values(state.accounts).find(a=>a.wallet===wallet);
+      if(!account&&preferredToken){const preferred=this.account(state,preferredToken);if(!preferred.wallet)account=preferred;}
+      if(!account){const id=randomUUID();account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};state.accounts[id]=account;this.ledger(state,account,'welcome',STARTING_POINTS);}
+      account.wallet=wallet;state.sessions[hash(token)]=account.id;
+      return {token,account:{id:account.id,wallet,name:account.name,balance:account.balance}};
+    });
+  }
   me(token:string) {
     const account=this.account(this.state,token);
     const bets=this.state.bets.filter(b=>b.accountId===account.id);
-    return {id:account.id,name:account.name,balance:account.balance,startingPoints:STARTING_POINTS,
+    return {id:account.id,name:account.name,wallet:account.wallet??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-30).reverse()};
   }

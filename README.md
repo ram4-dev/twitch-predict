@@ -1,51 +1,68 @@
 # Prediction Mirror · Puntos internos
 
-POC local: una extensión Chrome detecta predicciones de Twitch y crea una copia automática con el mismo título y opciones. Los consumidores apuestan puntos propios guardados en el servidor. El flujo predeterminado no usa Solana, wallets ni fondos reales.
+Extensión Chrome que replica predicciones de Twitch y permite apostar puntos internos. Phantom identifica al usuario mediante una firma; saldo, apuestas, resultado y cobro siguen offchain.
 
-## Ejecutar
+## Recorrido del usuario
 
-Requiere Node 22+, npm y Portless.
+1. Instala la extensión. Se abre automáticamente el onboarding.
+2. Toca **Conectar Phantom** y aprueba conexión/firma en su wallet.
+3. Se vincula la extensión automáticamente y llega al panel. No copia IDs ni credenciales.
+4. Panel y extensión usan la misma cuenta, saldo e historial. Volver con la misma dirección recupera esa cuenta desde otro navegador; no entrega otro saldo inicial.
+
+Si Phantom no está instalado, el onboarding ofrece su enlace oficial. La wallet y la aprobación de acceso pertenecen al usuario; el proyecto no guarda claves privadas de Phantom ni importa frases de recuperación.
+
+Las cuentas nuevas reciben 10.000 puntos de prueba. Una wallet nueva puede vincular la cuenta anónima anterior de la extensión y conservar sus apuestas. Si esa wallet ya tiene una cuenta, se usa la cuenta existente; no se mezclan saldos anónimos ni se duplican puntos iniciales.
+
+## Ejecutar en este equipo
+
+Node 22+, npm, Portless y Chromium de Playwright:
 
 ```sh
 npm ci
 npm run build
-npm run dev
+npx playwright install chromium
 ```
 
-Abrí la URL `.localhost` que imprime Portless. En este equipo: http://twitch-predict.localhost:1356.
+El servicio local ya está configurado en launchd (`dev.twitchpredict.bridge`). Acceso actual: https://twitch-predict.localhost:1357. Se mantiene http://twitch-predict.localhost:1356 para el puente y los enlaces anteriores; el onboarding redirige a HTTPS.
+
+Para operar manualmente, detené primero el servicio anterior: hay un único proceso escritor de puntos. Prepará un proxy TLS aislado y arrancá el servidor HTTP con su alias TLS:
 
 ```sh
-npx playwright install chromium
-npm run chrome -- warthunder_esports
+PORTLESS_STATE_DIR="$PWD/data/portless-auth" PORTLESS_PORT=1357 PORTLESS_HTTPS=1 portless proxy start -p 1357
+AUTH_ORIGIN=https://twitch-predict.localhost:1357 AUTH_PROXY_STATE_DIR="$PWD/data/portless-auth" PORTLESS_PORT=1356 PORTLESS_HTTPS=0 npm run dev
 ```
 
-El lanzador carga la extensión 0.3.0, la empareja, abre Twitch y abre el popup nativo de 700 px sin fijar el tamaño de la ventana. Para Chrome habitual, cargá la carpeta `extension` como extensión descomprimida y conectá su ID desde el panel.
+El certificado local se gestiona con Portless; los otros proyectos conservan su proxy. El alias HTTPS apunta al puerto que Portless asigna al único backend y se actualiza al arrancar.
 
-## Flujo
+```sh
+npm run chrome
+```
 
-- Cada instalación de la extensión y cada perfil del panel tienen cuentas anónimas independientes con 10.000 puntos iniciales. El identificador de sesión se conserva en el almacenamiento del navegador. No hay recuperación de cuenta si se borra ese almacenamiento.
-- El panel permite seguir canales. El servidor consulta Twitch cada cinco segundos y crea un único mercado por ID/canal. La extensión también detecta la predicción mientras el canal está abierto.
-- El servidor verifica las predicciones recibidas contra Twitch. Los puntos de Twitch son datos de referencia: el pozo interno empieza en cero y solo aumenta con apuestas internas.
-- Las apuestas aceptan puntos enteros dentro del saldo disponible. Se cierran al vencer el plazo o cuando Twitch informa LOCKED. Si la confirmación de Twitch tiene más de 30 segundos, se bloquean nuevas apuestas hasta actualizarla.
-- El servidor sigue el ID original incluso después de que desaparezca de la lista activa. El resultado RESOLVED reparte el pozo proporcionalmente entre los ganadores, sin comisión. Los redondeos conservan cada punto. CANCELED o un ganador sin apuestas generan reembolsos.
-- El consumidor cobra desde la extensión o el panel. Débito y cobro usan identificadores persistentes de operación para evitar duplicados en reintentos. No hay resolución manual de mercados reales; el panel solo permite simular el resultado de los ejemplos.
-- `data/points.json` guarda cuentas, mercados, apuestas, recibos y movimientos mediante una cola única y reemplazo atómico del archivo. Los tokens se almacenan como hash en el servidor. Hay un solo proceso escritor: no es una base de datos distribuida.
+Abre Chrome for Testing con la extensión 0.4.0 y el onboarding. Conserva el perfil `data/chromium`. Si ese perfil ya tiene Phantom, el lanzador permite cargarla sin leer su almacenamiento de wallet. La extensión tiene una clave pública de identidad fija para conservar su ID al cambiar de checkout. Para Chrome habitual, cargá la carpeta `extension` como extensión descomprimida: el onboarding se abre al instalarla, o desde **Conectar Phantom** en su popup.
 
-## Pruebas
+## Cuentas y autenticación
+
+El servidor crea un desafío por wallet con dominio/puerto, URI, nonce y vencimiento de cinco minutos. Verifica Ed25519 sobre el mensaje original; el cliente no elige el mensaje aceptado. Los desafíos son de un solo uso y no se aceptan firmas vencidas o de otro origen. El flujo de instalación tiene 30 minutos para permitir configurar Phantom; tras firmar hay cinco minutos para entregar la vinculación.
+
+La extensión guarda un estado aleatorio privado. El panel entrega un código ligado a ese flujo y el background lo canjea una sola vez, verificando origen, ID de extensión y estado. Panel y extensión reciben sesiones distintas para la misma cuenta. Los tokens se guardan como hashes en `data/points.json`; las sesiones y el historial sobreviven al reinicio. Los desafíos pendientes son efímeros: después de reiniciar el servidor se vuelve a abrir el acceso desde la extensión.
+
+## Mercados y puntos
+
+El servidor sigue canales y los IDs de las predicciones originales hasta conocer su resultado, aunque se cierre la extensión. Cada predicción se copia una vez con el mismo título/opciones; las entradas de la extensión se verifican contra Twitch. El pozo interno empieza en cero y nunca copia los puntos de Twitch.
+
+Las apuestas aceptan puntos enteros dentro del saldo, cierran al vencer el plazo o al informar LOCKED, y se bloquean si la fuente lleva más de 30 segundos sin verificar. RESOLVED reparte el pozo proporcionalmente entre los ganadores, conservando cada punto y sin comisión. CANCELED o un ganador sin apuestas generan reembolsos. El cobro usa recibos persistentes contra duplicados. Solo los ejemplos permiten resolver manualmente.
+
+`data/points.json` contiene cuentas, sesiones, mercados, apuestas, movimientos y recibos. Las operaciones se serializan y se persisten por reemplazo atómico. Es una POC local de un solo escritor: no incluye dinero real, recuperación social ni protección contra una persona que cree varias wallets.
+
+## UI y validación
+
+Popup nativo de 700px; Button/Input/Badge de shadcn, React 18, Tailwind, Inter local. Taste Skill está instalado en `.agents/skills/taste-skill`; la dirección visual está en DESIGN.md. Taste Labs privado no está conectado.
 
 ```sh
 npm run check
 npm run test:e2e
 ```
 
-Las E2E arrancan su propio servidor mediante Portless (`twitch-points-test.localhost:1356`), datos temporales y una fuente Twitch controlada mediante un preload exclusivo de pruebas. Cubren dos consumidores, apuestas, resultados, cobro, reembolso, persistencia en el navegador, extensión MV3 y el ancho del popup nativo con la ventana de Chrome sin cambios. Las pruebas unitarias cubren además concurrencia, conservación de puntos, fallos de escritura y restauración del servidor.
+Las E2E arrancan un servidor y un proxy Portless aislados en http://twitch-predict.localhost:1358 con datos temporales. La fuente Twitch y el proveedor de wallet se controlan en la prueba; las firmas Ed25519 y su verificación del servidor son reales. Prueban instalación, onboarding, cancelación, firma inválida, cuenta compartida entre panel/extensión y otro navegador, apuesta, resultado, cobro, reembolso y popup nativo. No sustituyen la aprobación manual con una instalación real de Phantom.
 
-La suite antigua de Solana es optativa: `MARKET_MODE=solana` tanto en el servidor como en las E2E, con sus dependencias operativas. Ver SOLANA_LEGACY.md. No se ejecuta en la fase offchain.
-
-## Alcance
-
-POC anónima para un único servidor local. Se pueden crear varias cuentas al borrar datos o cambiar de perfil; no hay protección contra cuentas múltiples, login de producción ni dinero real. El operador local configura canales y ejemplos desde el panel. La integración GraphQL de Twitch es interna y puede cambiar; los errores de fuente se muestran en la UI y nunca se inventa un ganador.
-
-## UI
-
-Los controles compartidos de apuesta usan Button, Input y Badge de shadcn/ui, con React 18, Tailwind y esbuild. Las fuentes son locales y el popup nativo mide 700px. El panel tiene vistas separadas para mercados, apuestas personales y operación de canales. Taste Skill está instalado en `.agents/skills/taste-skill`; la dirección, auditoría visual y límite de acceso a Taste Labs se documentan en DESIGN.md.
+El prototipo Solana anterior se conserva como modo optativo (`MARKET_MODE=solana`); ver SOLANA_LEGACY.md. Sus E2E están excluidas del flujo offchain.

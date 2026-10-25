@@ -23,7 +23,7 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
     await popup.getByLabel('Canal de Twitch').selectOption('alpha_stream');
     await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();
     await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('100 puntos');
-    await expect(popup.locator('#setup')).toBeVisible();await expect(popup.locator('.market strong')).toHaveText('Conectá la extensión para crear la copia');
+    await expect(popup.locator('#login')).toBeVisible();await expect(popup.locator('.market strong')).toHaveText('Conectá la extensión para crear la copia');
     await popup.getByLabel('Canal de Twitch').selectOption('beta_stream');
     await expect(popup.getByRole('heading',{name:'¿Gana Beta?'})).toBeVisible();await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('900 puntos');
     emptySecond=true;await popup.getByRole('button',{name:'Actualizar predicción'}).click();await expect(popup.locator('#empty')).toBeVisible();await expect(popup.locator('.prediction')).toHaveCount(0);

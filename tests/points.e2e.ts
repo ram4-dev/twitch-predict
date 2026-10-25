@@ -1,18 +1,19 @@
 import {test,expect,chromium,type Page} from '@playwright/test';
-import {mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,cp,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {signIn,phantomProvider} from './fixtures/phantom.js';
 const fixture=resolve('test-results/twitch-fixture.json');
-const base=process.env.APP_URL??'http://twitch-points-test.localhost:1356';
+const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
 async function operator(page:Page,path:string,body:unknown){return page.evaluate(async({path,body})=>{const {token}=await(await fetch('/api/pair')).json();const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(body)});if(!r.ok)throw new Error((await r.json()).error);return r.json();},{path,body});}
 async function ownRequest(page:Page,path:string,body:unknown){return page.evaluate(async({path,body})=>{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')}`},body:JSON.stringify(body)});return {status:r.status,data:await r.json()};},{path,body});}
 test.skip(process.env.MARKET_MODE==='solana','Offchain flow');
 test('consumer UI: two separate accounts bet, winner claims, loser cannot claim; refund and reload retain points',async({page,browser})=>{
-  await page.goto('/');await expect(page.locator('#own-balance')).toHaveText('10.000');
+  await signIn(page);await page.goto('/');await expect(page.locator('#own-balance')).toHaveText('10.000');
   const market=await operator(page,'/api/demo',{});await page.reload();const card=page.locator(`[data-key="${market.key}"]`);
   await card.getByLabel('Puntos a apostar').fill('300');await card.getByRole('button',{name:'Apostar a Gana',exact:true}).click();await expect(page.locator('#own-balance')).toHaveText('9.700');
-  const second=await browser.newContext();const other=await second.newPage();await other.goto(base);await expect(other.locator('#own-balance')).toHaveText('10.000');const otherCard=other.locator(`[data-key="${market.key}"]`);
+  const second=await browser.newContext();const other=await second.newPage();await phantomProvider(other);await other.goto(`${base}/onboarding`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL('**/#markets');await other.goto(base);await expect(other.locator('#own-balance')).toHaveText('10.000');const otherCard=other.locator(`[data-key="${market.key}"]`);
   await otherCard.getByLabel('Puntos a apostar').fill('700');await otherCard.getByRole('button',{name:'Apostar a Pierde',exact:true}).click();await expect(other.locator('#own-balance')).toHaveText('9.300');
   await page.reload();await expect(card.locator('.points-pool')).toContainText('1.000 pts');
   await card.getByText('Resolver este ejemplo').click();await card.getByRole('button',{name:'Dar ganador: Gana',exact:true}).click();
@@ -24,7 +25,8 @@ test('consumer UI: two separate accounts bet, winner claims, loser cannot claim;
   await page.screenshot({path:'test-results/offchain-dashboard.png',fullPage:true});await second.close();
 });
 test('MV3 detects a prediction, automatically creates one mirror, bets own points and claims after server tracks Twitch result without extension polling',async()=>{
-  const profile=await mkdtemp(`${tmpdir()}/points-extension-`);const extension=resolve('extension');
+  const profile=await mkdtemp(`${tmpdir()}/points-extension-`);const extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
+  for(const file of ['background.js','popup.js']){const path=resolve(extension,file);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
   const prediction={id:randomUUID(),channel:'fixture_stream',title:'¿Gana el equipo azul?',status:'ACTIVE',createdAt:new Date().toISOString(),predictionWindowSeconds:600,lockedAt:null,endedAt:null,winningOutcome:null as null|{id:string},outcomes:[{id:'blue',title:'Azul',color:'BLUE',totalPoints:9_000_000,totalUsers:500},{id:'red',title:'Rojo',color:'PINK',totalPoints:1_000_000,totalUsers:200}]};
   await writeFile(fixture,JSON.stringify([prediction]));
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
@@ -34,8 +36,10 @@ test('MV3 detects a prediction, automatically creates one mirror, bets own point
     await context.route('https://www.twitch.tv/fixture_stream',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch fixture</title>'}));
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
     const dashboard=await context.newPage();await dashboard.goto(base);
-    const bridgeToken=await dashboard.evaluate(async()=> (await(await fetch('/api/pair')).json()).token);
-    await worker.evaluate(async token=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({bridgeUrl:'http://twitch-predict.localhost:1356',bridgeToken:token});},bridgeToken);
+    await phantomProvider(context);
+    await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url(),{timeout:15000}).toBeTruthy();
+    const onboarding=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;await onboarding.reload();
+    await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL('**/#markets');
     const twitch=await context.newPage();await twitch.goto('https://www.twitch.tv/fixture_stream');
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:prediction.title})).toBeVisible();await expect(popup.locator('.points-pool')).toContainText('0 pts');await expect(popup.locator('#own-balance')).toHaveText('10.000');
     await popup.getByLabel('Puntos a apostar').fill('250');await popup.getByRole('button',{name:'Apostar a Azul',exact:true}).click();await expect(popup.locator('#own-balance')).toHaveText('9.750');await expect(popup.locator('.points-pool')).toContainText('250 pts');

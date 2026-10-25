@@ -62,7 +62,45 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
 chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
   if (!sender.url || new URL(sender.url).hostname !== 'twitch-predict.localhost' || message.type !== 'PAIR') return;
   let url; try { url = new URL(message.bridgeUrl); } catch { return; }
-  if (url.protocol !== 'http:' || url.hostname !== 'twitch-predict.localhost' || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
+  if (!['http:','https:'].includes(url.protocol) || url.hostname !== 'twitch-predict.localhost' || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
   chrome.storage.local.set({ bridgeUrl: url.origin, bridgeToken: message.token }).then(() => reply({ ok: true }));
   return true;
+});
+
+let authStart;
+function appUrl(value){const u=new URL(value||defaultBridge);if(!['http:','https:'].includes(u.protocol)||u.hostname!=='twitch-predict.localhost')throw new Error('URL de la app inválida');return u.origin;}
+async function startAuth(){
+  const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','pendingAuth']);
+  let base=appUrl(stored.bridgeUrl);
+  const config=await fetch(`${base}/api/auth/config`,{signal:AbortSignal.timeout(8000)});if(!config.ok)throw new Error('No se pudo abrir el inicio de sesión');base=appUrl((await config.json()).origin);
+  const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
+  const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo abrir el acceso');
+  await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
+  await chrome.tabs.create({url:`${base}/onboarding#flow=${result.flowId}`});return {ok:true};
+}
+chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
+  if(message.type!=='CONNECT_PHANTOM')return;
+  const task=authStart??=startAuth().finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
+});
+chrome.runtime.onInstalled.addListener(({reason})=>{if(reason==='install')void (authStart??=startAuth().finally(()=>{authStart=undefined;})).catch(e=>chrome.storage.local.set({authError:e.message}));});
+chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
+  if(message.type!=='AUTH_COMPLETE')return;
+  void (async()=>{
+    const stored=await chrome.storage.local.get(['pendingAuth','pointsToken','lastAuthFlow']);
+    const pending=stored.pendingAuth;
+    if(stored.lastAuthFlow===message.flowId&&stored.pointsToken){reply({ok:true});return;}
+    if(!pending||pending.flowId!==message.flowId||Date.parse(pending.expiresAt)<=Date.now()||!sender.url||new URL(sender.url).origin!==pending.base)throw new Error('El acceso no coincide con esta extensión. Volvé a conectar Phantom.');
+    if(typeof message.code!=='string'||!/^[a-f0-9]{64}$/.test(message.code))throw new Error('Código de acceso inválido');
+    const response=await fetch(`${pending.base}/api/auth/extension/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flowId:pending.flowId,state:pending.state,extensionId:chrome.runtime.id,code:message.code}),signal:AbortSignal.timeout(12000)});
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo vincular la extensión');
+    await chrome.storage.local.set({...(stored.pointsToken?{previousPointsToken:stored.pointsToken}:{}),pointsToken:result.token,walletAddress:result.account.wallet,bridgeToken:result.bridgeToken,bridgeUrl:pending.base,pendingAuth:null,lastAuthFlow:message.flowId,authError:null});
+    reply({ok:true});
+  })().catch(e=>reply({error:e.message}));return true;
+});
+
+chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
+  if(message.type!=='CONNECT_PHANTOM'||!sender.url)return;
+  const origin=new URL(sender.url);if(!['http:','https:'].includes(origin.protocol)||origin.hostname!=='twitch-predict.localhost')return;
+  const task=authStart??=startAuth().finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
 });

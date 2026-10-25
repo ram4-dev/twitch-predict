@@ -14,12 +14,11 @@ type Client=ReturnType<typeof createPointsClient>;
 const roots=new Set<Root>();
 export const number=(n:number|null|undefined)=>new Intl.NumberFormat('es-AR').format(n??0);
 export function createPointsClient(base:string,storage:{get():Promise<string|null|undefined>;set(token:string):Promise<void>}) {
-  let session:Promise<string>|undefined;
   const request=async<T=unknown>(path:string,body?:unknown,token?:string):Promise<T>=>{
     const response=await fetch(`${base}${path}`,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
     const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);return data;
   };
-  const ensure=()=>session??=(async()=>{let token=await storage.get();if(!token){const data=await request<{token:string}>('/api/points/session',{});token=data.token;await storage.set(token);}return token;})().catch(e=>{session=undefined;throw e;});
+  const ensure=async()=>{const token=await storage.get();if(!token)throw new Error('Conectá Phantom para acceder a tus puntos.');return token;};
   return {request,me:async()=>request<Account>('/api/points/me',undefined,await ensure()),bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
 }
 export function disposePointsViews(){for(const root of roots)root.unmount();roots.clear();}
