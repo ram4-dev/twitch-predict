@@ -39,3 +39,9 @@ La sustitución en el Chrome habitual está bloqueada por el controlador nativo:
 El popup nuevo se dejó abierto sobre el stream en Chrome for Testing. No confundir esa ventana con el Chrome habitual. No se usaron fondos reales ni se migró a devnet público.
 
 La creación en vivo terminó correctamente: mercado A3YTVgTdraaipgRdf4rW4aARcziU7ttDNgxBwcGDmZfh en localnet, phase=open, seis transacciones de creación. El registro conservó color, totalPoints y totalUsers de DODEC y AVReS, actualizados por las consultas posteriores.
+
+## Ajuste de tamaño solicitado
+
+Se retomó este mismo worktree identificado en el recibo para el ajuste visual del popup. Base del ajuste: e036968. El ancho pasó de 408 a 680 px, con texto y espacios más grandes. Los resultados se muestran en dos columnas, con retorno a una columna en vistas menores de 560 px. Se mantiene el alto máximo de 600 px del popup y el desplazamiento interno.
+
+Verificación: typecheck, lint, 12 pruebas unitarias, build, E2E de popup (1 prueba) y git diff --check aprobados. Se revisó visualmente test-results/popup-offline.png. El CSS actualizado se carga al cerrar y volver a abrir el popup de la instalación que usa esta carpeta.
