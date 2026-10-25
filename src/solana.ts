@@ -38,8 +38,8 @@ export class SolanaMarkets {
     const payer = await this.signer();
     return { wallet: payer.address, balance: (await this.connection.getBalance(new PublicKey(payer.address))) / 1e9, network: this.network };
   }
-  async send(instructions: readonly Instruction[], label: string, save: (signature: string) => Promise<void>, lookup?: {lookupTableAddress: ReturnType<typeof address>; addresses: ReturnType<typeof address>[]}) {
-    const payer = await this.signer();
+  async send(instructions: readonly Instruction[], label: string, save: (signature: string) => Promise<void>, lookup?: {lookupTableAddress: ReturnType<typeof address>; addresses: ReturnType<typeof address>[]}, signerName = 'wallet') {
+    const payer = await this.signer(signerName);
     const latest = await this.connection.getLatestBlockhash();
     const web3Instructions = instructions.map(ix => new TransactionInstruction({
       programId: new PublicKey(ix.programAddress), data: Buffer.from(ix.data ?? []),

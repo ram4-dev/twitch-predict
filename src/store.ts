@@ -1,7 +1,9 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import type { Prediction } from './prediction.js';
+export type MarketAction = { id: string; kind: 'buy' | 'resolve' | 'claim' | 'refund'; status: 'pending' | 'done' | 'failed'; signatures: string[]; amountLamports?: string; outcomeId?: string; paidLamports?: string; error?: string; createdAt: string };
 export type MarketRecord = {
-  key: string; prediction: Prediction; network: string; phase: 'creating' | 'open' | 'failed';
+  key: string; prediction: Prediction; network: string; phase: 'creating' | 'open' | 'resolving' | 'resolved' | 'void' | 'failed';
+  winnerId?: string; actions?: MarketAction[]; tradingError?: string;
   oracle?: string; market?: string; outcomes: { id: string; title: string; mint?: string; launch?: string }[];
   signatures: string[]; error?: string; createdAt: string; updatedAt: string;
 };

@@ -4,6 +4,11 @@ export interface MarketAdapter { network: string; create(record: MarketRecord, p
 export class Mirror {
   private queue = Promise.resolve();
   constructor(readonly store: Store, readonly adapter: MarketAdapter) {}
+  execute<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(work);
+    this.queue = result.then(() => undefined, () => undefined);
+    return result;
+  }
   async accept(input: unknown) {
     const p = predictionSchema.parse(input);
     if (p.status !== 'ACTIVE') throw new Error('Only ACTIVE predictions can create markets');
@@ -16,7 +21,7 @@ export class Mirror {
     if (Object.values(this.store.records).filter(r => r.phase === 'creating').length >= 10) throw new Error('Creation queue full');
     const record: MarketRecord = { key, prediction: p, network: this.adapter.network, phase: 'creating', outcomes: p.outcomes.map(o => ({ ...o })), signatures: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.store.records[key] = record;
-    this.queue = this.queue.then(async () => {
+    void this.execute(async () => {
       const persist = async () => { record.updatedAt = new Date().toISOString(); await this.store.save(); };
       try { await persist(); await this.adapter.create(record, persist); }
       catch (e) { record.phase = 'failed'; record.error = e instanceof Error ? e.message : 'Creation failed'; await persist(); }

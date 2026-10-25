@@ -5,3 +5,7 @@ test-results/
 playwright-report/
 .env*
 *.log
+
+# Ignore the local shared dependency/data symlinks as well as directories.
+node_modules
+data

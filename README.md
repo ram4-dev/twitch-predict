@@ -57,12 +57,26 @@ npm run test:e2e
 
 La suite E2E usa Playwright con Chromium persistente y carga la extensión MV3 real. Requiere el puente y el validador local anteriores activos. Si falta el navegador: `npx playwright install chromium`.
 
-Una prueba crea desde el panel y verifica el owner del mercado, los dos mints SPL y sus confirmaciones por RPC. Otra prueba conecta la extensión desde el panel, sirve una respuesta controlada de Twitch GraphQL y verifica creación automática y deduplicación tras recargar. La respuesta Twitch de esa prueba es un fixture; las transacciones de Solana se ejecutan sobre los contratos reales clonados. Las pruebas no demuestran detección de una predicción de un streamer en vivo.
+Una prueba crea desde el panel y verifica el owner del mercado, los dos mints SPL y sus confirmaciones por RPC. Otra conecta la extensión desde el panel, sirve una respuesta controlada de Twitch GraphQL y verifica creación automática y deduplicación tras recargar. Las pruebas de lifecycle usan la UI para comprar ambos resultados, resolver y cobrar; verifican el aumento de SOL nativo, el fondo reclamado on-chain, el rechazo del segundo cobro y los reembolsos de un mercado void. La respuesta Twitch de esa prueba es un fixture; las transacciones de Solana se ejecutan sobre los contratos reales clonados. Las pruebas no demuestran detección de una predicción de un streamer en vivo.
+
+## Apostar, resolver y cobrar
+
+En cada mercado creado, elegí **Apostar / resolver / cobrar**.
+
+1. **Recibir 2 SOL de prueba** financia una wallet de participante distinta de la del creador. Este faucet funciona sólo en localnet.
+2. Elegí una opción y un importe entre 0.001 y 1 SOL. **Cotizar apuesta** muestra los tokens estimados y el mínimo aceptado, con tolerancia del 0.5%. La cotización dura 30 segundos.
+3. **Confirmar apuesta** envuelve SOL en WSOL, compra tokens del resultado y confirma la transacción. Las apuestas nuevas se rechazan al vencer el plazo local.
+4. Cuando conozcas el resultado, elegí el ganador y confirmá **Fijar ganador y liquidar**. El creador firma como oráculo de confianza y liquida todos los resultados. La resolución es manual e irreversible; no interpreta el vídeo ni consulta automáticamente el ganador de Twitch. Para la demo se puede resolver antes de su vencimiento, lo que cierra las compras.
+5. **Cobrar premio / reembolso en SOL** quema los tokens ganadores, cobra del fondo del contrato y convierte WSOL a SOL en la misma transacción. Si el resultado elegido como ganador no tiene tokens comprados, Doppler declara el mercado void y permite reembolsos según sus reglas.
+
+La wallet de participante es compartida por esta POC local y custodiada por el puente, con su clave en data/participant.json (permiso 600). No se conecta a Phantom ni Solflare. No usar con fondos reales.
+
+La cola serializa creación, compras, resolución y cobros. Cada operación tiene un UUID de idempotencia y guarda sus firmas antes de transmitir. Una respuesta ambigua deja la operación pendiente y bloquea nuevos envíos en ese mercado hasta inspeccionar los recibos.
 
 ## Límites de esta POC
 
-- Replica la **creación**. No sincroniza lock, cancelación, resolución ni reparto de premios. No ofrece una interfaz de trading.
-- La hora de cierre se registra localmente. Doppler no la aplica automáticamente en su oracle; no debe usarse esta POC con fondos reales.
+- Replica la creación automáticamente y ofrece compra, resolución manual, liquidación y cobro on-chain. No sincroniza automáticamente lock, cancelación ni ganador de Twitch.
+- El puente rechaza compras después de la hora de cierre local. Doppler no impone esa hora por sí mismo: la protección on-chain comienza al finalizar el oracle. Esta POC no debe usarse con fondos reales.
 - El título y los textos de opciones quedan en el registro local. On-chain se guardan IDs hash de los resultados, oracle, mercado y mints; no hay publicación de metadatos de texto.
 - Los tokens usan una curva buy-only de Doppler denominada en WSOL; no replica cuotas ni liquidez de los puntos de Twitch.
 - La cola es de un solo proceso y acepta hasta diez creaciones pendientes. Cada combinación canal/ID de predicción se procesa una vez.
