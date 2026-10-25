@@ -1,0 +1,47 @@
+{
+  "sourceBranch": "feat/settlement-consoles",
+  "sourceCommit": "03fe248",
+  "branch": "feat/twitch-streamer-oauth",
+  "worktree": "/Users/ramiro/.t3/projects/twitch-predict.feat-twitch-streamer-oauth",
+  "features": [
+    "Twitch authorization-code OAuth tied to signed-in Phantom wallet",
+    "State, HttpOnly SameSite cookie, one-use callback and completion ticket protect account linking",
+    "Server validates Twitch client and user IDs, queries own public channel identity and discards tokens",
+    "No email/chat/write scopes; no user tokens or client secret in browser bundles or points database",
+    "Verified Twitch identity provisions channel ownership; manual channel assignment limited to demo_streamer",
+    "Disconnect removes real-channel streamer rights while preserving points, bets and history"
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "unit": "31 passed",
+    "build": "passed",
+    "e2e": "12 passed, 4 legacy Solana skipped",
+    "visual": "test-results/twitch-connected.png inspected; normal Chrome shows connection card and existing account"
+  },
+  "e2eProvider": "Twitch consent and token endpoints simulated in isolated test fixtures; wallet uses real Ed25519 proofs. Real Twitch OAuth is not claimed complete.",
+  "runtime": "launchctl dev.twitchpredict.bridge now runs this worktree through Portless; existing shared data retained; HTTPS callback/panel healthy",
+  "callbackUrl": "https://twitch-predict.localhost:1357/auth/twitch/callback",
+  "configuration": {
+    "missingVaultKeys": [
+      "TWITCH_CLIENT_ID",
+      "TWITCH_CLIENT_SECRET"
+    ],
+    "provisionCommand": "vault-env to /Users/ramiro/.t3/projects/twitch-predict.feat-twitch-streamer-oauth/.env --names TWITCH_CLIENT_ID,TWITCH_CLIENT_SECRET",
+    "runtimeEnvName": "APP_ENV_FILE",
+    "runtimeEnvPath": "/Users/ramiro/.t3/projects/twitch-predict.feat-twitch-streamer-oauth/.env"
+  },
+  "externalBlocker": {
+    "account": "RamitaPai",
+    "step": "Register confidential Twitch application Prediction Mirror POC RamitaPai",
+    "portal": "https://dev.twitch.tv/console/apps/create",
+    "error": "user must have two factor auth enabled to perform this action",
+    "state": "Registration form prepared; no application or credentials created. User must enable 2FA. Normal Chrome developer tab left for handoff."
+  },
+  "references": [
+    "https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#authorization-code-grant-flow",
+    "https://dev.twitch.tv/docs/authentication/register-app/",
+    "https://dev.twitch.tv/docs/authentication/validate-tokens/"
+  ],
+  "cleanup": "branch/worktree preserved; no merge, no unrelated edits reverted"
+}

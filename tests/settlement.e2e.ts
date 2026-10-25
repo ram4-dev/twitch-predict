@@ -6,7 +6,7 @@ async function own(page:Page,path:string,body?:unknown){return page.evaluate(asy
 test.skip(process.env.MARKET_MODE==='solana','Offchain settlement');
 test('streamer console records three wallets, previews exact split, resolves and distributes to offline users only once; cancellation refunds',async({page,browser})=>{
   await signIn(page);const m=await operator(page,'/api/demo',{});
-  await page.getByRole('link',{name:'Canales',exact:true}).click();await page.getByLabel('Canal del streamer',{exact:true}).fill('demo_streamer');await page.getByRole('button',{name:'Habilitar mi wallet para este canal',exact:true}).click();await expect(page).toHaveURL(/#streamer$/);
+  await page.getByRole('link',{name:'Canales',exact:true}).click();await expect(page.getByLabel('Canal del streamer',{exact:true})).toHaveValue('demo_streamer');await page.getByRole('button',{name:'Habilitar mi wallet para este canal',exact:true}).click();await expect(page).toHaveURL(/#streamer$/);
   const managed=page.locator(`[data-streamer-key="${m.key}"]`);await expect(managed).toBeVisible();
   const contexts=await Promise.all([browser.newContext(),browser.newContext(),browser.newContext()]);
   try{

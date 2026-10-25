@@ -4,13 +4,14 @@ import { closesAt, predictionSchema, type Prediction } from './prediction.js';
 
 export const STARTING_POINTS = 10_000;
 export const SOURCE_MAX_AGE = 30_000;
-type Account = { id:string; name:string; tokenHash:string; wallet?:string; balance:number; createdAt:string };
+export type TwitchIdentity = {id:string;login:string;displayName:string;linkedAt:string};
+type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
 type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
 type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'; delta:number; balance:number; marketKey?:string; createdAt:string };
-type Streamer = { channel:string; wallet:string; assignedAt:string };
+type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
 type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer> };
 export type StreamerAction = { key:string; action:'lock'|'resolve'|'cancel'|'distribute'; winnerId?:string; requestId:string };
 const fresh = ():State => ({version:1,accounts:{},markets:{},bets:[],receipts:{},ledger:[],channels:[],sessions:{},streamers:{}});
@@ -67,10 +68,10 @@ export class Points {
   me(token:string) {
     const account=this.account(this.state,token);
     const bets=this.state.bets.filter(b=>b.accountId===account.id);
-    return {id:account.id,name:account.name,wallet:account.wallet??null,balance:account.balance,startingPoints:STARTING_POINTS,
+    return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,channel:this.state.markets[b.marketKey].prediction.channel,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-100).reverse().map(l=>({...l,title:l.marketKey?this.state.markets[l.marketKey]?.prediction.title:undefined})),
-      streamerChannels:Object.values(this.state.streamers).filter(s=>s.wallet===account.wallet).map(s=>s.channel)};
+      streamerChannels:Object.values(this.state.streamers).filter(s=>s.wallet===account.wallet&&((s.twitchId&&s.twitchId===account.twitch?.id)||s.channel==='demo_streamer')).map(s=>s.channel)};
   }
   private view(state:State, m:Market) {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const total=bets.reduce((n,b)=>n+b.amount,0);
@@ -154,6 +155,7 @@ export class Points {
   // Provisioned only by the local bridge operator; a login cannot claim a Twitch channel.
   async assignStreamer(channel:string,wallet:string){
     if(!/^[a-zA-Z0-9_]{1,40}$/.test(channel))throw new Error('Canal inválido');
+    if(channel.toLowerCase()!=='demo_streamer')throw new Error('Conectá la cuenta de Twitch para administrar un canal real');
     return this.transaction(state=>{
       if(!Object.values(state.accounts).some(a=>a.wallet===wallet))throw new Error('La wallet debe iniciar sesión primero');
       const name=channel.toLowerCase();const previous=state.streamers[name];
@@ -161,9 +163,26 @@ export class Points {
       return state.streamers[name]??=( {channel:name,wallet,assignedAt:now()} );
     });
   }
+  async linkTwitch(token:string,identity:TwitchIdentity){
+    if(!/^\d+$/.test(identity.id)||!/^[a-z0-9_]{1,40}$/.test(identity.login))throw new Error('Identidad de Twitch inválida');
+    return this.transaction(state=>{
+      const a=this.account(state,token);if(!a.wallet)throw new Error('Conectá Phantom primero');
+      if(a.twitch&&a.twitch.id!==identity.id)throw new Error('Esta wallet ya tiene otra cuenta de Twitch conectada. Desconectala primero.');
+      if(Object.values(state.accounts).some(other=>other.id!==a.id&&other.twitch?.id===identity.id))throw new Error('Esta cuenta de Twitch ya está vinculada a otra wallet');
+      const owner=state.streamers[identity.login];if(owner?.twitchId&&owner.wallet!==a.wallet)throw new Error('El canal ya está vinculado a otra wallet');
+      if(!state.channels.includes(identity.login)&&state.channels.length>=30)throw new Error('Quitá un canal seguido antes de conectar otro');
+      for(const [name,s] of Object.entries(state.streamers))if(s.twitchId===identity.id)delete state.streamers[name];
+      a.twitch={...identity};state.streamers[identity.login]={channel:identity.login,wallet:a.wallet,twitchId:identity.id,assignedAt:now()};
+      if(!state.channels.includes(identity.login))state.channels.push(identity.login);
+      return {twitch:a.twitch,channel:identity.login};
+    });
+  }
+  async unlinkTwitch(token:string){
+    return this.transaction(state=>{const a=this.account(state,token);for(const [channel,s] of Object.entries(state.streamers))if(s.twitchId&&s.wallet===a.wallet)delete state.streamers[channel];delete a.twitch;return {ok:true};});
+  }
   private streamer(state:State,token:string,key?:string){
     const a=this.account(state,token);if(!a.wallet)throw new Error('Conectá Phantom para usar la consola');
-    const channels=Object.values(state.streamers).filter(s=>s.wallet===a.wallet).map(s=>s.channel);
+    const channels=Object.values(state.streamers).filter(s=>s.wallet===a.wallet&&(s.channel==='demo_streamer'||(s.twitchId&&s.twitchId===a.twitch?.id))).map(s=>s.channel);
     if(key&&!channels.includes(state.markets[key]?.prediction.channel.toLowerCase()))throw new Error('No tenés permisos sobre este mercado');
     return {account:a,channels};
   }

@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import {Auth} from './auth.js';
+import {TwitchAuth} from './twitch-auth.js';
 import { Points } from './points.js';
 import { TwitchSource } from './twitch-source.js';
 import { demoPrediction } from './mirror.js';
@@ -36,6 +37,31 @@ app.get('/api/markets',(_req,res)=>res.json(points.markets()));
 app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),sourceError:source.lastError}));
 app.get('/api/pair',(req,res)=>{if(req.get('sec-fetch-site')!=='same-origin'){res.status(403).json({error:'Open the dashboard to pair'});return;}res.json({token});});
 const appOrigin=(req:express.Request)=>`${req.protocol}://${req.get('host')}`;
+const twitchOrigin=process.env.AUTH_ORIGIN??`http://twitch-predict.localhost:${process.env.PORTLESS_PORT??1356}`;
+const twitchAuth=new TwitchAuth(points,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:twitchOrigin});
+const cookieName='twitch_link';
+const linkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${cookieName}=`))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
+const cookieOptions={httpOnly:true,secure:new URL(twitchOrigin).protocol==='https:',sameSite:'lax' as const,path:'/',maxAge:10*60_000};
+app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
+app.post('/api/twitch/start',route((req,res)=>{
+  if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
+  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.json({url:result.url});
+}));
+app.get('/auth/twitch/callback',async(req,res)=>{
+  if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
+  try{
+    const state=typeof req.query.state==='string'?req.query.state:'';
+    const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
+    res.redirect(`/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
+  }catch{
+    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.redirect(`/?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#streamer`);
+  }
+});
+app.post('/api/twitch/complete',route(async(req,res)=>{
+  const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
+  const result=await twitchAuth.complete(bearer(req),ticket,linkCookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.json(result);
+}));
+app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await points.unlinkTwitch(bearer(req)))));
 app.get('/api/auth/config',(req,res)=>res.json({origin:process.env.AUTH_ORIGIN??appOrigin(req)}));
 app.post('/api/auth/extension/start',route((req,res)=>{
   const i=z.object({extensionId:z.string().regex(/^[a-p]{32}$/),state:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);

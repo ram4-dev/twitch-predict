@@ -1,0 +1,21 @@
+import {test,expect,type Page} from '@playwright/test';
+import {writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {signIn} from './fixtures/phantom.js';
+async function identity(){const id=String(Date.now()),login=`streamer_${randomUUID().replaceAll('-','').slice(0,8)}`;const user={id,login,display_name:'Streamer de prueba'};await writeFile(resolve('test-results/twitch-oauth.json'),JSON.stringify(user));return user;}
+async function provider(page:Page,login:string){await page.route('https://id.twitch.tv/oauth2/authorize?**',async route=>{const url=new URL(route.request().url()),redirect=url.searchParams.get('redirect_uri')!,state=url.searchParams.get('state')!;expect(url.searchParams.get('response_type')).toBe('code');expect(url.searchParams.get('scope')).toBe('');await route.fulfill({contentType:'text/html',body:`<!doctype html><h1>Conectar Twitch</h1><p>Canal de prueba @${login}</p><a href="${redirect}?state=${state}&code=e2e-code">Autorizar canal</a><a href="${redirect}?state=${state}&error=access_denied">Cancelar</a>`});});}
+async function me(page:Page){return page.evaluate(async()=>{const r=await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}});return r.json();});}
+test.skip(process.env.MARKET_MODE==='solana','Offchain Twitch linking');
+test('Phantom wallet connects verified Twitch channel through OAuth and can disconnect without losing balance or history',async({page})=>{
+  const user=await identity();await signIn(page);const before=await me(page);await provider(page,user.login);await page.getByRole('link',{name:'Streamer',exact:true}).click();await page.getByRole('button',{name:'Conectar con Twitch',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Conectar Twitch',exact:true})).toBeVisible();await page.getByRole('link',{name:'Autorizar canal',exact:true}).click();await expect(page).toHaveURL(/\/#streamer$/);await expect(page.getByRole('heading',{name:`@${user.login}`,exact:true})).toBeVisible();await expect(page.getByText('Twitch conectado',{exact:true})).toBeVisible();
+  const linked=await me(page);expect(linked.id).toBe(before.id);expect(linked.wallet).toBe(before.wallet);expect(linked.balance).toBe(before.balance);expect(linked.twitch.id).toBe(user.id);expect(linked.streamerChannels).toContain(user.login);expect(new URL(page.url()).search).toBe('');
+  await page.reload();await expect(page.getByRole('heading',{name:`@${user.login}`,exact:true})).toBeVisible();await page.screenshot({path:'test-results/twitch-connected.png',fullPage:true});
+  await page.getByRole('button',{name:'Desconectar Twitch',exact:true}).click();await page.getByRole('dialog',{name:'Desconectar Twitch'}).getByRole('button',{name:'Confirmar desconexión',exact:true}).click();await expect(page.getByRole('button',{name:'Conectar con Twitch',exact:true})).toBeEnabled();const after=await me(page);expect(after.twitch).toBeNull();expect(after.balance).toBe(before.balance);expect(after.bets).toEqual(before.bets);
+});
+test('cancel, forged callback and switching wallets during OAuth cannot grant streamer access',async({page,context})=>{
+  const user=await identity();await signIn(page);await provider(page,user.login);await page.getByRole('link',{name:'Streamer',exact:true}).click();await page.getByRole('button',{name:'Conectar con Twitch',exact:true}).click();await page.getByRole('link',{name:'Cancelar',exact:true}).click();await expect(page.locator('#notice')).toContainText('Cancelaste');expect((await me(page)).twitch).toBeNull();
+  await page.goto('/auth/twitch/callback?state=forged&code=e2e-code');await expect(page.locator('#notice')).toContainText('No se pudo completar');expect((await me(page)).twitch).toBeNull();
+  await page.getByRole('button',{name:'Conectar con Twitch',exact:true}).click();await expect(page.getByRole('link',{name:'Autorizar canal',exact:true})).toBeVisible();const other=await context.newPage();await signIn(other);await page.getByRole('link',{name:'Autorizar canal',exact:true}).click();await expect(page.locator('#notice')).toContainText('La cuenta cambió');expect((await me(page)).twitch).toBeNull();await other.close();
+});
