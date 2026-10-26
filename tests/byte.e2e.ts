@@ -112,7 +112,42 @@ test('MV3 popup bets directly, authenticates once and retains receipts across po
   expect((await readFixture()).broadcasts).toBe(1);
   expect((await readFixture()).markets[0].pools[1]).toBe(25000000);
   await expect(popup.getByRole('button',{name:'Confirmar en Phantom'})).toHaveCount(0);
-  await popup.screenshot({path:'test-results/byte-extension.png',fullPage:true});
+  // Close and reopen with health and balance requests held. Cached content must
+  // render before either request finishes, and revalidation must not blank it.
+  await expect.poll(()=>popup.locator('#own-balance').textContent()).toBe('2');
+  await popup.close();
+  let releaseHealth!:()=>void,releaseBalance!:()=>void;
+  const healthGate=new Promise<void>(resolve=>{releaseHealth=resolve;}),balanceGate=new Promise<void>(resolve=>{releaseBalance=resolve;});
+  let healthWaiting=false,balanceWaiting=false;
+  await context.route('**/api/health',async route=>{healthWaiting=true;await healthGate;await route.fulfill({json:{ok:true,marketMode:'byte',network:'devnet'}});});
+  await context.route('**/api/byte/rpc',async route=>{if(route.request().postDataJSON()?.method!=='getBalance'){await route.fallback();return;}balanceWaiting=true;await balanceGate;await route.fulfill({json:{jsonrpc:'2.0',id:1,result:{context:{slot:101},value:3000000000}}});});
+  const cached=await context.newPage();await cached.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(cached.getByRole('heading',{name:market.title,exact:true})).toBeVisible();
+  await expect(cached.locator('#own-balance')).toHaveText('2');expect(healthWaiting).toBe(true);
+  await cached.evaluate(()=>{
+   const balance=document.querySelector('#own-balance')!,cards=document.querySelector('#predictions')!;
+   const state={balances:[] as string[],detached:false,card:cards.firstElementChild};
+   (window as unknown as {cacheObservation:typeof state}).cacheObservation=state;
+   new MutationObserver(()=>{state.balances.push(balance.textContent??'');if(!state.card?.isConnected)state.detached=true;}).observe(document.body,{childList:true,subtree:true});
+  });
+  const input=cached.getByLabel('Importe en SOL devnet');await input.fill('0.037');
+  releaseHealth();await expect.poll(()=>balanceWaiting).toBe(true);
+  await expect(cached.locator('#own-balance')).toHaveText('2');await expect(input).toBeFocused();await expect(input).toHaveValue('0.037');
+  releaseBalance();await expect(cached.locator('#own-balance')).toHaveText('3');
+  const observation=await cached.evaluate(()=>{const state=(window as unknown as {cacheObservation:{balances:string[];detached:boolean}}).cacheObservation;return {blank:state.balances.some(v=>v==='—'||!v),detached:state.detached};});
+  expect(observation).toEqual({blank:false,detached:false});
+  // Losing the bridge must preserve the cache and still expire betting controls.
+  await context.route('**/api/**',route=>route.abort('internetdisconnected'));
+  await worker.evaluate(async()=>{
+   const storage=(globalThis as unknown as {chrome:{storage:{local:{get(key:string):Promise<{popupCache:Record<string,unknown>}>;set(value:unknown):Promise<void>}}}}).chrome.storage.local;
+   const {popupCache}=await storage.get('popupCache');await storage.set({popupCache:{...popupCache,marketsAt:Date.now()-60000}});
+  });
+  await cached.reload();await expect(cached.getByRole('heading',{name:market.title,exact:true})).toBeVisible();await expect(cached.locator('#own-balance')).toHaveText('3');
+  await expect(cached.getByRole('button',{name:'Apostar a No',exact:true})).toBeDisabled();await expect(cached.locator('#freshness')).toContainText('datos guardados');
+  await cached.screenshot({path:'test-results/byte-extension-cached-offline.png',fullPage:true});
+  await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({pointsToken:'different-session'});});
+  await cached.reload();await expect(cached.locator('#own-balance')).not.toHaveText('3');await expect(cached.getByRole('heading',{name:market.title,exact:true})).toHaveCount(0);
+
  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
