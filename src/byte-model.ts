@@ -1,7 +1,7 @@
 import {z} from 'zod';
 
 export const BYTE_PROGRAM='24Vpfc8vEZtTnC9yLmbBHx13PyV8aEHVYBF5YE4BgRYK';
-export const DEVNET_GENESIS='EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
+export const DEVNET_GENESIS='EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
 const address=z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/);
 export const marketId=z.string().regex(/^pm_[a-zA-Z0-9_-]{1,100}$/);
 const amount=z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);

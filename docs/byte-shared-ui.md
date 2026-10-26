@@ -21,3 +21,13 @@ Se conserva la lógica existente de Byte: límites, verificación de devnet, fir
 Preview de este worktree: `http://twitch-predict-byte.localhost:1380/`. Portless usa `/tmp/plot-byte-shared-ui-proxy`; los datos aislados están en `/tmp/plot-byte-shared-ui-data`. Lee las credenciales mediante `APP_ENV_FILE` apuntando al archivo servidor existente, sin copiarlo ni incluirlo en Git.
 
 El health responde en modo Byte y devnet, y el status informa configuración presente. La API real devuelve HTTP 403 al listar mercados: byte todavía no habilitó la key como partner, o deshabilitó las predicciones. Esto impide verificar una operación externa completa. Las E2E usan el fixture de Byte del proyecto y firmas Ed25519 reales; no se emitieron transacciones externas.
+
+## Prueba real posterior · 2026-10-26
+
+El acceso partner ya responde HTTP 200. Se creó el mercado técnico `pm_539d3b10d4`, se leyó por ID y en la lista, se verificó el cierre y se envió resolución con evidencia. La respuesta inicial fue `resolved`; la consulta posterior de Byte informó `invalid`, `settled: true`, pozo 0. El panel y un popup MV3 aislado mostraron ese estado y no habilitaron apuestas después del cierre. Se guardó el recibo público en `docs/byte-live-receipt.json`. La consulta de cuenta en cadena posterior a la liquidación devolvió null; no se toma como evidencia independiente de la creación en cadena.
+
+La prueba real detectó un hash de génesis de devnet truncado tanto en el código como en el fixture. Se corrigió al hash completo reportado por el RPC, se agregó una comprobación de 32 bytes y una E2E que rechaza otra red antes de transmitir. El RPC del preview ahora devuelve HTTP 200 y el hash correcto.
+
+Verificación: `npm run check` aprobado, con 38 tests unitarios. En Playwright pasaron 30 casos activos; el caso nuevo de red incorrecta falló inicialmente por esperar una variante literal del mensaje y pasó en la repetición específica con ambas variantes válidas del cliente y servidor. Total: 31 E2E activos verificados y 4 legacy omitidos por modo. La primera corrida anterior se interrumpió para aplicar la corrección; no se cuenta como aprobada.
+
+No se completó una apuesta con fondos contra Solana real: `requestAirdrop` respondió Internal error y la wallet temporal no obtuvo fondos. Las pruebas automáticas de apuesta, firma, sincronización y pagos siguen usando el fixture RPC y firmas Ed25519 verificables. La interacción con una wallet personal en Phantom tampoco se verificó. La corrección está en este worktree; main conserva su revisión anterior.

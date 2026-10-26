@@ -1,0 +1,18 @@
+{
+  "requestId": "45bf51f3-2138-4c2a-a8c0-6ce109c94f96",
+  "startedAt": "2026-10-26T03:16:36.557618+00:00",
+  "marketId": "pm_539d3b10d4",
+  "chainMarket": "Et3qfzzsJ7Mc72hcJshqKkYc3j7Jv8vMpVKQoisvyaeX",
+  "closeMs": 1792984657239,
+  "resolveHttp": 200,
+  "final": {
+    "status": "invalid",
+    "settled": true,
+    "winner": null,
+    "total": 0
+  },
+  "onchain": {
+    "exists": false,
+    "owner": null
+  }
+}

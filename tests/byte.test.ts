@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import express from 'express';
 import {PublicKey} from '@solana/web3.js';
 import {ByteService,ByteError} from '../src/byte.js';
-import {BYTE_PROGRAM,solToLamports,type ByteMarket} from '../src/byte-model.js';
+import {BYTE_PROGRAM,DEVNET_GENESIS,solToLamports,type ByteMarket} from '../src/byte-model.js';
 import {placeBetInstruction} from '../src/byte-wallet.js';
 import {byteRouter} from '../src/byte-router.js';
 import {Points} from '../src/points.js';
@@ -16,6 +16,7 @@ const config={enabled:true,sol:{cluster:'devnet',programId:BYTE_PROGRAM,maxBet:1
 const input=()=>({title:'¿Gana la próxima partida?',options:['Sí','No'],windowSecs:60,currency:'sol',channel:'fixture_streamer',rules:'Se resuelve con el resultado final de la próxima partida y el VOD.',requestId:randomUUID()});
 const market=():ByteMarket=>({id:'pm_fixture',title:input().title,options:['Sí','No'],currency:'sol',status:'open',bettable:true,resolvable:false,openMs:Date.now(),closeMs:Date.now()+60000,chain:{market:chainMarket,settled:false},pools:[0,0],total:0,bettors:0,winner:null,invalidReason:null});
 async function fixture(run:(dir:string)=>Promise<void>){const dir=await mkdtemp(`${tmpdir()}/byte-test-`);try{await run(dir);}finally{await rm(dir,{recursive:true,force:true});}}
+test('devnet uses the complete 32-byte genesis hash reported by the live RPC',()=>{assert.equal(new PublicKey(DEVNET_GENESIS).toBytes().length,32);assert.equal(DEVNET_GENESIS,'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG');});
 test('SOL parsing and instruction encode exact units, documented discriminator, PDAs and signer roles',()=>{
   assert.equal(solToLamports('0.100000001'),100000001n);
   for(const value of ['1e-2','-1','0','0.000000001','0.1234567891','01','0,1'])assert.throws(()=>solToLamports(value));

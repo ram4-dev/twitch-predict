@@ -13,7 +13,7 @@ globalThis.fetch=async(input,options)=>{
   const save=async()=>{const temporary=path+'.'+randomUUID();await writeFile(temporary,JSON.stringify(state));await rename(temporary,path);};
   if(url==='https://api.devnet.solana.com'){
     const body=JSON.parse(options.body);let result;
-    if(body.method==='getGenesisHash')result=state.genesis??'EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
+    if(body.method==='getGenesisHash')result=state.genesis??'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
     else if(body.method==='getBalance')result={context:{slot:100},value:2_000_000_000};
     else if(body.method==='getLatestBlockhash')result={context:{slot:100},value:{blockhash:'11111111111111111111111111111111',lastValidBlockHeight:10000}};
     else if(body.method==='getBlockHeight')result=100;

@@ -7,7 +7,7 @@ import type {Transaction} from '@solana/web3.js';
 import type {DisplayByteMarket} from '../src/byte-model.js';
 
 test.skip(process.env.MARKET_MODE==='solana','byte integration uses the points authentication server');
-type Fixture={markets:DisplayByteMarket[];signatures:Record<string,unknown>;broadcasts:number;resolutions:number;invalidations:number;syncs:number;pending?:boolean;partnerError?:number};
+type Fixture={markets:DisplayByteMarket[];signatures:Record<string,unknown>;broadcasts:number;resolutions:number;invalidations:number;syncs:number;pending?:boolean;partnerError?:number;genesis?:string};
 const path=resolve('test-results/byte-fixture.json');
 async function readFixture():Promise<Fixture>{return JSON.parse(await readFile(path,'utf8'));}
 async function changeFixture(change:(state:Fixture)=>void){const state=await readFixture();change(state);await writeFile(path+'.test',JSON.stringify(state));await rename(path+'.test',path);}
@@ -97,4 +97,9 @@ test('MV3 extension pairs with the app and opens SOL markets in the Phantom web 
     for(const width of [1440,768,390]){await betPage.setViewportSize({width,height:1000});expect(await betPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(webCard.locator('.pool-split')).toBeVisible();await expect(webCard.getByRole('button',{name:'Apostar a No',exact:true})).toHaveCSS('border-radius','999px');await betPage.screenshot({path:`test-results/byte-panel-${width}.png`,fullPage:true});}
 
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
+test('a non-devnet RPC is rejected before any wallet transaction is broadcast',async({page})=>{
+ const market=await createMarket(page,'¿Bloquea una red incorrecta?');await connectWallet(page);await changeFixture(s=>{s.genesis='11111111111111111111111111111111';});
+ const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(card.getByRole('alert')).toContainText(/no corresponde a (Solana )?devnet/);expect((await readFixture()).broadcasts).toBe(0);
 });
