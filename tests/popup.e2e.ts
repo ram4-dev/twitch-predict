@@ -46,7 +46,8 @@ test('native action popup is 700px wide without resizing the browser window',asy
     // This tab only inspects the separate native action popup through the extension API.
     const inspector=context.pages()[0];await inspector.goto(`chrome-extension://${id}/popup.html`);
     const browserSize=await inspector.evaluate(()=>({width:outerWidth,height:outerHeight}));
-    await worker.evaluate(()=> (globalThis as unknown as {chrome:{action:{openPopup():Promise<void>}}}).chrome.action.openPopup());
+    const windowId=await inspector.evaluate(async()=> (await (globalThis as unknown as {chrome:{windows:{getCurrent():Promise<{id:number}>}}}).chrome.windows.getCurrent()).id);
+    await worker.evaluate(async windowId=>{const api=(globalThis as unknown as {chrome:{windows:{update(id:number,options:{focused:boolean}):Promise<unknown>};action:{openPopup(options:{windowId:number}):Promise<void>}}}).chrome;await api.windows.update(windowId,{focused:true});await api.action.openPopup({windowId});},windowId);
     const measure=()=>inspector.evaluate(()=>{
       const views=(globalThis as unknown as {chrome:{extension:{getViews(options:{type:string}):Window[]}}}).chrome.extension.getViews({type:'popup'});
       const popup=views[0];

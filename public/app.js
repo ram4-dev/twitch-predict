@@ -1,4 +1,5 @@
-import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
+import {disposePointsViews,emptyMarketView,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
+import './surfaces.js';
 import {renderUserConsole,renderStreamerConsole} from './consoles.js';
 const $=s=>document.querySelector(s);const el=(tag,value,className)=>{const n=document.createElement(tag);if(value!=null)n.textContent=value;if(className)n.className=className;return n;};
 const client=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async token=>localStorage.setItem('pointsToken',token)});
@@ -12,7 +13,7 @@ function card(m){
 function render(){
   disposePointsViews();
   $('#account-name').textContent=account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Conectá Phantom';$('#login-panel').hidden=!!account?.wallet;$('#extension-link-status').textContent=localStorage.getItem('linkedExtensionId')?'Extensión conectada. Usás la misma cuenta y el mismo saldo en ambos lugares.':'Conectá Phantom desde la extensión. La vinculación con este panel es automática.';$('#own-balance').textContent=account?number(account.balance):'—';$('#market-count').textContent=`${markets.length} mercados`;
-  $('#markets').replaceChildren(...(markets.length?markets.map(card):[el('div','Todavía no hay predicciones. Seguí un canal o creá un ejemplo para probar.','empty')]));
+  $('#markets').replaceChildren(...(markets.length?markets.map(card):[emptyMarketView()]));
   renderUserConsole($('#history'),account,markets,async key=>{await client.claim({key,requestId:crypto.randomUUID()});await refresh();});
   renderStreamerConsole($('#streamer'),streamer);
   $('#streamer-wallet').textContent=account?.wallet??'Conectá Phantom primero';$('#assign-streamer').disabled=!account?.wallet;

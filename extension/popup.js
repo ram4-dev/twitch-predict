@@ -1,5 +1,6 @@
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
+import './surfaces.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
 const defaultBridge='http://twitch-predict.localhost:1356';

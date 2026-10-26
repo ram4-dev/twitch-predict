@@ -4,6 +4,8 @@ import {flushSync} from 'react-dom';
 import {ArrowUpRight,Check,Loader2,Coins} from 'lucide-react';
 import {Button} from './components/button.js';
 import {Input} from './components/input.js';
+import {enableSpotlight} from './components/materials.js';
+import {EmptyState} from './components/plot.js';
 import {Badge} from './components/badge.js';
 import type {Points} from '../points.js';
 type Market=ReturnType<Points['market']>;
@@ -22,11 +24,16 @@ export function createPointsClient(base:string,storage:{get():Promise<string|nul
   return {request,authRequest:async<T=unknown>(path:string,body?:unknown)=>request<T>(path,body,await ensure()),me:async()=>request<Account>('/api/points/me',undefined,await ensure()),bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
 }
 export function disposePointsViews(){queueMicrotask(()=>{for(const [key,view] of roots)if(!view.node.isConnected){view.root.unmount();roots.delete(key);}});}
+export function emptyMarketView(){
+  let view=roots.get('__empty__');
+  if(!view){const node=document.createElement('section');node.className='plot-empty-container';view={node,root:createRoot(node)};roots.set('__empty__',view);}
+  flushSync(()=>view.root.render(<EmptyState title="La próxima está por venir" action={<Button variant="outline" asChild><a href="#channels">Seguir un canal</a></Button>}>Todavía no hay predicciones. Seguí un canal o creá un ejemplo para probar.</EmptyState>));return view.node;
+}
 export function bettingView(market:Market,account:Account|undefined,onAction:(a:Action)=>unknown,forms:Map<string,Form>){
   const form=forms.get(market.key)??{amount:100,busy:false,message:'',failed:false};forms.set(market.key,form);
   const existing=roots.get(market.key);
-  if(existing){flushSync(()=>existing.root.render(<Betting market={market} account={account} form={form} onAction={onAction}/>));return existing.node;}
-  const node=document.createElement('section');node.className='points-market';node.dataset.marketKey=market.key;
+  if(existing){enableSpotlight(existing.node);flushSync(()=>existing.root.render(<Betting market={market} account={account} form={form} onAction={onAction}/>));return existing.node;}
+  const node=document.createElement('section');node.className='points-market';node.dataset.marketKey=market.key;enableSpotlight(node);
   // Persist the edit before a background poll can replace this React root.
   node.addEventListener('input',event=>{const input=event.target;if(input instanceof HTMLInputElement&&input.getAttribute('aria-label')==='Puntos a apostar'){form.amount=input.value;form.pending=undefined;}},true);
   const root=createRoot(node);roots.set(market.key,{root,node});flushSync(()=>root.render(<Betting market={market} account={account} form={form} onAction={onAction}/>));return node;
@@ -50,11 +57,11 @@ function Betting({market,account,form,onAction}:{market:Market;account?:Account;
     <div className="points-options">{market.outcomes.map((o,i)=>{
       const my=own.filter(b=>b.outcomeId===o.id).reduce((n,b)=>n+b.amount,0);
       return <div key={o.id} className={`points-option ${i===0?'side-first':'side-second'}`}>
-        <div className="points-option-title"><strong>{o.title}</strong><span>{market.totalPoints?`${Math.round(o.share)}%`:'Sin apuestas'}</span></div>
+        <div className="points-option-title"><strong>{o.title}</strong><span>{market.totalPoints?`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:1}).format(o.share)}%`:'Sin apuestas'}</span></div>
         <p>{number(o.points)} pts <span>· {number(o.bets)} {o.bets===1?'apuesta':'apuestas'}</span></p>
         {my>0&&<p className="points-own">Apostaste {number(my)} pts</p>}
         {market.winnerId===o.id&&<strong className="points-winner"><Check size={14}/> Resultado ganador</strong>}
-        {market.canBet&&<Button type="button" variant="secondary" className="points-bet" disabled={form.busy||!account||account.balance<1} onClick={()=>bet(o.id)}>Apostar a {o.title}<ArrowUpRight size={14}/></Button>}
+        {market.canBet&&<Button type="button" variant="default" tone={i===0?'positive':'negative'} className="points-bet" disabled={form.busy||!account||account.balance<1} onClick={()=>bet(o.id)}>Apostar a {o.title}<ArrowUpRight size={14}/></Button>}
       </div>;
     })}</div>
 
