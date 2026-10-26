@@ -1,0 +1,24 @@
+{
+  "name": "plot",
+  "fontFamily": "Fraunces",
+  "fontWeight": 800,
+  "letterCase": "lowercase",
+  "symbol": "open-outcome",
+  "punctuation": "none",
+  "mascot": "chameleon",
+  "mascotAsset": "../public/brand/chameleon-poses.png",
+  "status": "user-selected visual direction",
+  "paletteVariant": "black-graphite-showcase",
+  "palette": {
+    "paper": "#fff4dd",
+    "ink": "#232039",
+    "coral": "#ff7049",
+    "lavender": "#cbb6e8"
+  },
+  "showcasePalette": {
+    "black": "#080808",
+    "graphite": "#151515",
+    "white": "#f2f2f2",
+    "accent": "#ff7049"
+  }
+}

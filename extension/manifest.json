@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Prediction Mirror · Puntos",
+  "name": "plot · Puntos",
   "version": "0.4.0",
   "description": "Replica predicciones de Twitch y apostá con tus propios puntos internos.",
   "permissions": [
@@ -19,7 +19,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Prediction Mirror · Ver apuesta"
+    "default_title": "plot · Ver apuesta"
   },
   "content_scripts": [
     {

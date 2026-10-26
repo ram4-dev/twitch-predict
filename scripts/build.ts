@@ -7,6 +7,11 @@ await build({ entryPoints: ['src/extension-model.ts'], outfile: 'extension/model
 await build({entryPoints:['src/ui/points-ui.tsx'],outfile:'public/points-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/onboarding.tsx'],outfile:'public/onboarding.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 execFileSync('./node_modules/.bin/tailwindcss',['-i','src/ui/theme.css','-o','public/points-ui.css','--minify'],{stdio:'inherit'});
+await build({entryPoints:['src/ui/catalog.tsx'],outfile:'public/catalog.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await cp('node_modules/@paper-design/shaders/LICENSE','public/brand/Paper-Shaders-LICENSE.txt');
+await cp('node_modules/@paper-design/shaders/NOTICE','public/brand/Paper-Shaders-NOTICE.txt');
+await cp('src/ui/components/LICENSE.materials','public/brand/Materials-LICENSE.txt');
+await cp('public/brand','extension/brand',{recursive:true});
 await cp('public/fonts','extension/fonts',{recursive:true});
 await cp('public/points-ui.js', 'extension/points-ui.js');
 await cp('public/points-ui.css', 'extension/points-ui.css');

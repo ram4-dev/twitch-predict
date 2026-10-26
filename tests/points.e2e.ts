@@ -42,7 +42,7 @@ test('MV3 detects a prediction, automatically creates one mirror, bets own point
     await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL('**/#markets');
     const twitch=await context.newPage();await twitch.goto('https://www.twitch.tv/fixture_stream');
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:prediction.title})).toBeVisible();await expect(popup.locator('.points-pool')).toContainText('0 pts');await expect(popup.locator('#own-balance')).toHaveText('10.000');
-    await popup.getByLabel('Puntos a apostar').fill('250');await popup.getByRole('button',{name:'Apostar a Azul',exact:true}).click();await expect(popup.locator('#own-balance')).toHaveText('9.750');await expect(popup.locator('.points-pool')).toContainText('250 pts');
+    await popup.getByLabel('Puntos a apostar').fill('250');await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(popup.getByLabel('Puntos a apostar')).toHaveValue('250');await popup.getByRole('button',{name:'Apostar a Azul',exact:true}).click();await expect(popup.locator('#own-balance')).toHaveText('9.750');await expect(popup.locator('.points-pool')).toContainText('250 pts');
     await popup.screenshot({path:'test-results/offchain-extension.png',fullPage:true});
     await popup.close();await twitch.close();
     prediction.status='RESOLVED';prediction.winningOutcome={id:'blue'};await writeFile(fixture,JSON.stringify([prediction]));

@@ -13,3 +13,10 @@ data
 # Local visual audit screenshots and reports
 .taste-skill/before/
 .taste-skill/after/
+
+.taste-skill/catalog/
+.taste-skill/final/
+
+.taste-skill/dia/
+
+.taste-skill/black-showcase/
