@@ -1,3 +1,4 @@
+import {contentSecurityPolicy} from './content-security-policy.js';
 import express from 'express';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
@@ -28,7 +29,7 @@ app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && !origin.startsWith('chrome-extension://') && origin !== `${req.protocol}://${req.get('host')}`) { res.status(403).json({ error: 'Untrusted origin' }); return; }
   res.set('Cache-Control', 'no-store'); res.set('X-Content-Type-Options', 'nosniff');
-  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'");
+  res.set('Content-Security-Policy', contentSecurityPolicy);
   next();
 });
 app.use(express.json({ limit: '16kb' }));

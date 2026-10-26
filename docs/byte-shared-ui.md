@@ -31,3 +31,9 @@ La prueba real detectó un hash de génesis de devnet truncado tanto en el códi
 Verificación: `npm run check` aprobado, con 38 tests unitarios. En Playwright pasaron 30 casos activos; el caso nuevo de red incorrecta falló inicialmente por esperar una variante literal del mensaje y pasó en la repetición específica con ambas variantes válidas del cliente y servidor. Total: 31 E2E activos verificados y 4 legacy omitidos por modo. La primera corrida anterior se interrumpió para aplicar la corrección; no se cuenta como aprobada.
 
 No se completó una apuesta con fondos contra Solana real: `requestAirdrop` respondió Internal error y la wallet temporal no obtuvo fondos. Las pruebas automáticas de apuesta, firma, sincronización y pagos siguen usando el fixture RPC y firmas Ed25519 verificables. La interacción con una wallet personal en Phantom tampoco se verificó. La corrección está en este worktree; main conserva su revisión anterior.
+
+## Corrección CSP · 2026-10-26
+
+Paper Shaders 0.0.82 inserta un bloque CSS fijo al montar el primer canvas. Su hash coincide con el error reportado (`sha256-bcX2M6hOeEgeI9Ttj3KtXWZuoRsKenyQAlXswSnLakA=`). La política compartida de ambos servidores permite exclusivamente ese bloque mediante hash, además de estilos del mismo origen. Los scripts conservan `script-src 'self'`.
+
+Una prueba unitaria contrasta el hash con el CSS de la dependencia instalada. La E2E comprueba que la hoja tiene reglas aplicadas, que los shaders del fondo y del botón montan sin violaciones de estilo en catálogo y Byte, y que un bloque inline ajeno sigue bloqueado. `npm run check` aprobó typecheck, lint, 39 unitarios y build; las 9 E2E relevantes (Byte, CSP y Dia) aprobaron. Preview reiniciado y header HTTP verificado. Rama conservada: `feat/byte-shared-ui`, origen de esta corrección `f3eda56`; main permanece sin cambios.

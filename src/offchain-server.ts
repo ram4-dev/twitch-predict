@@ -1,3 +1,4 @@
+import {contentSecurityPolicy} from './content-security-policy.js';
 import express from 'express';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -30,7 +31,7 @@ app.use((req,res,next)=>{
   const documentNavigation=req.method==='GET'&&req.get('sec-fetch-mode')==='navigate'&&req.get('sec-fetch-dest')==='document'&&!req.path.startsWith('/api');
   if(req.get('sec-fetch-site')==='cross-site'&&!origin?.startsWith('chrome-extension://')&&!documentNavigation){res.status(403).json({error:'Untrusted site'});return;}
   res.set('Referrer-Policy','no-referrer');res.set('Cache-Control','no-store');res.set('X-Content-Type-Options','nosniff');
-  res.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'");next();
+  res.set('Content-Security-Policy',contentSecurityPolicy);next();
 });
 app.use(express.json({limit:'16kb'}));
 const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
