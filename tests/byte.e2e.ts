@@ -82,8 +82,19 @@ test('MV3 extension pairs with the app and opens SOL markets in the Phantom web 
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const extensionId=new URL(worker.url()).host;
     const dashboard=await context.newPage();await dashboard.goto(`${base}/byte`);await dashboard.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(dashboard.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
     const popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await expect(popup.locator('#predictions')).toContainText(market.title);await expect(popup.locator('#wallet')).toBeHidden();await expect(popup.locator('.points-bet')).toHaveCount(0);
-    await expect(popup.getByRole('link',{name:'Abrir apuesta con Phantom',exact:false})).toHaveAttribute('href',`${base}/byte?channel=fixture_streamer`);
+    const card=popup.locator(`[data-market-id="${market.id}"]`);
+    await expect(card).toContainText(market.title);await expect(popup.locator('#wallet')).toBeHidden();await expect(card.locator('.points-bet')).toHaveCount(2);
+    await expect(card.locator('.pool-split')).toBeVisible();await expect(card.getByRole('button',{name:'Apostar a No',exact:true})).toHaveAttribute('data-tone','negative');
+    await card.getByLabel('Importe en SOL devnet').fill('0.025');await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(card.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');
+    const [betPage]=await Promise.all([context.waitForEvent('page'),card.getByRole('button',{name:'Apostar a No',exact:true}).click()]);
+    await betPage.waitForURL(`**/byte?market=${market.id}&channel=fixture_streamer&option=1&amount=0.025`);
+    const webCard=betPage.locator(`[data-market-id="${market.id}"]`);await expect(webCard.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');await expect(webCard.getByRole('button',{name:'Apostar a No',exact:true})).toHaveAttribute('aria-pressed','true');expect((await readFixture()).broadcasts).toBe(0);
+    await connectWallet(betPage);await webCard.getByRole('button',{name:'Apostar a No',exact:true}).click();await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('0.025 SOL devnet');await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('No');
+    await webCard.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(webCard.getByText('Apuesta confirmada en Solana.',{exact:true})).toBeVisible();expect((await readFixture()).markets[0].pools[1]).toBe(25000000);
+    await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(card.locator('.points-pool')).toContainText('0,025');await expect(card.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');
     await popup.screenshot({path:'test-results/byte-extension.png',fullPage:true});
+    await betPage.emulateMedia({reducedMotion:'reduce'});
+    for(const width of [1440,768,390]){await betPage.setViewportSize({width,height:1000});expect(await betPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(webCard.locator('.pool-split')).toBeVisible();await expect(webCard.getByRole('button',{name:'Apostar a No',exact:true})).toHaveCSS('border-radius','999px');await betPage.screenshot({path:`test-results/byte-panel-${width}.png`,fullPage:true});}
+
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });

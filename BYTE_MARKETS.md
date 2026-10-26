@@ -12,7 +12,7 @@ npm run build
 npm run dev:byte
 ```
 
-Portless informa la URL estable `twitch-predict-byte.localhost` con el puerto de su proxy. En este equipo es `http://twitch-predict-byte.localhost:1356/byte`. El comando observa cambios de código y de `.env`; el modo puntos anterior conserva `npm run dev`. `MARKET_MODE=byte` hace que `/` abra `/byte`.
+Portless informa la URL estable `twitch-predict-byte.localhost` con el puerto de su proxy. En este equipo es `http://twitch-predict-byte.localhost:1356/byte`. El comando observa cambios de código y de `.env`; el modo puntos anterior conserva `npm run dev`. `MARKET_MODE=byte` sirve el panel de Plot directamente en `/`; `/byte` conserva acceso compatible.
 
 Variables:
 
@@ -61,3 +61,5 @@ npm run test:e2e
 Las pruebas unitarias e integración verifican codificación de instrucciones y PDAs, montos exactos, permisos, configuración devnet, creación idempotente, recuperación tras reinicio y resolución con evidencia. Los E2E usan el backend y la UI reales, firmas Ed25519 reales y un transporte de byte/RPC controlado por un preload exclusivo de pruebas. Ese transporte valida firma, programa, PDAs y montos; no prueba ejecución del contrato, distribución de fondos reales ni disponibilidad de las rutas del partner.
 
 La prueba contra byte requiere una key habilitada y fondos devnet en las wallets. Con la key vacía la creación permanece deshabilitada. Los E2E legacy de Doppler están excluidos del modo offchain/byte y no constituyen validación de este contrato.
+
+La UI compartida del panel y la extensión, el flujo de selección y la validación están en [docs/byte-shared-ui.md](docs/byte-shared-ui.md).

@@ -121,7 +121,7 @@ app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
 app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}/onboarding`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
 app.get('/byte',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
-if(process.env.MARKET_MODE==='byte')app.get('/',(_req,res)=>res.redirect('/byte'));
+if(process.env.MARKET_MODE==='byte')app.get('/',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
 app.use(express.static(`${root}/public`));
 app.use('/extension',express.static(`${root}/extension`));
 const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{

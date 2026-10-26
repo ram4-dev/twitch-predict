@@ -1,6 +1,7 @@
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
 import './surfaces.js';
+import {byteMarketView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
 const defaultBridge='http://twitch-predict.localhost:1356';
@@ -55,17 +56,20 @@ async function load(){
     if(byteMode){
       const response=await fetch(`${base}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});const data=await response.json();
       const byteMarkets=response.ok?data.markets:[];
+      const config=await fetch(`${base}/api/byte/config`,{signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():undefined).catch(()=>undefined);
+      disposePointsViews();disposeByteViews();
       const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...byteMarkets.map(m=>m.notes?.channel).filter(Boolean)])].sort();
       if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
       $('#channel').replaceChildren(...channels.map(c=>{const option=el('option',`@${c}`);option.value=c;return option;}));$('#channel').value=selectedChannel;
       $('#wallet').hidden=true;$('#login').hidden=true;$('#history').replaceChildren();$('#points-error').hidden=response.ok;$('#points-error').textContent=response.ok?'':data.error;
       $('#source-error').hidden=true;$('#connection').textContent='SOL devnet';$('#freshness').textContent='Mercados de byte · sin dinero real';
       const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
-      const cards=visible.map(m=>{const card=el('article',null,'prediction');card.append(el('span',`@${m.notes?.channel||'partner'} · ${m.status==='open'?(m.bettable?'Abierto':'Esperando resultado'):m.chain.settled?'Pagos completados':'Pagos pendientes'}`,'status'),el('h1',m.title));const link=el('a','Abrir apuesta con Phantom ↗','byte-open');link.href=`${base}/byte?channel=${encodeURIComponent(m.notes?.channel||'')}`;link.target='_blank';link.rel='noopener';card.append(el('p',`${m.total/1e9} SOL devnet en el pozo · ${m.bettors} participantes`),link);return card;});
+      const cards=visible.map(m=>byteMarketView(m,config,base));
       $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Las apuestas se firman en la web con Phantom.';
-      $('#dashboard').href=`${base}/byte`;$('#user-console').href=`${base}/byte?view=history`;$('#streamer-console').hidden=true;
+      $('#dashboard').href=base;$('#user-console').href=`${base}/byte?view=history`;$('#streamer-console').hidden=true;
       return;
     }
+    disposeByteViews();
     $('#wallet').hidden=false;
     if(!client||clientBase!==base){clientBase=base;client=createPointsClient(base,{get:async()=> (await chrome.storage.local.get('pointsToken')).pointsToken,set:async token=>chrome.storage.local.set({pointsToken:token})});}
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}

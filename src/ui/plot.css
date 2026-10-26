@@ -33,3 +33,9 @@
 .pool-split .share-primary{background:#42c98a}.pool-split .share-secondary{background:#ff646f}
 @keyframes outcome-rim{from{background-position:0% 50%}to{background-position:240% 50%}}
 @media(prefers-reduced-motion:reduce){.plot-button[data-tone] .liquid-metal-surface{animation:none}}
+
+/* Shared SOL market controls in the dashboard and MV3 action popup. */
+.byte-betting .points-options{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-top:18px}.byte-betting .points-bet{width:100%}.byte-betting .option-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.byte-betting .option-heading strong{overflow-wrap:anywhere}.byte-betting .points-options p{font-size:14px}.byte-betting .points-rule{margin-top:16px}.byte-betting .points-stake input{min-width:0}
+@media(max-width:520px){.byte-betting .points-options{grid-template-columns:1fr}}
+
+.byte-betting .points-option[data-selected=true]{background:rgb(240 240 240/.07)}
