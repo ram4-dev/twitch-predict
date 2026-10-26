@@ -14,13 +14,26 @@
     "lib": [
       "ES2023",
       "DOM"
-    ]
+    ],
+    "paths": {
+      "@/lib/*": [
+        "./lib/*.ts"
+      ],
+      "@/components/ui/*": [
+        "./components/ui/*.tsx"
+      ],
+      "@/components/*": [
+        "./components/*.tsx"
+      ]
+    }
   },
   "include": [
     "src/**/*.ts",
     "scripts/**/*.ts",
     "tests/**/*.ts",
     "playwright.config.ts",
-    "src/**/*.tsx"
+    "src/**/*.tsx",
+    "components/**/*.tsx",
+    "lib/**/*.ts"
   ]
 }

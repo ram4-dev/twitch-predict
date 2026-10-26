@@ -1,3 +1,5 @@
+import ExpandableSearchBar from '@/components/ui/expandable-search-bar';
+import {twitchChannel} from '../mobile-model.js';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {createRoot} from 'react-dom/client';
 import {RefreshCw,Wallet,Plus,ExternalLink} from 'lucide-react';
@@ -20,7 +22,7 @@ async function request<T>(path:string,body?:unknown,operatorToken?:string):Promi
   const data=await response.json();if(!response.ok)throw new ApiError(response.status,data.error??'No se pudo completar la operación');return data;
 }
 function App(){
-  const [status,setStatus]=useState<Status>(),[config,setConfig]=useState<ByteConfig>(),[markets,setMarkets]=useState<DisplayByteMarket[]>([]),[wallet,setWallet]=useState(''),[balance,setBalance]=useState<number>(),[tab,setTab]=useState(new URLSearchParams(location.search).get('view')==='history'?'history':'markets'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false),[channel,setChannel]=useState(new URLSearchParams(location.search).get('channel')??''),[history,setHistory]=useState<BetReceipt[]>(receipts()),[operations,setOperations]=useState<Operation[]>([]),[loading,setLoading]=useState(true),[pairing,setPairing]=useState(false),[watched,setWatched]=useState<string[]>([]),[watchName,setWatchName]=useState(''),[watchBusy,setWatchBusy]=useState(false);
+  const [status,setStatus]=useState<Status>(),[config,setConfig]=useState<ByteConfig>(),[markets,setMarkets]=useState<DisplayByteMarket[]>([]),[wallet,setWallet]=useState(''),[balance,setBalance]=useState<number>(),[tab,setTab]=useState(new URLSearchParams(location.search).get('view')==='history'?'history':'markets'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false),[channel,setChannel]=useState(new URLSearchParams(location.search).get('channel')??''),[history,setHistory]=useState<BetReceipt[]>(receipts()),[operations,setOperations]=useState<Operation[]>([]),[loading,setLoading]=useState(true),[pairing,setPairing]=useState(false),[watched,setWatched]=useState<string[]>([]),[watchBusy,setWatchBusy]=useState(false);
   const operatorToken=useRef('');
   const [operatorReady,setOperatorReady]=useState(false),[loadError,setLoadError]=useState('');
   const refresh=async()=>{
@@ -96,10 +98,10 @@ function App(){
     try{for(const receipt of receipts().filter(r=>r.wallet===wallet&&(r.status==='pending'||r.status==='confirmed'&&!r.synced)))await checkReceipt(receipt);setHistory(receipts());await refresh();}
     catch(e){setError(walletError(e));}finally{setBusy(false);}
   };
-  const watch=async(event:FormEvent)=>{
-    event.preventDefault();if(watchBusy)return;setWatchBusy(true);setError('');
-    try{const name=watchName.trim().replace(/^@/,'').toLowerCase();const token=status?.operatorMode==='local'?(await request<{token:string}>('/pair')).token:undefined;
-      const result=await request<{predictions:{market:{error?:string}}[]}>('/byte/twitch/watch',{channel:name},token);setChannel(name);setWatchName('');await refresh();setNotice(`Siguiendo @${name}. ${result.predictions.find(p=>p.market.error)?.market.error??'Las próximas predicciones se replicarán en devnet.'}`);
+  const watch=async(query:string)=>{
+    if(watchBusy)return;setWatchBusy(true);setError('');
+    try{const name=twitchChannel(query);const token=status?.operatorMode==='local'?(await request<{token:string}>('/pair')).token:undefined;
+      const result=await request<{predictions:{market:{error?:string}}[]}>('/byte/twitch/watch',{channel:name},token);setChannel(name);await refresh();setNotice(`Siguiendo @${name}. ${result.predictions.find(p=>p.market.error)?.market.error??'Las próximas predicciones se replicarán en devnet.'}`);
     }catch(e){setError((e as Error).message);}finally{setWatchBusy(false);}
   };
   const visibleMarkets=markets.filter(m=>!channel||m.notes?.channel===channel);
@@ -107,7 +109,7 @@ function App(){
   return <div className="byte-app"><header><a className="brand" href="/"><PlotLogo/></a><nav aria-label="Secciones"><button aria-current={tab==='markets'?'page':undefined} onClick={()=>setTab('markets')}>Mercados</button><button aria-current={tab==='history'?'page':undefined} onClick={()=>setTab('history')}>Mis apuestas</button>{status?.manualOperations!==false&&<button aria-current={tab==='operator'?'page':undefined} onClick={()=>void operate()}>Operador</button>}</nav><span className="mode">SOL devnet</span></header>
     <main><div className="plot-scene"><Scene/></div><section className="intro"><div><h1>{tab==='history'?'Mis apuestas':tab==='operator'?'Consola del streamer':'Predicciones de la comunidad'}</h1><p>{tab==='history'?'Tus transacciones y su confirmación en Solana.':tab==='operator'?'Creá mercados, definí el resultado y seguí los pagos.':'Las jugadas del stream. Un pozo compartido en SOL devnet.'}</p></div><section className="wallet-strip"><div><small>{wallet?short(wallet):'Conectá Phantom'}</small><span>Saldo disponible</span></div><div><strong>{wallet?(balance===undefined?'—':sol(balance)):'—'}</strong><span>SOL devnet</span></div><Button variant="outline" disabled={busy} onClick={()=>void connect()}><Wallet size={16}/>{connected?'Reconectar wallet':'Conectar Phantom'}</Button></section></section>
       <div className="byte-connection"><span>Solana devnet · sin dinero real</span><Button variant="ghost" disabled={pairing||busy} onClick={()=>void pairExtension()}>Vincular extensión</Button></div>
-      {tab==='markets'&&<form className="byte-watch" onSubmit={e=>void watch(e)}><label htmlFor="byte-watch-channel">Canal de Twitch</label><div className="form-row"><Input id="byte-watch-channel" value={watchName} onChange={e=>setWatchName(e.target.value)} placeholder="@eggsterr" pattern="@?[a-zA-Z0-9_]{1,40}" required disabled={watchBusy}/><Button type="submit" disabled={watchBusy}>{watchBusy?'Verificando Twitch…':'Seguir canal'}</Button></div></form>}
+      {tab==='markets'&&<section className="byte-watch" aria-label="Buscar un canal de Twitch"><p>Canal de Twitch</p><ExpandableSearchBar expandDirection="right" width={360} placeholder="@streamer o enlace de Twitch" inputLabel="Canal de Twitch" openLabel="Buscar streamer" submitLabel="Seguir canal" disabled={watchBusy} onSearch={query=>void watch(query)}/>{watchBusy&&<p role="status">Verificando Twitch…</p>}</section>}
       {status&&!status.configured&&<Notice tone="warning">Los mercados todavía no están habilitados. El operador debe completar la conexión con byte.</Notice>}
       {loadError&&<Notice tone="error">{loadError}</Notice>}{error&&<Notice tone="error">{error}</Notice>}{notice&&<Notice>{notice}</Notice>}
       {tab==='markets'&&<><div className="byte-section-head section-title"><h2>Mercados</h2><div><Select aria-label="Filtrar canal" value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Todos los canales</option>{channels.map(c=><option key={c}>{c}</option>)}</Select><Button size="icon" variant="ghost" aria-label="Actualizar mercados" onClick={()=>void refresh()}><RefreshCw size={16}/></Button></div></div>

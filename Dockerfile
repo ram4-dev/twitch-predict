@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends zip && rm -rf /
 COPY package*.json ./
 RUN npm ci
 COPY src ./src
+COPY components ./components
+COPY lib ./lib
 COPY scripts ./scripts
 COPY tsconfig.json ./
 COPY migrations ./migrations

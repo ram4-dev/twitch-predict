@@ -15,3 +15,6 @@
 
 !cloud/package.json
 !cloud/package-lock.json
+
+!components/**
+!lib/**
