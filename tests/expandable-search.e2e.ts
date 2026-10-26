@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('Twitch search expands, submits exactly once, keeps nonempty queries and restores keyboard focus',async({page})=>{
  let searches=0;const channels:string[]=[];
+ await page.route('**/api/byte/markets',route=>route.fulfill({json:{markets:[]}}));
  await page.route('**/api/byte/twitch/watch',async route=>{searches++;channels.push(route.request().postDataJSON().channel);await route.fulfill({json:{predictions:[]}});});
  await page.goto('/byte');
  const toggle=page.getByRole('button',{name:'Buscar streamer',exact:true});await expect(toggle).toHaveAttribute('aria-expanded','false');await toggle.click();
@@ -10,7 +11,7 @@ test('Twitch search expands, submits exactly once, keeps nonempty queries and re
  await page.getByRole('heading',{level:1}).click();await expect(input).toHaveValue('  @Eggsterr  ');
  await input.focus();await input.press('Escape');await expect(input).toHaveCount(0);await expect(toggle).toBeFocused();
  await toggle.click();await input.fill('   ');await input.press('Enter');expect(searches).toBe(1);
- await input.fill('https://www.twitch.tv/eggsterr');await page.getByRole('button',{name:'Seguir canal',exact:true}).click();await expect.poll(()=>searches).toBe(2);expect(channels).toEqual(['eggsterr','eggsterr']);
+ await input.fill('https://www.twitch.tv/eggsterr');await page.getByRole('button',{name:'Seguir canal',exact:true}).click();await expect.poll(()=>searches).toBe(2);expect(channels).toEqual(['eggsterr','eggsterr']);await expect(page.getByRole('search',{name:'Canal de Twitch',exact:true})).toHaveAttribute('aria-busy','false');
  await page.getByRole('button',{name:'Cerrar búsqueda'}).click();await toggle.click();await page.getByRole('heading',{level:1}).click();await expect(input).toHaveCount(0);
  await toggle.click();await input.fill('https://evil.example/eggsterr');await input.press('Enter');await expect(page.getByText('Pegá el enlace de un canal de Twitch.')).toBeVisible();expect(searches).toBe(2);
  await page.screenshot({path:'test-results/search-desktop.png',fullPage:true});
@@ -30,4 +31,18 @@ test('both expansion directions fit phone and tablet viewports under CSP and red
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  }
  expect(errors).toEqual([]);
+});
+
+test('a pending Twitch refresh blocks duplicate submissions but still allows Escape and editing',async({page})=>{
+ let searches=0,finish=()=>{};const pending=new Promise<void>(resolve=>{finish=resolve;});
+ await page.route('**/api/byte/markets',async route=>{if(searches)await pending;await route.fulfill({json:{markets:[]}});});
+ await page.route('**/api/byte/twitch/watch',async route=>{searches++;await route.fulfill({json:{predictions:[]}});});
+ try{
+  await page.goto('/byte');const toggle=page.getByRole('button',{name:'Buscar streamer',exact:true});await toggle.click();
+  const input=page.getByRole('searchbox',{name:'Canal de Twitch',exact:true});await input.fill('eggsterr');await input.press('Enter');
+  await expect(page.getByRole('search',{name:'Canal de Twitch',exact:true})).toHaveAttribute('aria-busy','true');await expect(page.getByRole('button',{name:'Seguir canal',exact:true})).toBeDisabled();
+  await input.press('Escape');await expect(input).toHaveCount(0);await expect(toggle).toBeFocused();
+  await toggle.click();await input.fill('summit1g');await input.press('Enter');expect(searches).toBe(1);
+  finish();await expect(page.getByRole('button',{name:'Seguir canal',exact:true})).toBeEnabled();await input.press('Enter');await expect.poll(()=>searches).toBe(2);
+ }finally{finish();}
 });

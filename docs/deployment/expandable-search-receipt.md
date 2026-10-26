@@ -21,3 +21,7 @@ Se conservaron los permisos y el backend existentes. La actualización es estát
 Referencia de animación y accesibilidad: https://motion.dev/docs/react-animate-presence y https://motion.dev/docs/react-use-reduced-motion.
 
 Se preservó el primer fallo de la prueba MV3: el selector genérico getByLabel encontraba tanto el landmark de búsqueda como el input. Se corrigió para seleccionar el rol searchbox, sin modificar las aserciones de réplica o resolución. También se conservan los intentos de publicación que Vercel rechazó con fetch failed.
+
+La prueba pública detectó que deshabilitar todo el control durante el refresh impedía usar Escape. Se separó loading de disabled: la consulta pendiente solo bloquea el envío, muestra progreso y permite cerrar o editar. Un tercer E2E mantiene la respuesta pendiente y comprueba ese comportamiento y la ausencia de envíos duplicados. El indicador de carga también respeta reduced motion.
+
+Publicado en https://plot-devnet.vercel.app y demo en https://plot-devnet.vercel.app/components.html. Tres E2E del buscador aprobados también contra ese origen HTTPS público, con respuestas de escritura controladas para no modificar mercados reales. La verificación pública de consultas inválidas espera el estado idle entre consultas; el caso de respuesta pendiente se verifica por separado. Typecheck y lint finales aprobados. Los logs y capturas se conservaron en artifacts/search, fuera de Git.
