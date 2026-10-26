@@ -7,6 +7,7 @@ export async function phantomProvider(target:Page|BrowserContext,wallet=testWall
   await target.exposeBinding('__fixtureSign',(_source,message:number[])=>{
     const parsed=parseSignInMessage(new Uint8Array(message));
     if(!parsed||parsed.address!==wallet.address||!parsed.statement||!/^[\x20-\x7e]+$/.test(parsed.statement))throw new Error('Invalid SIWS message formatting');
+    if(parsed.chainId)throw new Error('Authentication must not force a wallet transaction network');
     return wallet.sign(message);
   });
   await target.addInitScript(({address,cancel})=>{

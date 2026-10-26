@@ -121,6 +121,12 @@ app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.ac
 app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
 app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}/onboarding`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
+// Named .localhost hosts need HTTPS for Phantom's injected provider.
+app.get(['/', '/byte'],(req,res,next)=>{
+  const origin=process.env.AUTH_ORIGIN;
+  if(process.env.MARKET_MODE==='byte'&&origin?.startsWith('https://')&&appOrigin(req)!==origin){res.redirect(`${origin}${req.originalUrl}`);return;}
+  next();
+});
 app.get('/byte',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
 if(process.env.MARKET_MODE==='byte')app.get('/',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
 app.use(express.static(`${root}/public`));
@@ -129,7 +135,7 @@ const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{
   console.log('Prediction Mirror ready (centralized offchain points).');
   const port=(server.address() as {port:number}).port;
   await writeFile(`${directory}/runtime-port`,String(port),{mode:0o600});
-  if(process.env.AUTH_PROXY_STATE_DIR)try{await promisify(execFile)('portless',['alias','twitch-predict',String(port),'--force'],{env:{...process.env,PORTLESS_STATE_DIR:process.env.AUTH_PROXY_STATE_DIR,PORTLESS_PORT:'1357',PORTLESS_HTTPS:'1'}});}catch(e){console.error('Could not refresh auth HTTPS alias:',(e as Error).message);}
+  if(process.env.AUTH_PROXY_STATE_DIR)try{await promisify(execFile)('portless',['alias',process.env.AUTH_PROXY_NAME??'twitch-predict',String(port),'--force'],{env:{...process.env,PORTLESS_STATE_DIR:process.env.AUTH_PROXY_STATE_DIR,PORTLESS_PORT:'1357',PORTLESS_HTTPS:'1'}});}catch(e){console.error('Could not refresh auth HTTPS alias:',(e as Error).message);}
 });
 const timer=setInterval(()=>{void source.sync().catch(e=>console.error('Twitch sync failed:',(e as Error).message));},5000);timer.unref();
 void source.sync().catch(e=>console.error('Initial Twitch sync failed:',(e as Error).message));

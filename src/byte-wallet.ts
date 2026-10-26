@@ -4,7 +4,10 @@ import {getBase58Decoder} from '@solana/kit';
 import {BYTE_PROGRAM,DEVNET_GENESIS,solToLamports,type ByteConfig,type DisplayByteMarket} from './byte-model.js';
 
 export type WalletProvider={isPhantom?:boolean;publicKey?:{toString():string};connect():Promise<{publicKey:{toString():string}}>;disconnect?():Promise<void>;signTransaction(tx:Transaction):Promise<Transaction>};
-export const phantom=()=>(window as unknown as {phantom?:{solana?:WalletProvider}}).phantom?.solana;
+export const phantom=()=>{
+ const injected=window as unknown as {phantom?:{solana?:WalletProvider};solana?:WalletProvider};
+ return injected.phantom?.solana?.isPhantom?injected.phantom.solana:injected.solana?.isPhantom?injected.solana:undefined;
+};
 export type BetReceipt={signature:string;marketId:string;title:string;wallet:string;option:number;amount:string;lastValidBlockHeight:number;createdAt:string;status:'pending'|'confirmed'|'failed'|'expired';synced?:boolean};
 const receiptKey='byteDevnetReceipts';
 export function receipts():BetReceipt[]{try{return JSON.parse(localStorage.getItem(receiptKey)??'[]');}catch{return [];}}

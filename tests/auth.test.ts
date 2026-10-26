@@ -16,6 +16,7 @@ test('login message follows SIWS grammar accepted by Phantom, including ASCII st
   const parsed=parseSignInMessageText(c.message);assert.ok(parsed);
   assert.equal(parsed.domain,new URL(origin).host);assert.equal(parsed.uri,origin);assert.equal(parsed.address,w.address);
   assert.match(parsed.statement!,/^[\x20-\x7e]+$/);
+  assert.equal(parsed.chainId,undefined);
   assert.equal(createSignInMessageText(parsed),c.message);
   assert.match(parsed.nonce!,/^[a-zA-Z0-9]{8,}$/);
   assert.equal(Date.parse(parsed.expirationTime!)-Date.parse(parsed.issuedAt!),300000);

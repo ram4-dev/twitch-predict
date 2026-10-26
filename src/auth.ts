@@ -27,7 +27,8 @@ export class Auth {
     const challengeId=id(),nonce=id().slice(0,24),issuedAt=new Date(this.clock()).toISOString(),expires=this.clock()+ttl;
     // SIWS statements use RFC 3986 reserved/unreserved characters (ASCII).
     // Accented text is valid UTF-8 but Phantom rejects it in this grammar.
-    const message=`${url.host} wants you to sign in with your Solana account:\n${wallet}\n\nIniciar sesion en Prediction Mirror.\n\nURI: ${origin}\nVersion: 1\nChain ID: solana:mainnet\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${new Date(expires).toISOString()}`;
+    // Authentication proves wallet identity; do not force the wallet onto a transaction network.
+    const message=`${url.host} wants you to sign in with your Solana account:\n${wallet}\n\nIniciar sesion en Prediction Mirror.\n\nURI: ${origin}\nVersion: 1\nNonce: ${nonce}\nIssued At: ${issuedAt}\nExpiration Time: ${new Date(expires).toISOString()}`;
     this.challenges.set(challengeId,{id:challengeId,address:wallet,origin,message,expires,flowId,preferredToken});return {challengeId,message,expiresAt:new Date(expires).toISOString()};
   }
   async authenticate(challengeId:string,signature:string,origin:string){

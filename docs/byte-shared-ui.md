@@ -37,3 +37,15 @@ No se completó una apuesta con fondos contra Solana real: `requestAirdrop` resp
 Paper Shaders 0.0.82 inserta un bloque CSS fijo al montar el primer canvas. Su hash coincide con el error reportado (`sha256-bcX2M6hOeEgeI9Ttj3KtXWZuoRsKenyQAlXswSnLakA=`). La política compartida de ambos servidores permite exclusivamente ese bloque mediante hash, además de estilos del mismo origen. Los scripts conservan `script-src 'self'`.
 
 Una prueba unitaria contrasta el hash con el CSS de la dependencia instalada. La E2E comprueba que la hoja tiene reglas aplicadas, que los shaders del fondo y del botón montan sin violaciones de estilo en catálogo y Byte, y que un bloque inline ajeno sigue bloqueado. `npm run check` aprobó typecheck, lint, 39 unitarios y build; las 9 E2E relevantes (Byte, CSP y Dia) aprobaron. Preview reiniciado y header HTTP verificado. Rama conservada: `feat/byte-shared-ui`, origen de esta corrección `f3eda56`; main permanece sin cambios.
+
+## Conexión real de Phantom · 2026-10-26
+
+Se reprodujo el flujo con Phantom 26.34.0 en Chrome. La wallet abrió bloqueada; después de que el usuario la desbloqueó, Phantom rechazó el mensaje con un error de Chain ID. El desafío SIWS fijaba `Chain ID: solana:mainnet`. Se quitó ese campo opcional del acceso, que verifica identidad, manteniendo dominio, URI, nonce, expiración y verificación de firma. La validación de devnet al apostar permanece activa.
+
+La firma de acceso corregida se confirmó en Phantom real y el panel mostró wallet conectada y saldo devnet. Se conservó la pestaña para el usuario. No se solicitó una transacción financiera durante esta comprobación.
+
+Se agregó soporte al proveedor legado de Phantom y mensajes para proveedor ausente y solicitudes pendientes. La prueba real de detección encontró proveedor tanto en HTTP como en HTTPS con Phantom 26; la hipótesis inicial de que HTTP era el bloqueo no se confirmó. El navegador integrado de T3 no tenía proveedor. Se dejó HTTPS conforme a la documentación del proveedor y para evitar diferencias entre navegadores.
+
+URL actual del preview: `https://twitch-predict-byte.localhost:1357/`. El HTTP anterior redirige conservando ruta y query. El alias TLS de Byte usa el proxy confiable existente y `AUTH_PROXY_NAME=twitch-predict-byte`, sin reemplazar el alias del panel de puntos. Para reiniciar el preview se conservan los argumentos anteriores con `AUTH_ORIGIN=https://twitch-predict-byte.localhost:1357`, `AUTH_PROXY_STATE_DIR=/Users/ramiro/.t3/projects/twitch-predict.poc-twitch-solana/data/portless-auth` y `AUTH_PROXY_NAME=twitch-predict-byte`.
+
+`npm run check`: typecheck, lint, 39 tests unitarios y build aprobados. Auth y Byte: 12 E2E aprobados, incluyendo proveedor legado, ausencia de proveedor, firma y rechazo de red incorrecta. La prueba unitaria SIWS y el fixture rechazan cualquier Chain ID forzado en el login. Rama/worktree conservados, origen de esta corrección `9ef93a7`, sin merge a main.

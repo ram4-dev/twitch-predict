@@ -41,7 +41,7 @@ function App(){
     setBusy(true);setError('');
     try{
       const provider=phantom() as ReturnType<typeof phantom>&{signMessage?:(message:Uint8Array,display:string)=>Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
-      if(!provider?.isPhantom||!provider.signMessage)throw new Error('Instalá Phantom para conectar tu wallet.');
+      if(!provider?.isPhantom||!provider.signMessage)throw new Error(location.protocol==='http:'&&!['localhost','127.0.0.1'].includes(location.hostname)?'Abrí el panel por HTTPS para conectar Phantom.':'No detectamos Phantom en este navegador. Abrí el panel en Chrome con Phantom instalada y recargá.');
       const result=await provider.connect(),address=result.publicKey.toString();
       const challenge=await request<{challengeId:string;message:string}>('/auth/challenge',{address});
       const proof=await provider.signMessage(new TextEncoder().encode(challenge.message),'utf8');
@@ -91,7 +91,7 @@ function App(){
 }
 // Keep the web3 browser import out of server-only code.
 import {PublicKey as PublicKeyClass} from '@solana/web3.js';
-function walletError(e:unknown){const error=e as Error&{code?:number};return error.code===4001?'Cancelaste la operación en Phantom. Podés volver a intentar.':error.message;}
+function walletError(e:unknown){const error=e as Error&{code?:number};return error.code===4001?'Cancelaste la operación en Phantom. Podés volver a intentar.':error.code===-32002?'Ya hay una solicitud pendiente en Phantom. Abrí la extensión para completarla.':error.message;}
 function MarketCard({market:m,config,wallet,disabled,onDone}:{market:DisplayByteMarket;config?:ByteConfig;wallet:string;disabled:boolean;onDone:()=>Promise<void>}){
   const query=new URLSearchParams(location.search),target=query.get('market')===m.id;
   const candidate=target?query.get('amount')??'0.01':'0.01';let initialAmount='0.01';try{solToLamports(candidate);initialAmount=candidate;}catch{/* Ignore malformed links. */}

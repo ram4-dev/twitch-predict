@@ -103,3 +103,12 @@ test('a non-devnet RPC is rejected before any wallet transaction is broadcast',a
  const market=await createMarket(page,'¿Bloquea una red incorrecta?');await connectWallet(page);await changeFixture(s=>{s.genesis='11111111111111111111111111111111';});
  const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(card.getByRole('alert')).toContainText(/no corresponde a (Solana )?devnet/);expect((await readFixture()).broadcasts).toBe(0);
 });
+
+test('legacy Phantom provider can authenticate without the namespaced provider',async({page})=>{
+ await phantomProvider(page);await page.addInitScript(()=>{const w=window as unknown as {phantom?:{solana:unknown};solana?:unknown};w.solana=w.phantom?.solana;delete w.phantom;});
+ await page.goto('/byte');await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await expect(page.getByText('Wallet conectada.',{exact:false})).toBeVisible();expect((await readFixture()).broadcasts).toBe(0);
+});
+test('HTTP named host explains the HTTPS requirement without attempting wallet authentication',async({page})=>{
+ const authRequests:string[]=[];page.on('request',r=>{if(r.url().includes('/api/auth/')&&r.method()==='POST')authRequests.push(r.url());});
+ await page.goto('/byte');await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await expect(page.getByRole('alert')).toContainText('HTTPS');expect(authRequests).toEqual([]);expect((await readFixture()).broadcasts).toBe(0);
+});
