@@ -18,7 +18,9 @@
     "setup": "tsx scripts/setup.ts",
     "localnet": "bash scripts/localnet.sh",
     "chrome": "tsx scripts/chrome.ts",
-    "dev:byte": "portless twitch-predict-byte tsx watch --include .env src/server.ts"
+    "dev:byte": "portless twitch-predict-byte tsx watch --include .env src/server.ts",
+    "dev:mobile-api": "portless plot-mobile-api tsx scripts/mobile-server.ts",
+    "check:mobile": "npm --prefix mobile run check"
   },
   "keywords": [],
   "author": "",
