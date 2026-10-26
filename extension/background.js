@@ -1,3 +1,4 @@
+import {installByteWallet} from './byte-wallet.js';
 import { TWITCH_CLIENT_ID, TWITCH_QUERY } from './twitch.js';
 import { parseTwitchPrediction, isOpen } from './model.js';
 const inflight = new Map();
@@ -102,13 +103,13 @@ async function startAuth(){
   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','pendingAuth']);
   let base=appUrl(stored.bridgeUrl);
   const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
-  if(health?.marketMode==='byte'){await chrome.tabs.create({url:`${base}/byte`});return {ok:true};}
+  const byteMode=health?.marketMode==='byte';
   const config=await fetch(`${base}/api/auth/config`,{signal:AbortSignal.timeout(8000)});if(!config.ok)throw new Error('No se pudo abrir el inicio de sesión');base=appUrl((await config.json()).origin);
   const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo abrir el acceso');
   await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
-  await chrome.tabs.create({url:`${base}/onboarding#flow=${result.flowId}`});return {ok:true};
+  if(byteMode)await chrome.windows.create({url:`${base}/onboarding?extension=1#flow=${result.flowId}`,type:'popup',width:480,height:700});else await chrome.tabs.create({url:`${base}/onboarding#flow=${result.flowId}`});return {ok:true};
 }
 chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
   if(message.type!=='CONNECT_PHANTOM')return;
@@ -135,3 +136,5 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
   const origin=new URL(sender.url);if(!['http:','https:'].includes(origin.protocol)||origin.hostname!=='twitch-predict.localhost')return;
   const task=authStart??=startAuth().finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
 });
+
+installByteWallet(appUrl);

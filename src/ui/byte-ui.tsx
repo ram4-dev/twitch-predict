@@ -33,9 +33,21 @@ function App(){
   useEffect(()=>{void refresh();const timer=setInterval(()=>void refresh(),6000);return()=>clearInterval(timer);},[]);
   useEffect(()=>{if(!wallet){setBalance(undefined);return;}let active=true;const refreshBalance=()=>void connection().getBalance(new (PublicKeyClass)(wallet)).then(n=>{if(active)setBalance(n);}).catch(()=>{if(active)setBalance(undefined);});refreshBalance();const timer=setInterval(refreshBalance,12000);return()=>{active=false;clearInterval(timer);};},[wallet]);
   useEffect(()=>{
-    const provider=phantom() as ReturnType<typeof phantom>&{on?:(name:string,listener:()=>void)=>void;removeListener?:(name:string,listener:()=>void)=>void};
-    const changed=()=>{setWallet('');setConnected(false);setOperatorReady(false);localStorage.removeItem('pointsToken');setNotice('La wallet cambió o se desconectó. Volvé a conectar.');};
-    provider?.on?.('accountChanged',changed);provider?.on?.('disconnect',changed);return()=>{provider?.removeListener?.('accountChanged',changed);provider?.removeListener?.('disconnect',changed);};
+    let active=true;
+    const restore=async()=>{
+      if(!localStorage.getItem('pointsToken'))return;
+      try{
+        const session=await request<{wallet:string|null}>('/points/me');
+        if(!session.wallet)return;
+        const provider=phantom();
+        try{const trusted=await provider?.connect({onlyIfTrusted:true});if(trusted&&trusted.publicKey.toString()!==session.wallet)return;}catch{/* Authentication survives a locked wallet; signing still checks its account. */}
+        if(active){setWallet(session.wallet);setConnected(true);}
+      }catch(e){if(e instanceof ApiError&&e.status===401)localStorage.removeItem('pointsToken');}
+    };
+    void restore();
+    const provider=phantom() as ReturnType<typeof phantom>&{on?:(name:string,listener:(key?:{toString():string}|null)=>void)=>void;removeListener?:(name:string,listener:(key?:{toString():string}|null)=>void)=>void};
+    const changed=(key?:{toString():string}|null)=>{if(!key)return;setWallet(current=>{if(current&&current!==key.toString()){setConnected(false);setOperatorReady(false);localStorage.removeItem('pointsToken');return '';}return current;});};
+    provider?.on?.('accountChanged',changed);return()=>{active=false;provider?.removeListener?.('accountChanged',changed);};
   },[]);
   const connect=async()=>{
     setBusy(true);setError('');
@@ -111,16 +123,15 @@ function MarketCard({market:m,config,wallet,disabled,onDone}:{market:DisplayByte
   const query=new URLSearchParams(location.search),target=query.get('market')===m.id;
   const candidate=target?query.get('amount')??'0.01':'0.01';let initialAmount='0.01';try{solToLamports(candidate);initialAmount=candidate;}catch{/* Ignore malformed links. */}
   const candidateOption=Number(target?query.get('option'):0),initialOption=Number.isInteger(candidateOption)&&candidateOption>=0&&candidateOption<m.options.length?candidateOption:0;
-  const [selection,setSelection]=useState<ByteSelection>({amount:initialAmount,option:initialOption}),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failed,setFailed]=useState(false),[confirm,setConfirm]=useState(false);
-  const {amount,option}=selection;
-  const choose=(next:ByteSelection)=>{setSelection(next);setFailed(false);setMessage(wallet?'':'Conectá Phantom para confirmar tu apuesta.');setConfirm(!!wallet);};
-  const bet=async()=>{
-    if(busy||!config)return;setBusy(true);setFailed(false);setConfirm(false);
+  const [selection,setSelection]=useState<ByteSelection>({amount:initialAmount,option:initialOption}),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failed,setFailed]=useState(false);
+  const bet=async(next:ByteSelection)=>{
+    setSelection(next);if(!wallet){setMessage('Conectá Phantom para apostar.');return;}
+    const {amount,option}=next;
+    if(busy||!config)return;setBusy(true);setFailed(false);
     try{const receipt=await sendBet(m,option,amount,wallet,config,setMessage);setMessage(receipt.status==='confirmed'?'Apuesta confirmada en Solana.':receipt.status==='pending'?'Confirmación pendiente. Revisá la firma en Mis apuestas antes de enviar otra.':receipt.status==='expired'?'La transacción expiró sin confirmación.':'La transacción falló en cadena.');setFailed(receipt.status==='failed');}
     catch(e){setMessage(walletError(e));setFailed(true);}finally{setBusy(false);await onDone();}
   };
-  return <article className="market-card byte-market" data-market-id={m.id} ref={node=>{if(node)enableSpotlight(node);}}><div className="market-heading"><a href={m.notes?`https://twitch.tv/${m.notes.channel}`:undefined} target="_blank" rel="noopener noreferrer">{m.notes?`@${m.notes.channel}`:'Mercado del partner'}</a><span>Cierre: {new Date(m.closeMs).toLocaleString('es-AR')}</span></div><h3>{m.title}</h3><ByteBetting market={m} config={config} initial={selection} disabled={disabled||busy} onBet={choose} onEdit={()=>setConfirm(false)}/>
-    {confirm&&wallet&&<div className="byte-confirm" role="group" aria-label="Confirmar apuesta"><p>Vas a apostar <strong>{amount} SOL devnet</strong> a <strong>{m.options[option]}</strong>. El peso se fija al entrar en cadena; el retorno no está garantizado.</p><Button onClick={()=>void bet()}>Confirmar en Phantom</Button><Button variant="ghost" onClick={()=>setConfirm(false)}>Volver</Button></div>}
+  return <article className="market-card byte-market" data-market-id={m.id} ref={node=>{if(node)enableSpotlight(node);}}><div className="market-heading"><a href={m.notes?`https://twitch.tv/${m.notes.channel}`:undefined} target="_blank" rel="noopener noreferrer">{m.notes?`@${m.notes.channel}`:'Mercado del partner'}</a><span>Cierre: {new Date(m.closeMs).toLocaleString('es-AR')}</span></div><h3>{m.title}</h3><ByteBetting market={m} config={config} initial={selection} disabled={disabled||busy} onBet={next=>void bet(next)}/>
     {message&&<Notice tone={failed?'error':'info'}>{message}</Notice>}
     <details><summary>Reglas y evidencia</summary><p>{m.notes?.rules??'Este mercado no tiene reglas registradas en esta aplicación.'}</p>{m.notes?.resolution&&<p>Evidencia: {m.notes.resolution.evidence}</p>}{m.invalidReason&&<p>Anulación: {m.invalidReason}</p>}<p>Si no hay apuestas ganadoras o se anula, byte devuelve las apuestas. Sin resolución, el protocolo prevé anular a los 7 días del cierre.</p><a href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana <ExternalLink size={13}/></a></details></article>;
 }

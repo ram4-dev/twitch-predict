@@ -1,4 +1,4 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {PlotLogo,Chameleon} from './components/plot.js';
 import {Button} from './components/button.js';
@@ -20,7 +20,7 @@ function Onboarding(){
       if(!response?.ok)throw new Error(response?.error||'No se pudo vincular la extensión. Reintentá la conexión.');
       localStorage.setItem('linkedExtensionId',result.handoff.extensionId);
     }
-    setPhase('done');location.replace('/#markets');
+    setPhase('done');if(new URLSearchParams(location.search).has('extension')){window.close();return;}location.replace('/#markets');
   };
   const connect=async()=>{
     setError('');
@@ -37,6 +37,8 @@ function Onboarding(){
       localStorage.setItem('pointsToken',result.token);setLogin(result);await finish(result);
     }catch(e){const err=e as Error&{code?:number};setError(err.code===4001?'Cancelaste la conexión o la firma. Podés volver a intentar.':err.message);setPhase('ready');}
   };
+  const autoStarted=useRef(false);
+  useEffect(()=>{if(flowReady&&installed&&new URLSearchParams(location.search).has('extension')&&!autoStarted.current){autoStarted.current=true;void connect();}},[flowReady,installed]);
   const busy=phase!=='ready';
   const labels:Record<string,string>={ready:login?'Reintentar vinculación':'Conectar Phantom',connecting:'Conectá tu wallet en Phantom…',signing:'Confirmá el inicio de sesión en Phantom…',linking:'Vinculando tu extensión…',done:'Abriendo tu panel…'};
   return <main className="onboarding"><a className="auth-brand" href="/"><PlotLogo/></a><section className="auth-card"><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><Chameleon/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Conectá Phantom para tener tus puntos y apuestas en la extensión y en el panel.</p><div className="auth-benefits"><span>Una misma cuenta en ambos lugares</span><span>Tu saldo e historial se conservan</span><span>Solo una firma de acceso, sin comisión</span></div>

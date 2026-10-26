@@ -1,9 +1,10 @@
+import {validateSignedBet} from './byte-signed-transaction.js';
 import {Buffer} from 'buffer';
 import {Connection,PublicKey,SystemProgram,Transaction,TransactionInstruction} from '@solana/web3.js';
 import {getBase58Decoder} from '@solana/kit';
 import {BYTE_PROGRAM,DEVNET_GENESIS,solToLamports,type ByteConfig,type DisplayByteMarket} from './byte-model.js';
 
-export type WalletProvider={isPhantom?:boolean;publicKey?:{toString():string};connect():Promise<{publicKey:{toString():string}}>;disconnect?():Promise<void>;signTransaction(tx:Transaction):Promise<Transaction>};
+export type WalletProvider={isPhantom?:boolean;publicKey?:{toString():string};connect(options?:{onlyIfTrusted:boolean}):Promise<{publicKey:{toString():string}}>;disconnect?():Promise<void>;signTransaction(tx:Transaction):Promise<Transaction>};
 export const phantom=()=>{
  const injected=window as unknown as {phantom?:{solana?:WalletProvider};solana?:WalletProvider};
  return injected.phantom?.solana?.isPhantom?injected.phantom.solana:injected.solana?.isPhantom?injected.solana:undefined;
@@ -33,7 +34,7 @@ export async function checkReceipt(receipt:BetReceipt,rpc=connection()):Promise<
   else if(!status&&await rpc.getBlockHeight('finalized')>receipt.lastValidBlockHeight)receipt.status='expired';
   saveReceipt(receipt);if(receipt.status==='confirmed')await syncReceipt(receipt);return receipt;
 }
-export async function sendBet(market:DisplayByteMarket,option:number,amountInput:string,walletAddress:string,config:ByteConfig,onProgress:(message:string)=>void){
+export async function sendBet(market:DisplayByteMarket,option:number,amountInput:string,walletAddress:string,config:ByteConfig,onProgress:(message:string)=>void,onReceipt?:(receipt:BetReceipt)=>Promise<void>){
   const wallet=phantom();if(!wallet?.isPhantom)throw new Error('Instalá Phantom para apostar.');
   if(receipts().some(r=>r.wallet===walletAddress&&r.marketId===market.id&&r.status==='pending'))throw new Error('Hay una transacción pendiente para este mercado. Revisala en Mis apuestas antes de enviar otra.');
   const amount=solToLamports(amountInput);
@@ -53,12 +54,13 @@ export async function sendBet(market:DisplayByteMarket,option:number,amountInput
   const nonce=new DataView(crypto.getRandomValues(new Uint8Array(8)).buffer).getBigUint64(0,true);
   const latest=await rpc.getLatestBlockhash('confirmed');
   const tx=new Transaction({feePayer:bettor,...latest}).add(placeBetInstruction(market.chain.market,walletAddress,option,amount,nonce));
-  const message=tx.serializeMessage();onProgress('Confirmá la apuesta en Phantom (SOL devnet)…');
-  const signed=await wallet.signTransaction(tx);
-  if(!signed.serializeMessage().equals(message)||!signed.signature||!signed.verifySignatures()||(wallet.publicKey&&wallet.publicKey.toString()!==walletAddress))throw new Error('La transacción firmada no coincide con la apuesta.');
-  const receipt:BetReceipt={signature:getBase58Decoder().decode(signed.signature),marketId:market.id,title:market.title,wallet:walletAddress,option,amount:amount.toString(),lastValidBlockHeight:latest.lastValidBlockHeight,createdAt:new Date().toISOString(),status:'pending'};
+  onProgress('Confirmá la apuesta en Phantom (SOL devnet)…');
+  const expected=Transaction.from(tx.serialize({requireAllSignatures:false,verifySignatures:false}));
+  const signed=validateSignedBet(expected,await wallet.signTransaction(tx));
+  if(wallet.publicKey&&wallet.publicKey.toString()!==walletAddress)throw new Error('La wallet cambió durante la firma.');
+  const receipt:BetReceipt={signature:getBase58Decoder().decode(signed.signature!),marketId:market.id,title:market.title,wallet:walletAddress,option,amount:amount.toString(),lastValidBlockHeight:latest.lastValidBlockHeight,createdAt:new Date().toISOString(),status:'pending'};
   // Save the deterministic signature BEFORE broadcast. A timeout must not invite a duplicate bet.
-  saveReceipt(receipt);onProgress('Enviando y esperando confirmación en Solana…');
+  saveReceipt(receipt);await onReceipt?.(receipt);onProgress('Enviando y esperando confirmación en Solana…');
   try{const signature=await rpc.sendRawTransaction(signed.serialize(),{skipPreflight:false,maxRetries:2});if(signature!==receipt.signature)throw new Error('Firma inesperada del RPC');}
   catch{onProgress('El envío no se pudo confirmar. Revisando la firma guardada…');}
   for(let attempt=0;attempt<12;attempt++){

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "plot · Puntos",
-  "version": "0.7.0",
-  "description": "Replica predicciones de Twitch y apostá con tus propios puntos internos.",
+  "name": "plot",
+  "version": "0.8.0",
+  "description": "Predicciones de Twitch y apuestas en SOL devnet desde el stream.",
   "permissions": [
     "storage",
     "activeTab"

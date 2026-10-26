@@ -7,6 +7,7 @@ await build({ entryPoints: ['src/extension-model.ts'], outfile: 'extension/model
 await build({entryPoints:['src/ui/points-ui.tsx'],outfile:'public/points-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/onboarding.tsx'],outfile:'public/onboarding.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/consoles.tsx'],outfile:'public/consoles.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['src/extension-signer.ts'],outfile:'public/extension-signer.js',platform:'browser',format:'esm',bundle:true,minify:true});
 await build({entryPoints:['src/ui/byte-ui.tsx'],outfile:'public/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/byte-market.tsx'],outfile:'extension/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/catalog.tsx'],outfile:'public/catalog.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});

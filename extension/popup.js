@@ -54,6 +54,7 @@ async function load(){
     state=await chrome.storage.local.get(null);const base=bridgeUrl();
     const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);byteMode=health?.marketMode==='byte';
     if(byteMode){
+      if(['pending','signing'].includes(state.byteOperation?.status))void chrome.runtime.sendMessage({type:'BYTE_CHECK'}).catch(()=>{});
       const response=await fetch(`${base}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});const data=await response.json();
       const byteMarkets=response.ok?data.markets:[];
       const config=await fetch(`${base}/api/byte/config`,{signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():undefined).catch(()=>undefined);
@@ -69,16 +70,19 @@ async function load(){
         if(Number.isSafeInteger(balance?.result?.value))$('#own-balance').textContent=new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(balance.result.value/1e9);
       }
 
+      const history=$('#history');
+      const receipts=(state.byteReceipts??[]).filter(r=>r.wallet===account?.wallet);
+      if(receipts.length){history.append(el('h2','Tus apuestas en devnet'));for(const r of receipts.slice(0,8)){const row=el('div',null,'history-row'),link=el('a','Ver transacción');link.href=`https://explorer.solana.com/tx/${r.signature}?cluster=devnet`;link.target='_blank';link.rel='noopener noreferrer';row.append(el('strong',r.title),el('span',`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(r.amount)/1e9)} SOL · ${{pending:'Pendiente',confirmed:'Confirmada',failed:'Falló',expired:'Expiró'}[r.status]??r.status}`),link);history.append(row);}}
       snapshot=state[`channel:${selectedChannel}`];$('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError??'';$('#connection').textContent='SOL devnet';$('#freshness').textContent='Mercados de byte · sin dinero real';
       const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
       disposePointsViews();disposeByteViews();
-      const cards=visible.map(m=>byteMarketView(m,config,base));
+      const cards=visible.map(m=>byteMarketView(m,config,state.byteOperation));
       for(const item of snapshot?.predictions??[])if(!byteMarkets.some(m=>m.id===item.market?.byteMarketId)){
         const card=el('article',null,'prediction');card.append(el('span',`@${selectedChannel} · Twitch`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
       }
 
-      $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Las apuestas se firman en la web con Phantom.';
-      $('#dashboard').href=base;$('#user-console').href=`${base}/byte?view=history`;$('#streamer-console').hidden=true;
+      $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Elegí una opción para firmar con Phantom.';
+      $('#dashboard').href=base;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Conectá Phantom para apostar y seguir tus transacciones desde la extensión.';$('#streamer-console').hidden=true;
       return;
     }
     disposeByteViews();
@@ -89,7 +93,7 @@ async function load(){
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
     $('#channel').replaceChildren(...(channels.length?channels.map(c=>{const o=el('option',`@${c}`);o.value=c;return o;}):[el('option','Esperando un canal…')]));$('#channel').value=selectedChannel;snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
-    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
+    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){again=false;void load();}}
 }

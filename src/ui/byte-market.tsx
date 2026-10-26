@@ -24,7 +24,7 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
   <div className="pool-split" role="img" aria-label={`Distribución del pozo: ${m.options.map((o,i)=>`${o} ${units(m.pools[i])} ${unit}`).join(', ')}`}>{m.options.map((o,i)=><span key={i} className={i%2===0?'share-primary':'share-secondary'} title={o} style={{width:`${m.total?m.pools[i]/m.total*100:0}%`}}/>)}</div>
   {open&&m.currency==='sol'&&<div className="stake-row"><label className="points-stake"><span>Tu apuesta</span><span className="stake-input"><Input aria-label="Importe en SOL devnet" inputMode="decimal" value={amount} disabled={disabled} onChange={e=>change(e.target.value)}/><span>SOL</span></span></label><div className="points-quick">{['0.01','0.05','0.1'].map(v=><Button key={v} variant="ghost" size="sm" disabled={disabled} aria-pressed={amount===v} onClick={()=>change(v)}>{v}</Button>)}</div></div>}
   <div className="points-options">{m.options.map((label,i)=><div className={`points-option ${i%2===0?'side-first':'side-second'}`} key={i} data-selected={selected===i}><div className="option-heading"><strong>{label}</strong><span>{m.total?`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:1}).format(m.pools[i]/m.total*100)}%`:'—'}</span></div><p>{units(m.pools[i])} {unit} en el pozo</p>{m.winner===i&&<span className="points-winner"><Check size={15}/>Resultado ganador</span>}{open&&m.currency==='sol'&&<Button className="points-bet" tone={i%2===0?'positive':'negative'} aria-pressed={selected===i} disabled={disabled||!config?.enabled} onClick={()=>choose(i)}>Apostar a {label}<ArrowUpRight size={15}/></Button>}</div>)}</div>
-  {open&&<p className="points-rule">{extension?'Continuás en el panel para confirmar con Phantom.':'Confirmás con tu wallet en Solana devnet.'} Porcentaje del pozo, no probabilidad.</p>}
+  {open&&<p className="points-rule">{extension?'Se abre Phantom para firmar esta apuesta.':'Confirmás con tu wallet en Solana devnet.'} Porcentaje del pozo, no probabilidad.</p>}
   {error&&<Notice tone="error">{error}</Notice>}
   {m.currency!=='sol'&&<Notice>Este mercado usa BYTE. Las apuestas de esta aplicación están disponibles en SOL devnet.</Notice>}
   {m.status!=='open'&&<Notice tone={m.chain.settled?'success':'info'}>{m.chain.settled?'Pagos o reembolsos completados en cadena.':'Resultado registrado. Esperando que byte complete los pagos.'}</Notice>}
@@ -32,8 +32,21 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
 }
 const roots=new Map<string,{node:HTMLElement;root:Root;generation:number}>();let generation=0;
 export function disposeByteViews(){const current=++generation;queueMicrotask(()=>{for(const [key,v]of roots)if(v.generation<current){v.root.unmount();roots.delete(key);}});}
-export function byteMarketView(market:DisplayByteMarket,config:ByteConfig|undefined,base:string){
+type ExtensionOperation={marketId:string;status:string;error?:string;receipt?:{signature:string}};
+function ExtensionMarket({market,config,operation}:{market:DisplayByteMarket;config?:ByteConfig;operation?:ExtensionOperation}){
+ const [error,setError]=useState(''),[opening,setOpening]=useState(false);
+ const open=async(selection:ByteSelection)=>{
+  if(opening)return;setOpening(true);setError('');
+  try{
+   const runtime=(globalThis as unknown as {chrome:{runtime:{sendMessage(message:unknown):Promise<{error?:string}>}}}).chrome.runtime;
+   const result=await runtime.sendMessage({type:'BYTE_BET',marketId:market.id,...selection});
+   if(result?.error)throw new Error(result.error);
+  }catch(e){setError((e as Error).message);}finally{setOpening(false);}
+ };
+ const active=operation?.marketId===market.id&&!['confirmed','failed','expired','cancelled'].includes(operation.status);
+ return <><div className="topline"><span>@{market.notes?.channel??'partner'}</span><span>{new Date(market.closeMs).toLocaleString('es-AR')}</span></div><h1>{market.title}</h1><ByteBetting market={market} config={config} extension disabled={opening||active} onBet={selection=>void open(selection)}/>{error&&<Notice tone="error">{error}</Notice>}{operation?.marketId===market.id&&<Notice tone={operation.error?'error':'info'}>{operation.error??({signing:'Confirmá en Phantom…',pending:'Transacción enviada. Esperando confirmación…',confirmed:'Apuesta confirmada en Solana.',failed:'La transacción falló.',expired:'La transacción expiró.',cancelled:'Firma cancelada.'}[operation.status]??operation.status)}{operation.receipt&&<a href={`https://explorer.solana.com/tx/${operation.receipt.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"> Ver transacción</a>}</Notice>}</>;
+}
+export function byteMarketView(market:DisplayByteMarket,config:ByteConfig|undefined,operation?:ExtensionOperation){
  let view=roots.get(market.id);if(!view){const node=document.createElement('article');node.className='prediction';node.dataset.marketId=market.id;view={node,root:createRoot(node),generation};roots.set(market.id,view);enableSpotlight(node);}view.generation=generation;
- const open=(selection:ByteSelection)=>{const url=new URL('/byte',base);url.search=new URLSearchParams({market:market.id,channel:market.notes?.channel??'',option:String(selection.option),amount:selection.amount}).toString();window.open(url.href,'_blank','noopener');};
- flushSync(()=>view.root.render(<><div className="topline"><span>@{market.notes?.channel??'partner'}</span><span>{new Date(market.closeMs).toLocaleString('es-AR')}</span></div><h1>{market.title}</h1><ByteBetting market={market} config={config} extension onBet={open}/></>));return view.node;
+ flushSync(()=>view.root.render(<ExtensionMarket market={market} config={config} operation={operation}/>));return view.node;
 }

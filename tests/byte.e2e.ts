@@ -36,7 +36,7 @@ async function connectWallet(page:Page,rejectTransaction=false){
 test('create → real wallet signatures → byte instruction → sync → close → resolve → observe automatic payout',async({page})=>{
   const market=await createMarket(page);await connectWallet(page);
   const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByLabel('Importe en SOL devnet').fill('0.012345678');
-  await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();
+  await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();
   await expect(card.getByText('Apuesta confirmada en Solana.',{exact:true})).toBeVisible();
   const state=await readFixture();expect(state.broadcasts).toBe(1);expect(state.markets[0].pools[0]).toBe(12345678);expect(state.syncs).toBeGreaterThan(0);
   await page.getByRole('button',{name:'Mis apuestas',exact:true}).click();await expect(page.locator('.byte-receipt')).toContainText('Confirmada');await expect(page.locator('.byte-receipt a')).toHaveAttribute('href',/cluster=devnet/);
@@ -50,7 +50,7 @@ test('create → real wallet signatures → byte instruction → sync → close 
 });
 test('wallet rejection broadcasts nothing; invalidation requires evidence and explicit confirmation',async({page})=>{
   const market=await createMarket(page,'¿Se completa el desafío?');await connectWallet(page,true);
-  const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();
+  const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();
   await expect(card.getByRole('alert')).toContainText('Cancelaste');expect((await readFixture()).broadcasts).toBe(0);
   await page.getByRole('button',{name:'Operador',exact:true}).click();await expect(page.getByRole('button',{name:'Resolver mercado',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Anular y reembolsar',exact:true})).toBeDisabled();
   await page.getByLabel(`Evidencia o motivo de ${market.title}`).fill('Se canceló el desafío por desconexión del streamer.');await page.getByRole('button',{name:'Anular y reembolsar',exact:true}).click();expect((await readFixture()).invalidations).toBe(0);
@@ -58,10 +58,10 @@ test('wallet rejection broadcasts nothing; invalidation requires evidence and ex
 });
 test('pending signature survives reload, blocks duplicate bets and can be confirmed later',async({page})=>{
   const market=await createMarket(page,'¿Llega al siguiente nivel?');await connectWallet(page);await changeFixture(s=>{s.pending=true;});
-  const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();
+  const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();
   await expect(card.getByText('Confirmación pendiente.',{exact:false})).toBeVisible({timeout:40000});expect((await readFixture()).broadcasts).toBe(1);
-  await page.reload();await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await expect(page.getByText('Wallet conectada.',{exact:false})).toBeVisible();
-  await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(card.getByRole('alert')).toContainText('transacción pendiente');expect((await readFixture()).broadcasts).toBe(1);
+  await page.reload();await expect(page.getByRole('button',{name:'Reconectar wallet',exact:true})).toBeVisible();
+  await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await expect(card.getByRole('alert')).toContainText('transacción pendiente');expect((await readFixture()).broadcasts).toBe(1);
   await changeFixture(s=>{s.pending=false;});await page.getByRole('button',{name:'Mis apuestas',exact:true}).click();await page.getByRole('button',{name:'Revisar transacciones',exact:true}).click();await expect(page.locator('.byte-receipt')).toContainText('Confirmada');expect((await readFixture()).broadcasts).toBe(1);
 });
 test('partner access errors are visible and mobile layout remains usable',async({page})=>{
@@ -70,42 +70,55 @@ test('partner access errors are visible and mobile layout remains usable',async(
   await page.getByRole('button',{name:'Crear mercado en devnet',exact:true}).click();await expect(page.getByRole('alert')).toContainText('partner');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/byte-mobile-partner-error.png',fullPage:true});
 });
-test('MV3 extension pairs with the app and opens SOL markets in the Phantom web flow',async({page})=>{
-  const market=await createMarket(page,'¿Gana el mercado de la extensión?');
-  const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
-  const profile=await mkdtemp(`${tmpdir()}/byte-extension-`),extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
-  for(const file of ['background.js','popup.js']){const filePath=resolve(extension,file);await writeFile(filePath,(await readFile(filePath,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
-  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
-  try{
-    // Only select the byte mode for this browser; the app API and pairing handlers stay real.
-    await context.route('**/api/health',route=>route.fulfill({json:{ok:true,marketMode:'byte',network:'devnet'}}));
-    const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const extensionId=new URL(worker.url()).host;
-    const dashboard=await context.newPage();await dashboard.goto(`${base}/byte`);await dashboard.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(dashboard.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
-    const popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    const card=popup.locator(`[data-market-id="${market.id}"]`);
-    await expect(card).toContainText(market.title);await expect(popup.locator('#wallet')).toBeHidden();await expect(card.locator('.points-bet')).toHaveCount(2);
-    await expect(card.locator('.pool-split')).toBeVisible();await expect(card.getByRole('button',{name:'Apostar a No',exact:true})).toHaveAttribute('data-tone','negative');
-    await card.getByLabel('Importe en SOL devnet').fill('0.025');await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(card.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');
-    const [betPage]=await Promise.all([context.waitForEvent('page'),card.getByRole('button',{name:'Apostar a No',exact:true}).click()]);
-    await betPage.waitForURL(`**/byte?market=${market.id}&channel=fixture_streamer&option=1&amount=0.025`);
-    const webCard=betPage.locator(`[data-market-id="${market.id}"]`);await expect(webCard.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');await expect(webCard.getByRole('button',{name:'Apostar a No',exact:true})).toHaveAttribute('aria-pressed','true');expect((await readFixture()).broadcasts).toBe(0);
-    const connectedWallet=await connectWallet(betPage);
-    await expect(betPage.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
-    await expect(popup.locator('#wallet')).toBeVisible();await expect(popup.locator('#login')).toBeHidden();await expect(popup.locator('#own-balance')).toHaveText('2');
-    const extensionWallet=await worker.evaluate(async base=>{const stored=await (globalThis as unknown as {chrome:{storage:{local:{get(key:string):Promise<{pointsToken:string}>}}}}).chrome.storage.local.get('pointsToken');const response=await fetch(`${base}/api/points/me`,{headers:{Authorization:`Bearer ${stored.pointsToken}`}});return (await response.json()).wallet;},base);expect(extensionWallet).toBe(connectedWallet.address);
-    await webCard.getByRole('button',{name:'Apostar a No',exact:true}).click();await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('0.025 SOL devnet');await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('No');
-    await webCard.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(webCard.getByText('Apuesta confirmada en Solana.',{exact:true})).toBeVisible();expect((await readFixture()).markets[0].pools[1]).toBe(25000000);
-    await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(card.locator('.points-pool')).toContainText('0,025');await expect(card.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');
-    await popup.screenshot({path:'test-results/byte-extension.png',fullPage:true});
-    await betPage.emulateMedia({reducedMotion:'reduce'});
-    for(const width of [1440,768,390]){await betPage.setViewportSize({width,height:1000});expect(await betPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await expect(webCard.locator('.pool-split')).toBeVisible();await expect(webCard.getByRole('button',{name:'Apostar a No',exact:true})).toHaveCSS('border-radius','999px');await betPage.screenshot({path:`test-results/byte-panel-${width}.png`,fullPage:true});}
-
-  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+test('MV3 popup bets directly, authenticates once and retains receipts across popup reload',async({page})=>{
+ const market=await createMarket(page,'¿Gana el mercado de la extensión?');
+ const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
+ const profile=await mkdtemp(`${tmpdir()}/byte-extension-`),extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
+ for(const file of ['background.js','popup.js']){const p=resolve(extension,file);await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+ const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ try{
+  const wallet=await phantomProvider(context);
+  await context.exposeBinding('__byteSign',(_source,message:number[])=>wallet.sign(message));
+  await context.addInitScript(()=>{
+   const w=window as unknown as {phantom:{solana:{signTransaction(tx:Transaction):Promise<Transaction>}};__byteSign(message:number[]):Promise<number[]>};
+   if(w.phantom)w.phantom.solana.signTransaction=async tx=>{tx.addSignature(tx.feePayer!,new Uint8Array(await w.__byteSign(Array.from(tx.serializeMessage()))) as never);return tx;};
+  });
+  await context.route('**/api/health',route=>route.fulfill({json:{ok:true,marketMode:'byte',network:'devnet'}}));
+  const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const extensionId=new URL(worker.url()).host;
+  // Connection begins in the popup; the web bridge connects and signs in automatically.
+  // Wait for the install onboarding to finish opening before starting another flow.
+  // Installing the extension can also start this connection automatically.
+  const popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const connect=popup.getByRole('button',{name:'Conectar Phantom',exact:true});
+  const walletLabel=`${wallet.address.slice(0,5)}…${wallet.address.slice(-5)}`;
+  await expect.poll(async()=>await popup.locator('#account-name').textContent()===walletLabel||await connect.isVisible()).toBe(true);
+  if(await connect.isVisible())await connect.click();
+  await expect(popup.locator('#account-name')).toHaveText(walletLabel);
+  const dashboard=await context.newPage();await dashboard.goto(`${base}/byte`);
+  await expect(dashboard.getByRole('button',{name:'Reconectar wallet',exact:true})).toBeVisible();
+  await dashboard.reload();await expect(dashboard.getByRole('button',{name:'Reconectar wallet',exact:true})).toBeVisible();
+  const card=popup.locator(`[data-market-id="${market.id}"]`);await expect(card).toBeVisible();await expect(popup.locator('#wallet')).toBeVisible();
+  await card.getByLabel('Importe en SOL devnet').fill('0.025');
+  await changeFixture(s=>{s.pending=true;});
+  const [signer]=await Promise.all([context.waitForEvent('page'),card.getByRole('button',{name:'Apostar a No',exact:true}).click()]);
+  await signer.waitForURL('**/extension-wallet.html#**');
+  await expect.poll(async()=>(await readFixture()).broadcasts).toBe(1);
+  await signer.close();await popup.reload();
+  await expect(card.getByText('Transacción enviada.',{exact:false})).toBeVisible();
+  await expect(card.getByRole('button',{name:'Apostar a No',exact:true})).toBeDisabled();
+  await changeFixture(s=>{s.pending=false;});await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();
+  await expect(popup.getByText('Apuesta confirmada en Solana.',{exact:false})).toBeVisible();
+  await expect(popup.locator('#history')).toContainText('Confirmada');
+  expect((await readFixture()).broadcasts).toBe(1);
+  expect((await readFixture()).markets[0].pools[1]).toBe(25000000);
+  await expect(popup.getByRole('button',{name:'Confirmar en Phantom'})).toHaveCount(0);
+  await popup.screenshot({path:'test-results/byte-extension.png',fullPage:true});
+ }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
 test('a non-devnet RPC is rejected before any wallet transaction is broadcast',async({page})=>{
  const market=await createMarket(page,'¿Bloquea una red incorrecta?');await connectWallet(page);await changeFixture(s=>{s.genesis='11111111111111111111111111111111';});
- const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await card.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(card.getByRole('alert')).toContainText(/no corresponde a (Solana )?devnet/);expect((await readFixture()).broadcasts).toBe(0);
+ const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await expect(card.getByRole('alert')).toContainText(/no corresponde a (Solana )?devnet/);expect((await readFixture()).broadcasts).toBe(0);
 });
 
 test('legacy Phantom provider can authenticate without the namespaced provider',async({page})=>{
