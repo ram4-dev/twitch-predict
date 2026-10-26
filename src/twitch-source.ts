@@ -1,8 +1,24 @@
-import { TWITCH_CLIENT_ID, TWITCH_QUERY, closesAt, type Prediction } from './prediction.js';
+import { TWITCH_CLIENT_ID, closesAt, type Prediction } from './prediction.js';
 import { parseTwitchPrediction } from './extension-model.js';
 import type { Points } from './points.js';
 const fields='id title status createdAt predictionWindowSeconds lockedAt endedAt winningOutcome {id} channel {name} outcomes {id title color totalPoints totalUsers}';
+const channelQuery=`query FollowedStreamer($channel:String!){user(login:$channel){id displayName stream {title viewersCount}} channel(name:$channel){activePredictionEvents{${fields}}}}`;
+type ChannelStatus={channel:string;displayName?:string;live?:boolean;title?:string;viewers?:number;checkedAt?:string;error?:string};
 export class TwitchSource {
+  private statuses=new Map<string,ChannelStatus>();
+  channels(){return this.points.channels().map(channel=>this.statuses.get(channel)??{channel});}
+  private async channel(channel:string){
+    const data=await this.gql(channelQuery,{channel});
+    if(!data?.user)throw new Error('El canal no existe en Twitch');
+    if(!Array.isArray(data?.channel?.activePredictionEvents))throw new Error('Twitch no devolvió las predicciones del canal');
+    return data;
+  }
+  async watch(channel:string){
+    const name=channel.toLowerCase();
+    await this.channel(name);
+    await this.points.watch(name);
+    await this.sync();
+  }
   private requests=new Map<string,{at:number;task:Promise<Prediction>}>();
   private syncing?:Promise<void>;
   lastError:string|null=null;
@@ -31,13 +47,13 @@ export class TwitchSource {
     const failures:string[]=[];
     for(const channel of this.points.channels()) {
       try {
-        const data=await this.gql(TWITCH_QUERY,{channel});
-        if(!Array.isArray(data?.channel?.activePredictionEvents))throw new Error('Canal sin respuesta válida');
+        const data=await this.channel(channel);
+        this.statuses.set(channel,{channel,displayName:data.user.displayName,live:!!data.user.stream,title:data.user.stream?.title,viewers:data.user.stream?.viewersCount,checkedAt:new Date().toISOString()});
         for(const raw of data.channel.activePredictionEvents) {
           const p=parseTwitchPrediction(raw,channel);
           if((p.status==='ACTIVE'&&closesAt(p)>Date.now())||this.points.markets().some(m=>m.prediction.id===p.id&&m.prediction.channel===channel))await this.points.accept(p);
         }
-      }catch(e){failures.push(`${channel}: ${(e as Error).message}`);}
+      }catch(e){const error=(e as Error).message;this.statuses.set(channel,{...this.statuses.get(channel),channel,error});failures.push(`${channel}: ${error}`);}
     }
     // Track saved IDs even after they disappear from activePredictionEvents or the extension closes.
     const pending=this.points.pendingSources();

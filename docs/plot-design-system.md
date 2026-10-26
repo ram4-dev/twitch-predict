@@ -71,3 +71,11 @@ PORTLESS_STATE_DIR=/tmp/plot-ui-proxy PORTLESS_PORT=1360 PORTLESS_HTTPS=0 DATA_D
 Los E2E se ejecutaron en otro proxy y datos temporales, con la fuente de Twitch del fixture del proyecto. El puerto habitual de tests 1358 estaba ocupado por otro trabajo; no se tocó ese proceso.
 
 No hay cambios al backend de pagos, ni integración nueva de USDC en este cambio de UI.
+
+## Integración con main · 2026-10-25
+
+Se integró el showcase de `46361fe` con main `351f11e` en el worktree `/Users/ramiro/.t3/worktrees/twitch-predict/feat-plot-design-system`, rama `feat/plot-design-system`. Se preservaron Twitch OAuth, las consolas, Byte y los permisos actuales de la extensión. El catálogo comparte el componente Betting y el build lo genera antes de copiar la distribución.
+
+La primera corrida completa de Playwright dio 27 aprobados, 3 fallidos y 4 omitidos. Se corrigieron la expectativa del título de canales y la conservación del componente React entre refrescos, que afectaba el monto de la apuesta. La nueva corrida de las cuatro suites afectadas (catálogo, Dia, puntos y settlement) aprobó sus 14 tests. Los otros 16 E2E activos habían pasado en la corrida completa. Los 4 omitidos pertenecen al modo legacy Solana; esta validación corresponde al modo offchain y usa fixtures de Twitch, OAuth y Byte, sin transacciones externas.
+
+`npm run check` volvió a pasar: typecheck, lint, 37 tests unitarios y build. Se comprobó que el catálogo generado coincide con el incluido en `dist/public`. Los archivos originales sin seguimiento en `output/` del checkout principal se conservan.

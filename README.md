@@ -1,4 +1,8 @@
-# Prediction Mirror · Puntos internos
+# plot · Predicciones
+
+La integración de mercados con byte está en [BYTE_MARKETS.md](BYTE_MARKETS.md). El `.env` local está preparado para agregar `BYTE_API_KEY`; `npm run dev:byte` abre el modo SOL devnet con Phantom, panel de operador y acceso desde la extensión.
+
+## POC anterior: puntos internos
 
 Extensión Chrome que replica predicciones de Twitch y permite apostar puntos internos. Phantom identifica al usuario mediante una firma; saldo, apuestas, resultado y cobro siguen offchain.
 

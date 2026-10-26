@@ -1,0 +1,41 @@
+{
+  "sourceBranch": "fix/phantom-message-format",
+  "sourceCommit": "ebe56e1",
+  "branch": "feat/settlement-consoles",
+  "worktree": "/Users/ramiro/.t3/projects/twitch-predict.feat-settlement-consoles",
+  "features": [
+    "Per-bet wallet snapshot, outcome, amount, payout and credit timestamps",
+    "Local operator provisions channel-to-wallet permission; wallet login alone grants no streamer rights",
+    "Streamer console: roster, close, preview, immutable resolve/cancel, batch distribution",
+    "Consumer console: wallet positions, claimable and credited points, balance ledger",
+    "Twitch resolution remains automatic; manual streamer settlement is authoritative once committed",
+    "Atomic persisted snapshots and idempotent receipts prevent duplicate payouts, including claim/distribution races",
+    "Cancellation or no winning stakes refund the full pool",
+    "Popup input survives background polling; links open both consoles with existing account"
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "unit": "27 passed",
+    "build": "passed",
+    "e2e": "10 passed, 4 legacy Solana skipped by offchain scope",
+    "pollEditingRegression": "2 focused repeated E2E passed; forced refresh preserves 250-point input",
+    "visual": "desktop streamer, consumer and 390px consumer screenshots inspected"
+  },
+  "live": {
+    "server": "launchctl dev.twitchpredict.bridge runs this worktree through Portless; canonical HTTPS panel healthy",
+    "extension": "0.5.0 loaded/enabled in normal Chrome with same extension ID and existing wallet session; both console links verified",
+    "setup": "Signed-in wallet assigned demo_streamer; one empty example created; no user bets or live settlements performed",
+    "screenshots": [
+      "test-results/streamer-resolution.png",
+      "test-results/user-settled.png",
+      "test-results/user-console-mobile.png"
+    ]
+  },
+  "limitations": [
+    "Local single-writer offchain JSON POC; no Solana transactions",
+    "Streamer assignment is local operator configuration, not Twitch OAuth ownership verification",
+    "UI E2E wallet signatures use generated test wallets with real Ed25519 verification; live existing wallet session preserved"
+  ],
+  "cleanup": "worktree and branch preserved; no merge, no unrelated files reverted"
+}

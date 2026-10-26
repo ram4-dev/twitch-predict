@@ -14,3 +14,5 @@ body *{font-variant-numeric:inherit}.points-status,.points-pool>span,.pool-peopl
 .stake-row{margin-bottom:14px}
 
 @import "./plot.css";
+
+@import "./app-materials.css";

@@ -26,10 +26,12 @@ export function LiquidMetalSurface({active,tone='neutral'}:{active:boolean;tone?
 export function DitherField({shape='swirl',paused=false}:{shape?:'swirl'|'simplex';paused?:boolean}){
  const node=useRef<HTMLDivElement>(null);const reduced=useReducedMotion();
  useEffect(()=>{
-  if(!node.current)return;let mount:ShaderMount|undefined;
+  if(!node.current)return;let mount:ShaderMount|undefined,visible=true;
   try{mount=new ShaderMount(node.current,ditheringFragmentShader,{...sizing,u_colorBack:[.025,.025,.025,1],u_colorFront:[.16,.16,.16,1],u_shape:shape==='swirl'?6:1,u_type:3,u_pxSize:1.5,u_scale:.75},undefined,reduced||paused?0:.22,1800,1.5,700000);}
   catch{node.current.dataset.fallback='true';}
-  return()=>mount?.dispose();
+  const update=()=>mount?.setSpeed(reduced||paused||document.hidden||!visible?0:.22);
+  const observer=new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;update();});observer.observe(node.current);document.addEventListener('visibilitychange',update);update();
+  return()=>{observer.disconnect();document.removeEventListener('visibilitychange',update);mount?.dispose();};
  },[shape,reduced,paused]);
  return <div ref={node} className="plot-dither-field" aria-hidden="true"/>;
 }
@@ -42,8 +44,8 @@ export function enableSpotlight(node:HTMLElement){
 }
 // Own canvas treatment informed by Halftone Wordmark Footer and Murmuration Wordmark.
 // It preserves Fraunces and the open-outcome o; no third-party particle source is copied.
-export function HalftonePlot({replayKey=0}:{replayKey?:number}){
- const canvas=useRef<HTMLCanvasElement>(null);const reduced=useReducedMotion();
+export function HalftonePlot({replayKey=0,paused=false,label='plot en puntos, con desenlace abierto'}:{replayKey?:number;paused?:boolean;label?:string}){
+ const canvas=useRef<HTMLCanvasElement>(null);const reducedMotion=useReducedMotion();const reduced=reducedMotion||paused;
  useEffect(()=>{
   const el=canvas.current;if(!el)return;const ctx=el.getContext('2d');if(!ctx)return;
   type Dot={x:number;y:number;tx:number;ty:number;vx:number;vy:number};
@@ -66,7 +68,7 @@ export function HalftonePlot({replayKey=0}:{replayKey?:number}){
    dotX=x+pl+o*.88;dotY=baseline-o*.62;dotRadius=Math.max(2.4,font*.046);
    const data=c.getImageData(0,0,mask.width,mask.height).data,step=Math.max(2.6,width/250);dots=[];
    for(let y=1;y<height;y+=step)for(let x=1;x<width;x+=step)if(data[(Math.floor(y)*mask.width+Math.floor(x))*4+3]>130){const i=dots.length,seed=Math.sin(i*127.1+replayKey*7.7);dots.push({x:reduced?x:x+seed*width*.38,y:reduced?y:y+Math.cos(i*91.7)*height*.6,tx:x,ty:y,vx:0,vy:0});}
-   el.dataset.animationState=reduced?'settled':'assembling';el.dataset.particles=String(dots.length);last=0;schedule();
+   el.dataset.animationState=reduced?'settled':'assembling';el.dataset.particles=String(dots.length);last=0;draw(performance.now());
   };
   function draw(time:number){
    raf=0;if(stopped)return;const dt=Math.min(last?(time-last)/1000:1/60,.032);last=time;let energy=0;
@@ -85,5 +87,5 @@ export function HalftonePlot({replayKey=0}:{replayKey?:number}){
   el.addEventListener('pointermove',move);el.addEventListener('pointerleave',leave);document.addEventListener('visibilitychange',visibility);
   return()=>{stopped=true;cancelAnimationFrame(raf);if(ready){resize.disconnect();intersection.disconnect();}el.removeEventListener('pointermove',move);el.removeEventListener('pointerleave',leave);document.removeEventListener('visibilitychange',visibility);};
  },[reduced,replayKey]);
- return <canvas ref={canvas} className="plot-halftone" role="img" aria-label="plot en puntos, con desenlace abierto"/>;
+ return <canvas ref={canvas} className="plot-halftone" role="img" aria-label={label}/>;
 }

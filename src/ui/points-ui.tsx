@@ -22,7 +22,7 @@ export function createPointsClient(base:string,storage:{get():Promise<string|nul
     const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);return data;
   };
   const ensure=async()=>{const token=await storage.get();if(!token)throw new Error('Conectá Phantom para acceder a tus puntos.');return token;};
-  return {request,me:async()=>request<Account>('/api/points/me',undefined,await ensure()),bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
+  return {request,authRequest:async<T=unknown>(path:string,body?:unknown)=>request<T>(path,body,await ensure()),me:async()=>request<Account>('/api/points/me',undefined,await ensure()),bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
 }
 // Reconcile retained markets instead of replacing a focused input on every poll.
 // The callers render synchronously; prune only roots not reused in this generation.
