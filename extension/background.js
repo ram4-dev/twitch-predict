@@ -72,13 +72,27 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
 chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
   if (!sender.url || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(new URL(sender.url).hostname) || message.type !== 'PAIR') return;
   let url; try { url = new URL(message.bridgeUrl); } catch { return; }
-  if (!['http:','https:'].includes(url.protocol) || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(url.hostname) || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
+  if (new URL(sender.url).origin!==url.origin || !['http:','https:'].includes(url.protocol) || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(url.hostname) || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
   chrome.storage.local.set({ bridgeUrl: url.origin, bridgeToken: message.token }).then(() => reply({ ok: true }));
   return true;
 });
 
 let authStart;
 function appUrl(value){const u=new URL(value||defaultBridge);if(!['http:','https:'].includes(u.protocol)||!['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname))throw new Error('URL de la app inválida');return u.origin;}
+async function beginSession(base){
+  const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
+  const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo iniciar la vinculación');
+  await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
+  return {ok:true,flowId:result.flowId};
+}
+chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
+  if(message.type!=='LINK_SESSION')return;
+  void (async()=>{
+    const base=appUrl(message.bridgeUrl);if(!sender.url||new URL(sender.url).origin!==base)throw new Error('Origen de vinculación inválido');
+    reply(await beginSession(base));
+  })().catch(e=>reply({error:e.message}));return true;
+});
 async function startAuth(){
   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','pendingAuth']);
   let base=appUrl(stored.bridgeUrl);

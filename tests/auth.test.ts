@@ -50,3 +50,18 @@ test('concurrent proofs cannot mint duplicate accounts or overwrite an existing 
   const first=proofs.find(r=>r.status==='fulfilled');if(first?.status!=='fulfilled')throw new Error('No result');
   const anon=await p.createAccount();const flow=a.start('a'.repeat(32),'b'.repeat(64),anon.token);const c2=a.challenge(w.address,origin,flow.flowId);const known=await a.authenticate(c2.challengeId,w.signature(c2.message),origin);assert.equal(known.account.id,first.value.account.id);assert.notEqual(known.account.id,anon.account.id);assert.equal(p.me(anon.token).balance,10000);
 }));
+
+test('authenticated web session links a one-time extension flow bound to its origin and state',()=>fixture(async(p,a,_dir,tick)=>{
+ const w=wallet(),c=a.challenge(w.address,origin),web=await a.authenticate(c.challengeId,w.signature(c.message),origin);
+ const extensionId='a'.repeat(32),state='c'.repeat(64);
+ const flow=a.start(extensionId,state,undefined,origin);
+ assert.throws(()=>a.authorize(flow.flowId,web.token,'https://other.localhost'),/panel/);
+ assert.throws(()=>a.authorize(flow.flowId,'invalid',origin));
+ const anonymous=await p.createAccount();assert.throws(()=>a.authorize(flow.flowId,anonymous.token,origin),/Phantom/);
+ const handoff=a.authorize(flow.flowId,web.token,origin);assert.equal(handoff.extensionId,extensionId);
+ assert.throws(()=>a.authorize(flow.flowId,web.token,origin),/completó/);
+ await assert.rejects(a.complete(flow.flowId,'d'.repeat(64),handoff.code,extensionId));
+ const linked=await a.complete(flow.flowId,state,handoff.code,extensionId);assert.equal(linked.account.id,web.account.id);assert.notEqual(linked.token,web.token);assert.equal(p.me(linked.token).wallet,w.address);
+ await assert.rejects(a.complete(flow.flowId,state,handoff.code,extensionId));
+ const expired=a.start(extensionId,state,undefined,origin);tick(30*60_000);assert.throws(()=>a.authorize(expired.flowId,web.token,origin),/venció/);
+}));

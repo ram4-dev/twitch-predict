@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "plot \u00b7 Puntos",
-  "version": "0.5.0",
-  "description": "Replica predicciones de Twitch y apost\u00e1 con tus propios puntos internos.",
+  "name": "plot · Puntos",
+  "version": "0.6.0",
+  "description": "Replica predicciones de Twitch y apostá con tus propios puntos internos.",
   "permissions": [
     "storage",
     "activeTab"
@@ -21,7 +21,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "plot \u00b7 Ver apuesta"
+    "default_title": "plot · Ver apuesta"
   },
   "content_scripts": [
     {

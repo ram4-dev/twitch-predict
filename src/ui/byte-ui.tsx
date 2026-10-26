@@ -20,7 +20,7 @@ async function request<T>(path:string,body?:unknown,operatorToken?:string):Promi
   const data=await response.json();if(!response.ok)throw new ApiError(response.status,data.error??'No se pudo completar la operación');return data;
 }
 function App(){
-  const [status,setStatus]=useState<Status>(),[config,setConfig]=useState<ByteConfig>(),[markets,setMarkets]=useState<DisplayByteMarket[]>([]),[wallet,setWallet]=useState(''),[balance,setBalance]=useState<number>(),[tab,setTab]=useState(new URLSearchParams(location.search).get('view')==='history'?'history':'markets'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false),[channel,setChannel]=useState(new URLSearchParams(location.search).get('channel')??''),[history,setHistory]=useState<BetReceipt[]>(receipts()),[operations,setOperations]=useState<Operation[]>([]),[loading,setLoading]=useState(true);
+  const [status,setStatus]=useState<Status>(),[config,setConfig]=useState<ByteConfig>(),[markets,setMarkets]=useState<DisplayByteMarket[]>([]),[wallet,setWallet]=useState(''),[balance,setBalance]=useState<number>(),[tab,setTab]=useState(new URLSearchParams(location.search).get('view')==='history'?'history':'markets'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false),[channel,setChannel]=useState(new URLSearchParams(location.search).get('channel')??''),[history,setHistory]=useState<BetReceipt[]>(receipts()),[operations,setOperations]=useState<Operation[]>([]),[loading,setLoading]=useState(true),[pairing,setPairing]=useState(false);
   const operatorToken=useRef('');
   const [operatorReady,setOperatorReady]=useState(false),[loadError,setLoadError]=useState('');
   const refresh=async()=>{
@@ -47,7 +47,7 @@ function App(){
       const proof=await provider.signMessage(new TextEncoder().encode(challenge.message),'utf8');
       if(proof.publicKey&&proof.publicKey.toString()!==address)throw new Error('La wallet cambió durante la firma. Volvé a conectar.');
       const login=await request<{token:string}>('/auth/verify',{challengeId:challenge.challengeId,signature:btoa(String.fromCharCode(...proof.signature))});
-      localStorage.setItem('pointsToken',login.token);setWallet(address);setConnected(true);setNotice('Wallet conectada. Las apuestas requieren otra firma de transacción.');if(tab==='operator')await operate();
+      localStorage.setItem('pointsToken',login.token);setWallet(address);setConnected(true);setNotice('Wallet conectada. Las apuestas requieren otra firma de transacción.');await pairExtension(true);if(tab==='operator')await operate();
     }catch(e){setError(walletError(e));}finally{setBusy(false);}
   };
   const operate=async()=>{
@@ -59,14 +59,22 @@ function App(){
       setOperatorReady(true);
     }catch(e){setError((e as Error).message);}
   };
-  const pairExtension=async()=>{
-    setError('');try{
-      const runtime=(globalThis as unknown as {chrome?:{runtime?:{sendMessage(id:string,message:unknown):Promise<{ok?:boolean;error?:string}>}}}).chrome?.runtime;
+  const pairExtension=async(automatic=false)=>{
+    if(pairing)return;setPairing(true);if(!automatic)setError('');try{
+      const runtime=(globalThis as unknown as {chrome?:{runtime?:{sendMessage(id:string,message:unknown):Promise<{ok?:boolean;error?:string;flowId?:string}>}}}).chrome?.runtime;
       if(!runtime?.sendMessage||!status?.extensionId)throw new Error('Cargá la extensión de Plot en Chrome y volvé a intentar.');
       const {token}=await request<{token:string}>('/pair');
       const result=await runtime.sendMessage(status.extensionId,{type:'PAIR',bridgeUrl:location.origin,token});
-      if(!result?.ok)throw new Error(result?.error??'No se pudo vincular la extensión.');setNotice('Extensión vinculada. Los mercados del canal se abren en esta web para firmar con Phantom.');
-    }catch(e){setError((e as Error).message);}
+      if(!result?.ok)throw new Error(result?.error??'No se pudo vincular la extensión.');
+      const session=await request<{wallet:string|null}>('/points/me').catch(()=>undefined);
+      if(session?.wallet){
+        const flow=await runtime.sendMessage(status.extensionId,{type:'LINK_SESSION',bridgeUrl:location.origin});if(!flow?.ok||!flow.flowId)throw new Error(flow?.error??'Actualizá la extensión para vincular la cuenta.');
+        const handoff=await request<{flowId:string;code:string;extensionId:string}>('/auth/extension/authorize',{flowId:flow.flowId});
+        const linked=await runtime.sendMessage(status.extensionId,{type:'AUTH_COMPLETE',flowId:handoff.flowId,code:handoff.code});if(!linked?.ok)throw new Error(linked?.error??'No se pudo vincular la cuenta.');
+        localStorage.setItem('linkedExtensionId',status.extensionId);
+      }
+      setNotice(`${automatic?'Wallet conectada. ':''}Extensión vinculada.${session?.wallet?' Tu wallet también está disponible en el popup.':' Conectá Phantom para vincular también tu cuenta.'}`);
+    }catch(e){if(!automatic)setError((e as Error).message);}finally{setPairing(false);}
   };
   const checkHistory=async()=>{
     setBusy(true);setError('');
@@ -77,7 +85,7 @@ function App(){
   const channels=[...new Set(markets.map(m=>m.notes?.channel).filter((v):v is string=>!!v))];
   return <div className="byte-app"><header><a className="brand" href="/"><PlotLogo/></a><nav aria-label="Secciones"><button aria-current={tab==='markets'?'page':undefined} onClick={()=>setTab('markets')}>Mercados</button><button aria-current={tab==='history'?'page':undefined} onClick={()=>setTab('history')}>Mis apuestas</button><button aria-current={tab==='operator'?'page':undefined} onClick={()=>void operate()}>Operador</button></nav><span className="mode">SOL devnet</span></header>
     <main><div className="plot-scene"><Scene/></div><section className="intro"><div><h1>{tab==='history'?'Mis apuestas':tab==='operator'?'Consola del streamer':'Predicciones de la comunidad'}</h1><p>{tab==='history'?'Tus transacciones y su confirmación en Solana.':tab==='operator'?'Creá mercados, definí el resultado y seguí los pagos.':'Las jugadas del stream. Un pozo compartido en SOL devnet.'}</p></div><section className="wallet-strip"><div><small>{wallet?short(wallet):'Conectá Phantom'}</small><span>Saldo disponible</span></div><div><strong>{wallet?(balance===undefined?'—':sol(balance)):'—'}</strong><span>SOL devnet</span></div><Button variant="outline" disabled={busy} onClick={()=>void connect()}><Wallet size={16}/>{connected?'Reconectar wallet':'Conectar Phantom'}</Button></section></section>
-      <div className="byte-connection"><span>Solana devnet · sin dinero real</span><Button variant="ghost" onClick={()=>void pairExtension()}>Vincular extensión</Button></div>
+      <div className="byte-connection"><span>Solana devnet · sin dinero real</span><Button variant="ghost" disabled={pairing||busy} onClick={()=>void pairExtension()}>Vincular extensión</Button></div>
       {status&&!status.configured&&<Notice tone="warning">Los mercados todavía no están habilitados. El operador debe completar la conexión con byte.</Notice>}
       {loadError&&<Notice tone="error">{loadError}</Notice>}{error&&<Notice tone="error">{error}</Notice>}{notice&&<Notice>{notice}</Notice>}
       {tab==='markets'&&<><div className="byte-section-head section-title"><h2>Mercados</h2><div><Select aria-label="Filtrar canal" value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Todos los canales</option>{channels.map(c=><option key={c}>{c}</option>)}</Select><Button size="icon" variant="ghost" aria-label="Actualizar mercados" onClick={()=>void refresh()}><RefreshCw size={16}/></Button></div></div>

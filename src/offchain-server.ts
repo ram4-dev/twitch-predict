@@ -69,7 +69,7 @@ app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await points.un
 app.get('/api/auth/config',(req,res)=>res.json({origin:process.env.AUTH_ORIGIN??appOrigin(req)}));
 app.post('/api/auth/extension/start',route((req,res)=>{
   const i=z.object({extensionId:z.string().regex(/^[a-p]{32}$/),state:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
-  res.json(auth.start(i.extensionId,i.state,bearer(req)||undefined));
+  res.json(auth.start(i.extensionId,i.state,bearer(req)||undefined,appOrigin(req)));
 }));
 app.get('/api/auth/flow/:flowId',route((req,res)=>res.json(auth.context(String(req.params.flowId)))));
 app.post('/api/auth/challenge',route((req,res)=>{
@@ -79,6 +79,11 @@ app.post('/api/auth/challenge',route((req,res)=>{
 app.post('/api/auth/verify',route(async(req,res)=>{
   const i=z.object({challengeId:z.string().regex(/^[a-f0-9]{64}$/),signature:z.string().max(128)}).parse(req.body);
   res.json(await auth.authenticate(i.challengeId,i.signature,appOrigin(req)));
+}));
+app.post('/api/auth/extension/authorize',route((req,res)=>{
+  if(req.get('sec-fetch-site')!=='same-origin'||req.get('origin')!==appOrigin(req))throw new Error('Vinculá la cuenta desde el mismo panel');
+  const i=z.object({flowId:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
+  res.json(auth.authorize(i.flowId,bearer(req),appOrigin(req)));
 }));
 app.post('/api/auth/extension/complete',route(async(req,res)=>{
   const i=z.object({flowId:z.string().regex(/^[a-f0-9]{64}$/),state:z.string().regex(/^[a-f0-9]{64}$/),code:z.string().regex(/^[a-f0-9]{64}$/),extensionId:z.string().regex(/^[a-p]{32}$/)}).parse(req.body);

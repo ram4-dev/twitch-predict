@@ -89,7 +89,11 @@ test('MV3 extension pairs with the app and opens SOL markets in the Phantom web 
     const [betPage]=await Promise.all([context.waitForEvent('page'),card.getByRole('button',{name:'Apostar a No',exact:true}).click()]);
     await betPage.waitForURL(`**/byte?market=${market.id}&channel=fixture_streamer&option=1&amount=0.025`);
     const webCard=betPage.locator(`[data-market-id="${market.id}"]`);await expect(webCard.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');await expect(webCard.getByRole('button',{name:'Apostar a No',exact:true})).toHaveAttribute('aria-pressed','true');expect((await readFixture()).broadcasts).toBe(0);
-    await connectWallet(betPage);await webCard.getByRole('button',{name:'Apostar a No',exact:true}).click();await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('0.025 SOL devnet');await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('No');
+    const connectedWallet=await connectWallet(betPage);
+    await expect(betPage.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+    await expect(popup.locator('#wallet')).toBeVisible();await expect(popup.locator('#login')).toBeHidden();await expect(popup.locator('#own-balance')).toHaveText('2');
+    const extensionWallet=await worker.evaluate(async base=>{const stored=await (globalThis as unknown as {chrome:{storage:{local:{get(key:string):Promise<{pointsToken:string}>}}}}).chrome.storage.local.get('pointsToken');const response=await fetch(`${base}/api/points/me`,{headers:{Authorization:`Bearer ${stored.pointsToken}`}});return (await response.json()).wallet;},base);expect(extensionWallet).toBe(connectedWallet.address);
+    await webCard.getByRole('button',{name:'Apostar a No',exact:true}).click();await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('0.025 SOL devnet');await expect(webCard.getByRole('group',{name:'Confirmar apuesta'})).toContainText('No');
     await webCard.getByRole('button',{name:'Confirmar en Phantom',exact:true}).click();await expect(webCard.getByText('Apuesta confirmada en Solana.',{exact:true})).toBeVisible();expect((await readFixture()).markets[0].pools[1]).toBe(25000000);
     await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(card.locator('.points-pool')).toContainText('0,025');await expect(card.getByLabel('Importe en SOL devnet')).toHaveValue('0.025');
     await popup.screenshot({path:'test-results/byte-extension.png',fullPage:true});

@@ -3,7 +3,7 @@ import {address,getAddressEncoder} from '@solana/kit';
 import type {Points} from './points.js';
 const id=()=>randomBytes(32).toString('hex');
 const ttl=5*60_000;
-type Flow={id:string;extensionId:string;state:string;preferredToken?:string;expires:number;code?:string;wallet?:string;redeeming?:boolean};
+type Flow={id:string;extensionId:string;state:string;preferredToken?:string;origin?:string;expires:number;code?:string;wallet?:string;redeeming?:boolean};
 type Challenge={id:string;address:string;origin:string;message:string;expires:number;flowId?:string;preferredToken?:string};
 function publicKey(value:string){const bytes=getAddressEncoder().encode(address(value));return createPublicKey({key:Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from(bytes)]),format:'der',type:'spki'});}
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
@@ -12,11 +12,18 @@ export class Auth {
   constructor(readonly points:Points,readonly clock=()=>Date.now()){}
   private prune(){for(const [key,f] of this.flows)if(f.expires<=this.clock())this.flows.delete(key);for(const [key,c] of this.challenges)if(c.expires<=this.clock())this.challenges.delete(key);}
   private flow(flowId:string){const f=this.flows.get(flowId);if(!f||f.expires<=this.clock())throw new Error('El acceso venció. Volvé a abrirlo desde la extensión.');return f;}
-  start(extensionId:string,state:string,preferredToken?:string){
+  start(extensionId:string,state:string,preferredToken?:string,origin?:string){
     this.prune();if(!/^[a-p]{32}$/.test(extensionId)||!/^[a-f0-9]{64}$/.test(state))throw new Error('Solicitud de extensión inválida');
     if(preferredToken){try{this.points.me(preferredToken);}catch{preferredToken=undefined;}}
     if(this.flows.size>=1000)throw new Error('Demasiados accesos pendientes');
-    const f:Flow={id:id(),extensionId,state,preferredToken,expires:this.clock()+30*60_000};this.flows.set(f.id,f);return {flowId:f.id,expiresAt:new Date(f.expires).toISOString()};
+    const f:Flow={id:id(),extensionId,state,preferredToken,origin,expires:this.clock()+30*60_000};this.flows.set(f.id,f);return {flowId:f.id,expiresAt:new Date(f.expires).toISOString()};
+  }
+  authorize(flowId:string,token:string,origin:string){
+    const f=this.flow(flowId);
+    if(f.origin!==origin||f.code||f.redeeming)throw new Error('La vinculación no corresponde a este panel o ya se completó');
+    const account=this.points.me(token);if(!account.wallet)throw new Error('Conectá Phantom antes de vincular tu cuenta');
+    f.wallet=account.wallet;f.code=id();f.expires=this.clock()+ttl;
+    return {flowId:f.id,code:f.code,extensionId:f.extensionId};
   }
   context(flowId:string){const f=this.flow(flowId);return {extensionId:f.extensionId,expiresAt:new Date(f.expires).toISOString()};}
   challenge(wallet:string,origin:string,flowId?:string,preferredToken?:string){

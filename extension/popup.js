@@ -57,20 +57,28 @@ async function load(){
       const response=await fetch(`${base}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});const data=await response.json();
       const byteMarkets=response.ok?data.markets:[];
       const config=await fetch(`${base}/api/byte/config`,{signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():undefined).catch(()=>undefined);
-      disposePointsViews();disposeByteViews();
       const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...byteMarkets.map(m=>m.notes?.channel).filter(Boolean)])].sort();
       if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
       $('#channel').replaceChildren(...channels.map(c=>{const option=el('option',`@${c}`);option.value=c;return option;}));$('#channel').value=selectedChannel;
-      $('#wallet').hidden=true;$('#login').hidden=true;$('#history').replaceChildren();$('#points-error').hidden=response.ok;$('#points-error').textContent=response.ok?'':data.error;
+      account=undefined;
+      if(state.pointsToken)account=await fetch(`${base}/api/points/me`,{headers:{Authorization:`Bearer ${state.pointsToken}`},signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():undefined).catch(()=>undefined);
+      $('#wallet').hidden=!account?.wallet;$('#login').hidden=!!account?.wallet;$('#history').replaceChildren();$('#points-error').hidden=response.ok&&!!config;$('#points-error').textContent=!response.ok?data.error:!config?'No se pudo consultar la configuración de Byte.':'';
+      if(account?.wallet){
+        $('#account-name').textContent=`${account.wallet.slice(0,5)}…${account.wallet.slice(-5)}`;$('#own-balance').nextElementSibling.textContent='SOL devnet';$('#own-balance').textContent='—';
+        const balance=await fetch(`${base}/api/byte/rpc`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[account.wallet]}),signal:AbortSignal.timeout(10000)}).then(r=>r.ok?r.json():undefined).catch(()=>undefined);
+        if(Number.isSafeInteger(balance?.result?.value))$('#own-balance').textContent=new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(balance.result.value/1e9);
+      }
+
       $('#source-error').hidden=true;$('#connection').textContent='SOL devnet';$('#freshness').textContent='Mercados de byte · sin dinero real';
       const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
+      disposePointsViews();disposeByteViews();
       const cards=visible.map(m=>byteMarketView(m,config,base));
       $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Las apuestas se firman en la web con Phantom.';
       $('#dashboard').href=base;$('#user-console').href=`${base}/byte?view=history`;$('#streamer-console').hidden=true;
       return;
     }
     disposeByteViews();
-    $('#wallet').hidden=false;
+    $('#wallet').hidden=false;$('#own-balance').nextElementSibling.textContent='puntos internos';
     if(!client||clientBase!==base){clientBase=base;client=createPointsClient(base,{get:async()=> (await chrome.storage.local.get('pointsToken')).pointsToken,set:async token=>chrome.storage.local.set({pointsToken:token})});}
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}
     const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();
