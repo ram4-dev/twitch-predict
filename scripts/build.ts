@@ -7,6 +7,7 @@ await build({ entryPoints: ['src/extension-model.ts'], outfile: 'extension/model
 await build({entryPoints:['src/ui/points-ui.tsx'],outfile:'public/points-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/onboarding.tsx'],outfile:'public/onboarding.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/consoles.tsx'],outfile:'public/consoles.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['src/ui/byte-ui.tsx'],outfile:'public/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 execFileSync('./node_modules/.bin/tailwindcss',['-i','src/ui/theme.css','-o','public/points-ui.css','--minify'],{stdio:'inherit'});
 await build({entryPoints:['src/ui/surfaces.tsx'],outfile:'public/surfaces.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await cp('node_modules/@paper-design/shaders/LICENSE','public/brand/Paper-Shaders-LICENSE.txt');

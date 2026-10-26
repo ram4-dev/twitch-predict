@@ -17,7 +17,8 @@
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
     "setup": "tsx scripts/setup.ts",
     "localnet": "bash scripts/localnet.sh",
-    "chrome": "tsx scripts/chrome.ts"
+    "chrome": "tsx scripts/chrome.ts",
+    "dev:byte": "portless twitch-predict-byte tsx watch --include .env src/server.ts"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,7 @@
     "@solana/kit": "^6.10.0",
     "@solana/web3.js": "^1.98.4",
     "@whetstone-research/doppler-sdk": "^1.0.43",
+    "buffer": "^6.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.3.0",

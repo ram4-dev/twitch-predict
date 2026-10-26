@@ -4,9 +4,9 @@ import './surfaces.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
 const defaultBridge='http://twitch-predict.localhost:1356';
-let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase;
+let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const forms=new Map();let loading=false,again=false;
-function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&u.hostname==='twitch-predict.localhost'?u.origin:defaultBridge;}catch{return defaultBridge;}}
+function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
 function fact(list,title,value){list.append(el('dt',title),el('dd',value??'Sin informar'));}
 function sourceView(p){
@@ -39,6 +39,7 @@ function render(){
   tick();
 }
 function tick(){
+  if(byteMode)return;
   const age=snapshot?.fetchedAt?Math.max(0,Math.floor((Date.now()-Date.parse(snapshot.fetchedAt))/1000)):null;
   $('#freshness').textContent=age==null?'Esperando consulta de Twitch…':`Twitch actualizado hace ${age} s`;
   for(const p of [...(snapshot?.predictions??[]).map(i=>i.prediction),...markets.map(m=>m.prediction)]){const timer=document.querySelector(`[data-timer="${CSS.escape(p.id)}"]`);if(timer)timer.textContent=countdown(p);}
@@ -50,6 +51,22 @@ async function load(){
   const focused=document.activeElement;const restore=focused?.matches('input[aria-label="Puntos a apostar"]')?focused.closest('[data-market-key]')?.dataset.marketKey:null;
   try{
     state=await chrome.storage.local.get(null);const base=bridgeUrl();
+    const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);byteMode=health?.marketMode==='byte';
+    if(byteMode){
+      const response=await fetch(`${base}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});const data=await response.json();
+      const byteMarkets=response.ok?data.markets:[];
+      const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...byteMarkets.map(m=>m.notes?.channel).filter(Boolean)])].sort();
+      if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
+      $('#channel').replaceChildren(...channels.map(c=>{const option=el('option',`@${c}`);option.value=c;return option;}));$('#channel').value=selectedChannel;
+      $('#wallet').hidden=true;$('#login').hidden=true;$('#history').replaceChildren();$('#points-error').hidden=response.ok;$('#points-error').textContent=response.ok?'':data.error;
+      $('#source-error').hidden=true;$('#connection').textContent='SOL devnet';$('#freshness').textContent='Mercados de byte · sin dinero real';
+      const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
+      const cards=visible.map(m=>{const card=el('article',null,'prediction');card.append(el('span',`@${m.notes?.channel||'partner'} · ${m.status==='open'?(m.bettable?'Abierto':'Esperando resultado'):m.chain.settled?'Pagos completados':'Pagos pendientes'}`,'status'),el('h1',m.title));const link=el('a','Abrir apuesta con Phantom ↗','byte-open');link.href=`${base}/byte?channel=${encodeURIComponent(m.notes?.channel||'')}`;link.target='_blank';link.rel='noopener';card.append(el('p',`${m.total/1e9} SOL devnet en el pozo · ${m.bettors} participantes`),link);return card;});
+      $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Las apuestas se firman en la web con Phantom.';
+      $('#dashboard').href=`${base}/byte`;$('#user-console').href=`${base}/byte?view=history`;$('#streamer-console').hidden=true;
+      return;
+    }
+    $('#wallet').hidden=false;
     if(!client||clientBase!==base){clientBase=base;client=createPointsClient(base,{get:async()=> (await chrome.storage.local.get('pointsToken')).pointsToken,set:async token=>chrome.storage.local.set({pointsToken:token})});}
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}
     const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();

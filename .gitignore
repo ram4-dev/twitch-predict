@@ -4,6 +4,7 @@ dist/
 test-results/
 playwright-report/
 .env*
+!.env.example
 *.log
 
 # Ignore the local shared dependency/data symlinks as well as directories.
@@ -13,3 +14,4 @@ data
 # Local visual audit screenshots and reports
 .taste-skill/before/
 .taste-skill/after/
+public/byte-ui.js

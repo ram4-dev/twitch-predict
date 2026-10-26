@@ -23,6 +23,16 @@ async function poll(channel, tabId) {
   const previous = stored[key];
   let snapshot;
   try {
+    const health=await fetch(`${stored.bridgeUrl||defaultBridge}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
+    if(health?.marketMode==='byte'){
+      const response=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo consultar byte');
+      const byteMarkets=result.markets.filter(m=>m.notes?.channel===channel);
+      await saveSnapshot(channel,{channel,fetchedAt:new Date().toISOString(),sourceError:null,predictions:[],byteMarkets,mode:'byte'});
+      await chrome.storage.local.set({lastPoll:{channel,at:new Date().toISOString(),count:byteMarkets.length},lastError:null});
+      if(Number.isInteger(tabId))try{await chrome.action.setBadgeText({tabId,text:byteMarkets.filter(m=>m.bettable).length?String(byteMarkets.filter(m=>m.bettable).length):''});}catch{/* The tab may have closed. */}
+      return;
+    }
     const response = await fetch('https://gql.twitch.tv/gql', {
       method: 'POST', headers: { 'Client-ID': TWITCH_CLIENT_ID, 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: TWITCH_QUERY, variables: { channel } }), signal: AbortSignal.timeout(12000),
@@ -60,18 +70,20 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   return true;
 });
 chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
-  if (!sender.url || new URL(sender.url).hostname !== 'twitch-predict.localhost' || message.type !== 'PAIR') return;
+  if (!sender.url || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(new URL(sender.url).hostname) || message.type !== 'PAIR') return;
   let url; try { url = new URL(message.bridgeUrl); } catch { return; }
-  if (!['http:','https:'].includes(url.protocol) || url.hostname !== 'twitch-predict.localhost' || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
+  if (!['http:','https:'].includes(url.protocol) || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(url.hostname) || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
   chrome.storage.local.set({ bridgeUrl: url.origin, bridgeToken: message.token }).then(() => reply({ ok: true }));
   return true;
 });
 
 let authStart;
-function appUrl(value){const u=new URL(value||defaultBridge);if(!['http:','https:'].includes(u.protocol)||u.hostname!=='twitch-predict.localhost')throw new Error('URL de la app inválida');return u.origin;}
+function appUrl(value){const u=new URL(value||defaultBridge);if(!['http:','https:'].includes(u.protocol)||!['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname))throw new Error('URL de la app inválida');return u.origin;}
 async function startAuth(){
   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','pendingAuth']);
   let base=appUrl(stored.bridgeUrl);
+  const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
+  if(health?.marketMode==='byte'){await chrome.tabs.create({url:`${base}/byte`});return {ok:true};}
   const config=await fetch(`${base}/api/auth/config`,{signal:AbortSignal.timeout(8000)});if(!config.ok)throw new Error('No se pudo abrir el inicio de sesión');base=appUrl((await config.json()).origin);
   const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});

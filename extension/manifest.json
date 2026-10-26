@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "plot · Puntos",
+  "name": "plot \u00b7 Puntos",
   "version": "0.5.0",
-  "description": "Replica predicciones de Twitch y apostá con tus propios puntos internos.",
+  "description": "Replica predicciones de Twitch y apost\u00e1 con tus propios puntos internos.",
   "permissions": [
     "storage",
     "activeTab"
@@ -11,7 +11,9 @@
     "https://gql.twitch.tv/*",
     "http://twitch-predict.localhost/*",
     "http://127.0.0.1/*",
-    "https://twitch-predict.localhost/*"
+    "https://twitch-predict.localhost/*",
+    "http://twitch-predict-byte.localhost/*",
+    "https://twitch-predict-byte.localhost/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -19,7 +21,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "plot · Ver apuesta"
+    "default_title": "plot \u00b7 Ver apuesta"
   },
   "content_scripts": [
     {
@@ -35,7 +37,9 @@
   "externally_connectable": {
     "matches": [
       "http://twitch-predict.localhost/*",
-      "https://twitch-predict.localhost/*"
+      "https://twitch-predict.localhost/*",
+      "http://twitch-predict-byte.localhost/*",
+      "https://twitch-predict-byte.localhost/*"
     ]
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsi/mQfDq9jXT7RyjhJufu7VIJwe5X2fD6rWiM0nLLjTmkh8rbwrU5VCkWsc/bzaH0vNmEZZ07rLwjO+OV3z9js5qSL9v8ZwHRs9Bh9wVx+QKmZ1KB0warEXzbDU+xegBu4od0bnfOSXrlSbQbx2YEM2WWx6q0t11u+TXLF6sMrlF1EZ4MUnPRJjGpALShn69HIlHsGuUGB4UfqPtq+eOYqu1rkt/IItG2+j0IEPZ5GOlJpuq/NK/n7FMCbf5Hqj+Ima0qyo5lOIAcG8n4fEVOu3zfM9jNe8zvDxek6JEslxlUuLzMhu0PlAns0nVCaq6TOEyt2eBR65bhBxrK7PdsQIDAQAB"

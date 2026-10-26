@@ -38,7 +38,10 @@ test('MV3 detects a prediction, automatically creates one mirror, bets own point
     const dashboard=await context.newPage();await dashboard.goto(base);
     await phantomProvider(context);
     await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url(),{timeout:15000}).toBeTruthy();
-    const onboarding=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;await onboarding.reload();
+    // This install tab may have been created while exposeBinding was being registered.
+    // Continue the same real auth flow in a new document created after fixture installation.
+    const installedTab=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;
+    const onboarding=await context.newPage();await onboarding.goto(installedTab.url());await installedTab.close();
     await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL('**/#markets');
     const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${prediction.channel}`);
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:prediction.title})).toBeVisible();await expect(popup.locator('.points-pool')).toContainText('0 pts');await expect(popup.locator('#own-balance')).toHaveText('10.000');
