@@ -1,4 +1,4 @@
-import {popupScope,matchingCache,cacheAllowsBet,cachedBalance} from './popup-cache.js';
+import {popupScope,matchingCache,cacheAllowsBet,cachedBalance,reconcileBytePredictions} from './popup-cache.js';
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
 import './surfaces.js';
@@ -7,6 +7,7 @@ const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
 const defaultBridge='http://twitch-predict.localhost:1356';
 let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
+const polling=new Set();
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
 function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
@@ -72,11 +73,11 @@ function renderByte(){
  if(receipts.length){history.append(el('h2','Tus apuestas en devnet'));for(const r of receipts.slice(0,8)){const row=el('div',null,'history-row'),link=el('a','Ver transacción');link.href=`https://explorer.solana.com/tx/${r.signature}?cluster=devnet`;link.target='_blank';link.rel='noopener noreferrer';row.append(el('strong',r.title),el('span',`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(r.amount)/1e9)} SOL · ${{pending:'Pendiente',confirmed:'Confirmada',failed:'Falló',expired:'Expiró'}[r.status]??r.status}`),link);history.append(row);}}
  snapshot=state[`channel:${selectedChannel}`];$('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError??'';$('#connection').textContent='SOL devnet';
  const fresh=cacheAllowsBet(byteCache);$('#freshness').textContent=fresh?'Mercados actualizados · SOL devnet':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
- const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
+ const visible=reconcileBytePredictions(byteMarkets,snapshot?.predictions??[],selectedChannel);
  disposePointsViews();disposeByteViews();
- const cards=visible.map(m=>byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation));
- for(const item of snapshot?.predictions??[])if(!byteMarkets.some(m=>m.id===item.market?.byteMarketId)){
-  const card=el('article',null,'prediction');card.append(el('span',`@${selectedChannel} · Twitch`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
+ const cards=visible.markets.map(m=>byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation));
+ for(const item of visible.predictions){
+  const card=el('article',null,'prediction');card.dataset.predictionId=item.prediction.id;card.append(el('span',`@${selectedChannel} · Twitch · Ronda ${time(item.prediction.createdAt)}`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
  }
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Elegí una opción para firmar con Phantom.';
  $('#dashboard').href=base;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Conectá Phantom para apostar y seguir tus transacciones desde la extensión.';$('#streamer-console').hidden=true;
@@ -126,7 +127,15 @@ async function load(force=false){
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){const force=forceAgain;again=false;forceAgain=false;void load(force);}}
 }
-async function requestPoll(force=false){if(!selectedChannel||selectedChannel==='demo_streamer'){await load(force);return;}$('#refresh').disabled=true;try{await chrome.runtime.sendMessage({type:'POLL_CHANNEL',channel:selectedChannel});await load(force);}catch(e){$('#source-error').hidden=false;$('#source-error').textContent=e.message;}finally{$('#refresh').disabled=false;}}
+async function requestPoll(force=false){
+ const channel=selectedChannel;
+ if(!channel||channel==='demo_streamer'){await load(force);return;}
+ if(polling.has(channel)){if(force)await load(true);return;}
+ polling.add(channel);if(force)$('#refresh').disabled=true;
+ try{const result=await chrome.runtime.sendMessage({type:'POLL_CHANNEL',channel});if(result?.error)throw new Error(result.error);}
+ catch(e){$('#source-error').hidden=false;$('#source-error').textContent=e.message;}
+ finally{polling.delete(channel);if(force)$('#refresh').disabled=false;await load(force);}
+}
 $('#connect-phantom').onclick=async()=>{const button=$('#connect-phantom');button.disabled=true;$('#auth-message').textContent='Abriendo el acceso con Phantom…';try{const result=await chrome.runtime.sendMessage({type:'CONNECT_PHANTOM'});if(result?.error)throw new Error(result.error);}catch(e){$('#auth-message').textContent=e.message;}finally{button.disabled=false;}};
 $('#channel').onchange=async()=>{selectedChannel=$('#channel').value;await load();void requestPoll();};$('#refresh').onclick=()=>void requestPoll(true);
 chrome.storage.onChanged.addListener((changes,area)=>{
@@ -135,4 +144,4 @@ chrome.storage.onChanged.addListener((changes,area)=>{
  if(Object.keys(changes).some(key=>key!=='popupCache'))void load();
 });
 try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
-setInterval(tick,1000);await load();void requestPoll();setInterval(()=>void requestPoll(),5000);
+setInterval(tick,1000);await load();void requestPoll();setInterval(()=>{void load();void requestPoll();},5000);
