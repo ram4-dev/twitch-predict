@@ -70,40 +70,59 @@ test('partner access errors are visible and mobile layout remains usable',async(
   await page.getByRole('button',{name:'Crear mercado en devnet',exact:true}).click();await expect(page.getByRole('alert')).toContainText('partner');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'test-results/byte-mobile-partner-error.png',fullPage:true});
 });
-test('MV3 popup bets directly, authenticates once and retains receipts across popup reload',async({page})=>{
+test('MV3 popup signs through an existing Twitch tab and retains receipts and cached balance',async({page})=>{
  const market=await createMarket(page,'¿Gana el mercado de la extensión?');
  const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
  const profile=await mkdtemp(`${tmpdir()}/byte-extension-`),extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
  for(const file of ['background.js','popup.js']){const p=resolve(extension,file);await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ let releaseSignature:(()=>void)|undefined;
  try{
   const wallet=await phantomProvider(context);
-  await context.exposeBinding('__byteSign',(_source,message:number[])=>wallet.sign(message));
+  let signatureGate=Promise.resolve();
+  await context.exposeBinding('__byteSign',async(_source,message:number[])=>{await signatureGate;return wallet.sign(message);});
   await context.addInitScript(()=>{
-   const w=window as unknown as {phantom:{solana:{signTransaction(tx:Transaction):Promise<Transaction>}};__byteSign(message:number[]):Promise<number[]>};
-   if(w.phantom)w.phantom.solana.signTransaction=async tx=>{tx.addSignature(tx.feePayer!,new Uint8Array(await w.__byteSign(Array.from(tx.serializeMessage()))) as never);return tx;};
+   const w=window as unknown as {phantom:{solana:{signTransaction(tx:Transaction):Promise<Transaction>}};__byteSign(message:number[]):Promise<number[]>;__rejectPlot?:boolean;__tamperPlot?:boolean;__plotSignRequested?:boolean};
+   if(w.phantom)w.phantom.solana.signTransaction=async tx=>{w.__plotSignRequested=true;if(w.__rejectPlot)throw Object.assign(new Error('Rejected'),{code:4001});if(w.__tamperPlot)tx.instructions[0].data[8]=0;tx.addSignature(tx.feePayer!,new Uint8Array(await w.__byteSign(Array.from(tx.serializeMessage()))) as never);return tx;};
   });
   await context.route('**/api/health',route=>route.fulfill({json:{ok:true,marketMode:'byte',network:'devnet'}}));
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const extensionId=new URL(worker.url()).host;
-  // Connection begins in the popup; the web bridge connects and signs in automatically.
-  // Wait for the install onboarding to finish opening before starting another flow.
-  // Installing the extension can also start this connection automatically.
-  const popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  const connect=popup.getByRole('button',{name:'Conectar Phantom',exact:true});
-  const walletLabel=`${wallet.address.slice(0,5)}…${wallet.address.slice(-5)}`;
-  await expect.poll(async()=>await popup.locator('#account-name').textContent()===walletLabel||await connect.isVisible()).toBe(true);
-  if(await connect.isVisible())await connect.click();
-  await expect(popup.locator('#account-name')).toHaveText(walletLabel);
-  const dashboard=await context.newPage();await dashboard.goto(`${base}/byte`);
-  await expect(dashboard.getByRole('button',{name:'Reconectar wallet',exact:true})).toBeVisible();
+  // Authenticate before the betting test. Reuse the original browser tab so
+  // install-time onboarding cannot race creation of a tab in a closing window.
+  const dashboard=context.pages().find(p=>p.url()==='about:blank')??await context.newPage();
+  await dashboard.goto(`${base}/byte`);
+  await dashboard.getByRole('button',{name:'Conectar Phantom',exact:true}).click();
+  await expect(dashboard.getByText('Wallet conectada.',{exact:false})).toBeVisible();
+  await dashboard.getByRole('button',{name:'Vincular extensión',exact:true}).click();
+  await expect(dashboard.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+  for(const auth of context.pages().filter(p=>p.url().includes('/onboarding')))await auth.close();
+  await dashboard.bringToFront();
   await dashboard.reload();await expect(dashboard.getByRole('button',{name:'Reconectar wallet',exact:true})).toBeVisible();
-  const card=popup.locator(`[data-market-id="${market.id}"]`);await expect(card).toBeVisible();await expect(popup.locator('#wallet')).toBeVisible();
+  let popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const walletLabel=`${wallet.address.slice(0,5)}…${wallet.address.slice(-5)}`;
+  await expect(popup.locator('#account-name')).toHaveText(walletLabel);
+  let card=popup.locator(`[data-market-id="${market.id}"]`);await expect(card).toBeVisible();await expect(popup.locator('#wallet')).toBeVisible();
   await card.getByLabel('Importe en SOL devnet').fill('0.025');
   await changeFixture(s=>{s.pending=true;});
-  const [signer]=await Promise.all([context.waitForEvent('page'),card.getByRole('button',{name:'Apostar a No',exact:true}).click()]);
-  await signer.waitForURL('**/extension-wallet.html#**');
+  await context.route('https://www.twitch.tv/fixture_streamer',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch fixture</title>'}));
+  const twitch=await context.newPage();await twitch.goto('https://www.twitch.tv/fixture_streamer');
+  await twitch.evaluate(()=>{(window as unknown as {__rejectPlot:boolean}).__rejectPlot=true;});
+  await card.getByRole('button',{name:'Apostar a No',exact:true}).click();
+  await expect(card.getByRole('alert')).toContainText('Cancelaste');expect((await readFixture()).broadcasts).toBe(0);
+  await twitch.evaluate(()=>{const w=window as unknown as {__rejectPlot:boolean;__tamperPlot:boolean};w.__rejectPlot=false;w.__tamperPlot=true;});
+  await card.getByRole('button',{name:'Apostar a No',exact:true}).click();
+  await expect(card.getByRole('alert')).toContainText('no coincide');expect((await readFixture()).broadcasts).toBe(0);
+  await twitch.evaluate(()=>{const w=window as unknown as {__tamperPlot:boolean;__plotSignRequested:boolean};w.__tamperPlot=false;w.__plotSignRequested=false;});
+  signatureGate=new Promise<void>(resolve=>{releaseSignature=resolve;});
+  const pagesBefore=context.pages().length;
+  const windowsBefore=await worker.evaluate(async()=> (await (globalThis as unknown as {chrome:{windows:{getAll():Promise<unknown[]>}}}).chrome.windows.getAll()).length);
+  await card.getByRole('button',{name:'Apostar a No',exact:true}).click();
+  await expect.poll(()=>twitch.evaluate(()=>(window as unknown as {__plotSignRequested:boolean}).__plotSignRequested)).toBe(true);
+  await popup.close();releaseSignature?.();
   await expect.poll(async()=>(await readFixture()).broadcasts).toBe(1);
-  await signer.close();await popup.reload();
+  expect(context.pages().length).toBe(pagesBefore-1);
+  expect(await worker.evaluate(async()=> (await (globalThis as unknown as {chrome:{windows:{getAll():Promise<unknown[]>}}}).chrome.windows.getAll()).length)).toBe(windowsBefore);
+  popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);card=popup.locator(`[data-market-id="${market.id}"]`);
   await expect(card.getByText('Transacción enviada.',{exact:false})).toBeVisible();
   await expect(card.getByRole('button',{name:'Apostar a No',exact:true})).toBeDisabled();
   await changeFixture(s=>{s.pending=false;});await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();
@@ -148,7 +167,7 @@ test('MV3 popup bets directly, authenticates once and retains receipts across po
   await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({pointsToken:'different-session'});});
   await cached.reload();await expect(cached.locator('#own-balance')).not.toHaveText('3');await expect(cached.getByRole('heading',{name:market.title,exact:true})).toHaveCount(0);
 
- }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+ }finally{releaseSignature?.();await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
 test('a non-devnet RPC is rejected before any wallet transaction is broadcast',async({page})=>{

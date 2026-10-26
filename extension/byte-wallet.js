@@ -1,33 +1,59 @@
-// The popup owns the wager. This short-lived web window only hosts Phantom's
-// injected provider; no session token is placed in its URL or sent to the page.
-let starting=false;
+import {performExtensionBet} from './byte-transaction.js';
+let starting=false,betting;
 const terminal=new Set(['confirmed','failed','expired','cancelled']);
 async function saveOperation(operation){
  const {byteReceipts=[]}=await chrome.storage.local.get('byteReceipts');
  const receipts=operation.receipt?[operation.receipt,...byteReceipts.filter(r=>r.signature!==operation.receipt.signature)].slice(0,100):byteReceipts;
  await chrome.storage.local.set({byteOperation:operation,byteReceipts:receipts});
 }
+function eligibleTab(tab,base){
+ try{const url=new URL(tab.url);return url.origin===base&&['/','/byte'].includes(url.pathname)||url.origin==='https://www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname)&&!/^\/(directory|downloads|settings|videos|inventory|wallet|subscriptions|search)(\/|$)/i.test(url.pathname);}catch{return false;}
+}
+async function signerTab(base){
+ const active=await chrome.tabs.query({active:true,lastFocusedWindow:true});
+ if(active[0]&&eligibleTab(active[0],base))return active[0];
+ const tabs=await chrome.tabs.query({url:['https://www.twitch.tv/*',`${base}/*`]});
+ return tabs.find(tab=>tab.url?.startsWith('https://www.twitch.tv/')&&eligibleTab(tab,base))??tabs.find(tab=>eligibleTab(tab,base));
+}
+async function signInTab(tabId,transaction,wallet){
+ const injected=await chrome.scripting.executeScript({target:{tabId,frameIds:[0]},world:'MAIN',files:['page-wallet.js']});
+ const documentId=injected[0]?.documentId;if(!documentId)throw new Error('La pestaña cambió. Volvé a intentar desde Twitch.');
+ const [response]=await chrome.scripting.executeScript({target:{tabId,documentIds:[documentId]},world:'MAIN',func:async input=>{
+  const sign=globalThis.__plotPhantomSign;if(typeof sign!=='function')return {error:'No se pudo acceder a Phantom en esta pestaña.'};return sign(input);
+ },args:[{transaction,wallet}]});
+ if(!response?.result)throw new Error('Phantom no respondió desde la pestaña.');return response.result;
+}
+function runBet(op,receipts){
+ const keeper=setInterval(()=>void chrome.runtime.getPlatformInfo(),20000);
+ let timeout;
+ const task=performExtensionBet(op,receipts,(transaction,wallet)=>signInTab(op.tabId,transaction,wallet),async receipt=>{
+  const {byteOperation:current}=await chrome.storage.local.get('byteOperation');
+  if(current?.id!==op.id||(terminal.has(current.status)&&!(current.receipt?.signature===receipt.signature&&current.status===receipt.status)))throw new Error('Esta solicitud de apuesta ya terminó.');
+  await saveOperation({...current,status:receipt.status,receipt});
+ });
+ return Promise.race([task,new Promise((_resolve,reject)=>{timeout=setTimeout(()=>reject(new Error('La solicitud de Phantom expiró. Volvé a intentar.')),150000);})]).catch(async error=>{
+  const {byteOperation:current}=await chrome.storage.local.get('byteOperation');
+  if(current?.id===op.id&&!terminal.has(current.status))await saveOperation({...current,status:current.receipt?'pending':'failed',error:error.message});
+ }).finally(()=>{clearInterval(keeper);clearTimeout(timeout);});
+}
 export function installByteWallet(appUrl){
  chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(message.type!=='BYTE_BET')return;
   if(sender.id!==chrome.runtime.id||sender.url!==chrome.runtime.getURL('popup.html'))return;
-  if(starting){reply({error:'Ya se está abriendo Phantom.'});return;}
+  if(starting||betting){reply({error:'Ya hay una solicitud pendiente en Phantom.'});return;}
   starting=true;
   void (async()=>{
-   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','byteOperation']);
+   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','byteOperation','byteReceipts']);
    const base=appUrl(stored.bridgeUrl),previous=stored.byteOperation;
    if(previous&&!terminal.has(previous.status)&&(previous.receipt||Date.now()-previous.createdAt<120000))throw new Error('Hay una apuesta pendiente. Completá Phantom o revisá la transacción guardada.');
+   const tab=await signerTab(base);if(!tab)throw new Error('Abrí un canal de Twitch o el panel de Plot para usar Phantom. No se abrirán ventanas adicionales.');
    const me=await fetch(`${base}/api/points/me`,{headers:{Authorization:`Bearer ${stored.pointsToken||''}`},signal:AbortSignal.timeout(10000)});
    const account=await me.json();if(!me.ok||!account.wallet)throw new Error('Conectá Phantom desde la extensión antes de apostar.');
    if(!/^pm_[a-zA-Z0-9_-]{1,100}$/.test(message.marketId)||!Number.isInteger(message.option)||message.option<0||message.option>5||typeof message.amount!=='string'||!/^(0|[1-9]\d*)(\.\d{1,9})?$/.test(message.amount))throw new Error('Apuesta inválida.');
-   const operation={id:crypto.randomUUID(),base,marketId:message.marketId,option:message.option,amount:message.amount,wallet:account.wallet,createdAt:Date.now(),status:'signing'};
+   const operation={id:crypto.randomUUID(),base,marketId:message.marketId,option:message.option,amount:message.amount,wallet:account.wallet,tabId:tab.id,createdAt:Date.now(),status:'signing'};
    await saveOperation(operation);
-   try{
-    const window=await chrome.windows.create({url:`${base}/extension-wallet.html#request=${operation.id}&extension=${chrome.runtime.id}`,type:'popup',width:440,height:560});
-    // The page retries its handshake until the tab identity is durably recorded.
-    await saveOperation({...operation,windowId:window.id,tabId:window.tabs[0].id});
-    reply({ok:true});
-   }catch(e){await saveOperation({...operation,status:'cancelled',error:e.message});throw e;}
+   betting=runBet(operation,stored.byteReceipts??[]).finally(()=>{betting=undefined;});
+   reply({ok:true});
   })().catch(e=>reply({error:e.message})).finally(()=>{starting=false;});return true;
  });
  chrome.runtime.onMessage.addListener((message,sender,reply)=>{
@@ -35,8 +61,7 @@ export function installByteWallet(appUrl){
   void (async()=>{
    const {byteOperation:op}=await chrome.storage.local.get('byteOperation');
    if(op?.status==='signing'){
-    if(op.windowId)try{await chrome.windows.get(op.windowId);}catch{await saveOperation({...op,status:'cancelled',error:'La ventana de firma se cerró. Podés volver a apostar.'});}
-    else if(Date.now()-op.createdAt>30000)await saveOperation({...op,status:'cancelled',error:'No se pudo abrir Phantom. Volvé a intentar.'});
+    if(!betting&&!starting)await saveOperation({...op,status:'cancelled',error:'La solicitud de firma se interrumpió. Podés volver a apostar.'});
     reply({ok:true});return;
    }
    if(!op||op.status!=='pending'||!op.receipt){reply({ok:true});return;}
@@ -52,25 +77,5 @@ export function installByteWallet(appUrl){
    reply({ok:true});
   })().catch(e=>reply({error:e.message}));return true;
  });
- chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
-  if(!['BYTE_SIGNER_READY','BYTE_SIGNER_RECEIPT','BYTE_SIGNER_RESULT'].includes(message.type))return;
-  void (async()=>{
-   const {byteOperation:op}=await chrome.storage.local.get('byteOperation');
-   if(!op||op.id!==message.id||!sender.url||new URL(sender.url).origin!==op.base||new URL(sender.url).pathname!=='/extension-wallet.html'||sender.tab?.id!==op.tabId)throw new Error('La solicitud no corresponde a esta ventana de firma.');
-   if(message.type==='BYTE_SIGNER_READY'){if(op.status!=='signing')throw new Error('Esta solicitud ya terminó.');reply({ok:true,operation:op});return;}
-   const receipt=message.receipt;
-   if(receipt&&(receipt.wallet!==op.wallet||receipt.marketId!==op.marketId||receipt.option!==op.option||typeof receipt.signature!=='string'||!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(receipt.signature)||!Number.isSafeInteger(receipt.lastValidBlockHeight)||BigInt(receipt.amount)!==BigInt(op.amount.split('.')[0])*1000000000n+BigInt((op.amount.split('.')[1]||'').padEnd(9,'0'))))throw new Error('El recibo no coincide con la apuesta.');
-   if(message.type==='BYTE_SIGNER_RECEIPT'){
-    if(op.status!=='signing'||!receipt||receipt.status!=='pending')throw new Error('Recibo fuera de secuencia.');
-    await saveOperation({...op,status:'pending',receipt});reply({ok:true});return;
-   }
-   if(receipt&&(!op.receipt||!['pending','confirmed','failed','expired'].includes(receipt.status)))throw new Error('El recibo no fue guardado antes del envío.');
-   if(!receipt&&op.receipt){reply({ok:true});return;}
-   if(op.receipt&&receipt?.signature!==op.receipt.signature)throw new Error('La firma cambió.');
-   if(terminal.has(op.status)){reply({ok:true});return;}
-   await saveOperation({...op,status:receipt?.status??'failed',receipt,error:typeof message.error==='string'?message.error.slice(0,500):undefined});
-   reply({ok:true});
-  })().catch(e=>reply({error:e.message}));return true;
- });
- chrome.windows.onRemoved.addListener(windowId=>{void (async()=>{const {byteOperation:op}=await chrome.storage.local.get('byteOperation');if(op?.windowId===windowId&&op.status==='signing')await saveOperation({...op,status:'cancelled',error:'Cerraste la ventana antes de firmar.'});})();});
+ chrome.tabs.onRemoved.addListener(tabId=>{void (async()=>{const {byteOperation:op}=await chrome.storage.local.get('byteOperation');if(op?.tabId===tabId&&op.status==='signing')await saveOperation({...op,status:'cancelled',error:'Cerraste la pestaña antes de firmar.'});})();});
 }
