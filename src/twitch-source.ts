@@ -19,6 +19,7 @@ export class TwitchSource {
     await this.points.watch(name);
     await this.sync();
   }
+  async active(channel:string):Promise<Prediction[]>{const data=await this.channel(channel);return data.channel.activePredictionEvents.map((raw:unknown)=>parseTwitchPrediction(raw,channel));}
   private requests=new Map<string,{at:number;task:Promise<Prediction>}>();
   private syncing?:Promise<void>;
   lastError:string|null=null;

@@ -19,16 +19,21 @@ async function mirrorPrediction(prediction, previous, config) {
 }
 async function poll(channel, tabId) {
   const key = channelKey(channel);
-  const stored = await chrome.storage.local.get([key, 'bridgeUrl', 'bridgeToken']);
+  const stored = await chrome.storage.local.get([key, 'bridgeUrl', 'bridgeToken','pointsToken']);
   const previous = stored[key];
   let snapshot;
   try {
     const health=await fetch(`${stored.bridgeUrl||defaultBridge}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
     if(health?.marketMode==='byte'){
+      let observed;
+      if(stored.bridgeToken){
+        const watch=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/twitch/watch`,{method:'POST',headers:{'Content-Type':'application/json','x-operator-token':stored.bridgeToken,...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({channel}),signal:AbortSignal.timeout(40000)});
+        observed=await watch.json();if(!watch.ok)throw new Error(observed.error||'No se pudo replicar la predicción de Twitch');
+      }
       const response=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});
       const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo consultar byte');
       const byteMarkets=result.markets.filter(m=>m.notes?.channel===channel);
-      await saveSnapshot(channel,{channel,fetchedAt:new Date().toISOString(),sourceError:null,predictions:[],byteMarkets,mode:'byte'});
+      await saveSnapshot(channel,{channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken?null:'Vinculá la extensión al panel para replicar las predicciones.',predictions:observed?.predictions??[],byteMarkets,mode:'byte'});
       await chrome.storage.local.set({lastPoll:{channel,at:new Date().toISOString(),count:byteMarkets.length},lastError:null});
       if(Number.isInteger(tabId))try{await chrome.action.setBadgeText({tabId,text:byteMarkets.filter(m=>m.bettable).length?String(byteMarkets.filter(m=>m.bettable).length):''});}catch{/* The tab may have closed. */}
       return;

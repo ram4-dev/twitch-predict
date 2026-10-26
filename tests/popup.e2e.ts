@@ -1,6 +1,6 @@
 import { test, expect, chromium } from '@playwright/test';
 import { resolve } from 'node:path';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, cp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 test('popup shows Twitch data without pairing and isolates snapshots from concurrent channels',async()=>{
   const profile=await mkdtemp(`${tmpdir()}/mirror-popup-`);const extension=resolve('extension');
@@ -39,12 +39,16 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
 });
 
 test('native action popup is 700px wide without resizing the browser window',async()=>{
-  const profile=await mkdtemp(`${tmpdir()}/mirror-native-popup-`);const extension=resolve('extension');
+  const profile=await mkdtemp(`${tmpdir()}/mirror-native-popup-`);const extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
+  const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
+  for(const name of ['background.js','popup.js']){const path=resolve(extension,name);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,viewport:null,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   try {
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
+    // Finish the install-triggered tab before opening the native popup, or it steals focus.
+    await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url()).toBeTruthy();
     // This tab only inspects the separate native action popup through the extension API.
-    const inspector=context.pages()[0];await inspector.goto(`chrome-extension://${id}/popup.html`);
+    const inspector=await context.newPage();await inspector.goto(`chrome-extension://${id}/popup.html`);
     const browserSize=await inspector.evaluate(()=>({width:outerWidth,height:outerHeight}));
     const windowId=await inspector.evaluate(async()=> (await (globalThis as unknown as {chrome:{windows:{getCurrent():Promise<{id:number}>}}}).chrome.windows.getCurrent()).id);
     await worker.evaluate(async windowId=>{const api=(globalThis as unknown as {chrome:{windows:{update(id:number,options:{focused:boolean}):Promise<unknown>};action:{openPopup(options:{windowId:number}):Promise<void>}}}).chrome;await api.windows.update(windowId,{focused:true});await api.action.openPopup({windowId});},windowId);

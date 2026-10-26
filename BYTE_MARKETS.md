@@ -36,11 +36,11 @@ El servidor escucha en `127.0.0.1` y permite solamente los hosts locales conocid
 4. **Resultado:** al cerrar la ventana, el operador elige la opción y registra evidencia. La anulación exige un motivo y puede hacerse antes del cierre. Ambas acciones requieren confirmación explícita.
 5. **Pago:** byte resuelve y distribuye. La interfaz distingue resultado registrado de `chain.settled=true`. No realiza reclamos manuales ni calcula o promete pagos fijos.
 
-El pozo es parimutuel con peso temporal, no una compra de participaciones a precio fijo. Los porcentajes mostrados son proporciones de los pozos. Las comisiones documentadas se aplican a la ganancia: 2% de protocolo y 0,5% de creador cuando corresponde. La resolución es manual; no se interpreta automáticamente el video ni se usa una predicción de puntos de Twitch como prueba del resultado.
+El pozo es parimutuel con peso temporal, no una compra de participaciones a precio fijo. Los porcentajes mostrados son proporciones de los pozos. Las comisiones documentadas se aplican a la ganancia: 2% de protocolo y 0,5% de creador cuando corresponde. Los mercados manuales se resuelven con evidencia. Las réplicas verifican el resultado por el ID original de la predicción de Twitch; no interpretan el video.
 
 ## Extensión
 
-Cargar la carpeta `extension` de este checkout como extensión descomprimida en Chrome. En `/byte`, pulsar **Vincular extensión**. El popup consulta el modo del backend, muestra los mercados byte del canal y abre la web filtrada por canal para firmar con Phantom. En modo byte el background no crea copias offchain de las predicciones de Twitch. Las operaciones con fondos se firman en la página de la aplicación; no en el popup.
+Cargar la carpeta `extension` de este checkout como extensión descomprimida en Chrome. En `/byte`, pulsar **Vincular extensión**. El popup consulta el modo del backend, muestra los mercados byte del canal y abre la web filtrada por canal para firmar con Phantom. En modo byte el background registra el canal con el backend para replicar predicciones elegibles en Byte, sin crear una copia offchain paralela. Las operaciones con fondos se firman en la página de la aplicación; no en el popup.
 
 ## Recuperación y persistencia
 
@@ -63,3 +63,5 @@ Las pruebas unitarias e integración verifican codificación de instrucciones y 
 La prueba contra byte requiere una key habilitada y fondos devnet en las wallets. Con la key vacía la creación permanece deshabilitada. Los E2E legacy de Doppler están excluidos del modo offchain/byte y no constituyen validación de este contrato.
 
 La UI compartida del panel y la extensión, el flujo de selección y la validación están en [docs/byte-shared-ui.md](docs/byte-shared-ui.md).
+
+La réplica de Twitch, las ventanas admitidas y las pruebas están en [docs/byte-twitch-mirror.md](docs/byte-twitch-mirror.md).

@@ -1,6 +1,7 @@
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {z} from 'zod';
+import {closesAt,type Prediction} from './prediction.js';
 import {byteMarketSchema,byteConfigSchema,createByteMarketSchema,type CreateByteMarket,type DisplayByteMarket,type MarketNotes} from './byte-model.js';
 
 export class ByteError extends Error {constructor(readonly status:number,message:string){super(message);}}
@@ -42,7 +43,8 @@ export class ByteService {
     if(!parsed.success)throw new ByteError(504,'byte devolvió un mercado no verificable. Revisá el estado antes de repetir.');
     const market=parsed.data.market;
     if(market.pools.length!==market.options.length||(market.winner!==null&&market.winner>=market.options.length))throw new ByteError(504,'Las opciones de byte no coinciden con los pozos.');
-    return {...market,notes:this.state.notes[market.id]};
+    const notes=this.state.notes[market.id],source=notes?.twitch;
+    return {...market,bettable:market.bettable&&(!source||(source.status==='ACTIVE'&&Date.now()<source.closesAt&&Date.now()-source.checkedAt<30000)),notes};
   }
   async list():Promise<DisplayByteMarket[]> {
     const pages=await Promise.all(['open','closed'].map(status=>this.request(`/api/partner/markets?status=${status}`)));
@@ -76,9 +78,11 @@ export class ByteService {
       }
       this.state.notes[market.id]={channel:input.channel,rules:input.rules,createdAt:new Date().toISOString()};
       this.state.operations[input.requestId]={input,state:'complete',marketId:market.id};await this.save();
-      return {...market,notes:this.state.notes[market.id]};
+      const notes=this.state.notes[market.id],source=notes?.twitch;
+    return {...market,bettable:market.bettable&&(!source||(source.status==='ACTIVE'&&Date.now()<source.closesAt&&Date.now()-source.checkedAt<30000)),notes};
     });
   }
+  async marketForRequest(requestId:string){const op=this.state.operations[requestId];return op?.state==='complete'?this.get(op.marketId!):undefined;}
   operations(){return Object.values(this.state.operations).filter(op=>op.state==='pending').map(op=>({...op.input}));}
   async reconcile(requestId:string,id:string){return this.serial(async()=>{
     const op=this.state.operations[requestId];if(!op||op.state!=='pending')throw new ByteError(409,'La operación no está pendiente de conciliación.');
@@ -86,9 +90,14 @@ export class ByteService {
     if(market.title!==op.input.title||market.currency!==op.input.currency||JSON.stringify(market.options)!==JSON.stringify(op.input.options)||this.state.notes[id])throw new ByteError(409,'El mercado no coincide con la solicitud pendiente o ya está asociado.');
     this.state.notes[id]={channel:op.input.channel,rules:op.input.rules,createdAt:new Date().toISOString()};op.state='complete';op.marketId=id;await this.save();return {...market,notes:this.state.notes[id]};
   });}
-  async settle(id:string,winner:number|null,evidence:string){return this.serial(async()=>{
+  async updateTwitch(id:string,p:Prediction){return this.serial(async()=>{
+    const notes=this.state.notes[id];if(!notes)throw new ByteError(409,'El mercado no tiene reglas locales');
+    notes.twitch={predictionId:p.id,closesAt:closesAt(p),checkedAt:Date.now(),status:p.status};await this.save();
+  });}
+  async settle(id:string,winner:number|null,evidence:string,oracle:'operator'|'twitch'='operator'){return this.serial(async()=>{
     const market=await this.get(id);
     const notes=this.state.notes[id];if(!notes)throw new ByteError(409,'Este mercado no tiene reglas registradas en esta aplicación.');
+    if(notes.twitch&&oracle!=='twitch')throw new ByteError(403,'Este mercado se resuelve con el resultado verificado de Twitch.');
     if(market.status!=='open'){
       if((winner===null&&market.status==='invalid')||(market.status==='resolved'&&market.winner===winner))return market;
       throw new ByteError(409,'El mercado ya tiene otro resultado.');

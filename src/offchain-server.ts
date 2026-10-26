@@ -13,6 +13,7 @@ import { Points } from './points.js';
 import { TwitchSource } from './twitch-source.js';
 import { demoPrediction } from './mirror.js';
 import { predictionSchema } from './prediction.js';
+import {ByteTwitchMirror} from './byte-twitch.js';
 import {ByteService} from './byte.js';
 import {byteRouter} from './byte-router.js';
 const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
@@ -22,6 +23,7 @@ try{await writeFile(`${directory}/bridge-token`,randomBytes(32).toString('hex'),
 const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
 const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
 const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined);await byte.load();
+const byteMirror=new ByteTwitchMirror(directory,byte,source);await byteMirror.load();
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
   if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
@@ -107,7 +109,7 @@ const claimInput=z.object({key:z.string().min(1).max(300),requestId:z.string().u
 app.post('/api/points/claim',route(async(req,res)=>{if(!points.me(bearer(req)).wallet)throw new Error('Conectá Phantom para cobrar');const i=claimInput.parse(req.body);res.json(await points.claim(bearer(req),i.key,i.requestId));}));
 const extensionManifest=JSON.parse(await readFile(`${root}/extension/manifest.json`,'utf8'));
 const extensionId=[...createHash('sha256').update(Buffer.from(extensionManifest.key,'base64')).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
-app.use('/api/byte',byteRouter(byte,points,token,process.env,extensionId));
+app.use('/api/byte',byteRouter(byte,points,token,process.env,extensionId,byteMirror));
 app.use('/api',(req,res,next)=>{const given=Buffer.from(bearer(req));const expected=Buffer.from(token);if(given.length!==expected.length||!timingSafeEqual(given,expected)){res.status(401).json({error:'Bridge pairing required'});return;}next();});
 app.post('/api/operator/streamers',route(async(req,res)=>{
   if(req.get('sec-fetch-site')!=='same-origin'||req.get('origin')!==appOrigin(req))throw new Error('La asignación se hace desde el panel del operador local');
@@ -142,6 +144,7 @@ const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{
   await writeFile(`${directory}/runtime-port`,String(port),{mode:0o600});
   if(process.env.AUTH_PROXY_STATE_DIR)try{await promisify(execFile)('portless',['alias',process.env.AUTH_PROXY_NAME??'twitch-predict',String(port),'--force'],{env:{...process.env,PORTLESS_STATE_DIR:process.env.AUTH_PROXY_STATE_DIR,PORTLESS_PORT:'1357',PORTLESS_HTTPS:'1'}});}catch(e){console.error('Could not refresh auth HTTPS alias:',(e as Error).message);}
 });
-const timer=setInterval(()=>{void source.sync().catch(e=>console.error('Twitch sync failed:',(e as Error).message));},5000);timer.unref();
-void source.sync().catch(e=>console.error('Initial Twitch sync failed:',(e as Error).message));
+const sync=async()=>{await source.sync();await byteMirror.sync();};
+const timer=setInterval(()=>{void sync().catch(e=>console.error('Twitch sync failed:',(e as Error).message));},5000);timer.unref();
+void sync().catch(e=>console.error('Initial Twitch sync failed:',(e as Error).message));
 process.on('SIGTERM',()=>{clearInterval(timer);server.close();});

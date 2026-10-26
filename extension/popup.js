@@ -69,10 +69,14 @@ async function load(){
         if(Number.isSafeInteger(balance?.result?.value))$('#own-balance').textContent=new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(balance.result.value/1e9);
       }
 
-      $('#source-error').hidden=true;$('#connection').textContent='SOL devnet';$('#freshness').textContent='Mercados de byte · sin dinero real';
+      snapshot=state[`channel:${selectedChannel}`];$('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError??'';$('#connection').textContent='SOL devnet';$('#freshness').textContent='Mercados de byte · sin dinero real';
       const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
       disposePointsViews();disposeByteViews();
       const cards=visible.map(m=>byteMarketView(m,config,base));
+      for(const item of snapshot?.predictions??[])if(!byteMarkets.some(m=>m.id===item.market?.byteMarketId)){
+        const card=el('article',null,'prediction');card.append(el('span',`@${selectedChannel} · Twitch`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
+      }
+
       $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Las apuestas se firman en la web con Phantom.';
       $('#dashboard').href=base;$('#user-console').href=`${base}/byte?view=history`;$('#streamer-console').hidden=true;
       return;

@@ -1,0 +1,40 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {ByteService} from '../src/byte.js';
+import {ByteTwitchMirror} from '../src/byte-twitch.js';
+import {BYTE_PROGRAM,type ByteMarket} from '../src/byte-model.js';
+import type {Prediction} from '../src/prediction.js';
+async function fixture(run:(f:{mirror:ByteTwitchMirror;byte:ByteService;set(p:Prediction):void;prediction:Prediction;market():ByteMarket;counts:{create:number;resolve:number;invalidate:number};restart():Promise<ByteTwitchMirror>})=>Promise<void>,short=false,ambiguous=false){
+ const dir=await mkdtemp(`${tmpdir()}/byte-mirror-`);let prediction:Prediction={id:'twitch-id',channel:'eggsterr',title:'EVEN OR ODD KILLS',status:'ACTIVE',createdAt:new Date().toISOString(),predictionWindowSeconds:short?60:600,outcomes:[{id:'even',title:'EVENNNNZ :D'},{id:'odd',title:'ODDSTERR :O'}]};
+ let market:ByteMarket;const counts={create:0,resolve:0,invalidate:0};
+ const transport:typeof fetch=async(url,options)=>{
+  if(String(url).endsWith('/api/bets/open'))return Response.json({enabled:true,sol:{cluster:'devnet',programId:BYTE_PROGRAM,maxBet:100000000,maxPool:2000000000}});
+  if(options?.method==='POST'){
+   const body=JSON.parse(String(options.body));
+   if(String(url).endsWith('/resolve')){counts.resolve++;market.status='resolved';market.winner=body.winner;market.bettable=false;}
+   else if(String(url).endsWith('/invalidate')){counts.invalidate++;market.status='invalid';market.bettable=false;}
+   else{counts.create++;if(ambiguous)throw new Error('timeout');market={id:'pm_mirror',title:body.title,options:body.options,currency:'sol',status:'open',bettable:true,resolvable:false,openMs:Date.now(),closeMs:Date.now()+body.windowSecs*1000,chain:{market:'11111111111111111111111111111111',settled:false},pools:[0,0],total:0,bettors:0,winner:null,invalidReason:null};}
+  }
+  return Response.json({market});
+ };
+ const source={active:async()=>prediction.status==='ACTIVE'?[prediction]:[],prediction:async()=>prediction};
+ const byte=new ByteService(dir,'test-only-key',undefined,transport);await byte.load();
+ const mirror=new ByteTwitchMirror(dir,byte,source);await mirror.load();
+ try{await run({mirror,byte,prediction,set:p=>{prediction=p;},market:()=>market,counts,restart:async()=>{const b=new ByteService(dir,'test-only-key',undefined,transport);await b.load();const m=new ByteTwitchMirror(dir,b,source);await m.load();return m;}});}finally{await rm(dir,{recursive:true,force:true});}
+}
+test('one Twitch ID creates one Byte market, survives restart and maps reordered outcome IDs to the correct winner',()=>fixture(async f=>{
+ await Promise.all([f.mirror.watch('eggsterr'),f.mirror.watch('eggsterr')]);assert.equal(f.counts.create,1);assert.deepEqual(f.market().options,['EVENNNNZ :D','ODDSTERR :O']);
+ const restarted=await f.restart();await restarted.watch('eggsterr');assert.equal(f.counts.create,1);
+ f.market().closeMs=Date.now()-1;f.set({...f.prediction,status:'RESOLVED',winningOutcomeId:'odd',outcomes:[...f.prediction.outcomes].reverse()});await restarted.sync();assert.equal(f.counts.resolve,1);assert.equal(f.market().winner,1);
+ await restarted.sync();assert.equal(f.counts.resolve,1);
+}));
+test('short or closed windows do not create an extended market',()=>fixture(async f=>{const state=await f.mirror.watch('eggsterr');assert.equal(f.counts.create,0);assert.match(state.predictions[0].market.error!,/60 segundos/);},true));
+test('early lock refunds rather than keeping chain bets open past Twitch; manual override is rejected',()=>fixture(async f=>{
+ await f.mirror.watch('eggsterr');await assert.rejects(f.byte.settle(f.market().id,null,'Override manual no autorizado'),/Twitch/);
+ f.set({...f.prediction,status:'LOCKED'});await f.mirror.sync();assert.equal(f.counts.invalidate,1);assert.equal(f.market().status,'invalid');
+}));
+test('ambiguous upstream creation is never duplicated by polling or restart',()=>fixture(async f=>{
+ const first=await f.mirror.watch('eggsterr');assert.equal(first.predictions[0].market.state,'failed');await f.mirror.watch('eggsterr');const restarted=await f.restart();await restarted.watch('eggsterr');assert.equal(f.counts.create,1);
+},false,true));

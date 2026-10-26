@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "plot · Puntos",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Replica predicciones de Twitch y apostá con tus propios puntos internos.",
   "permissions": [
     "storage",

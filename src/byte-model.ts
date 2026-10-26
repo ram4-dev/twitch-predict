@@ -27,7 +27,7 @@ export const createByteMarketSchema=z.object({
 export type CreateByteMarket=z.infer<typeof createByteMarketSchema>;
 export type ByteMarket=z.infer<typeof byteMarketSchema>;
 export type ByteConfig=z.infer<typeof byteConfigSchema>;
-export type MarketNotes={channel:string;rules:string;createdAt:string;resolution?:{winner:number|null;evidence:string;at:string}};
+export type MarketNotes={channel:string;rules:string;createdAt:string;twitch?:{predictionId:string;closesAt:number;checkedAt:number;status:string};resolution?:{winner:number|null;evidence:string;at:string}};
 export type DisplayByteMarket=ByteMarket&{notes?:MarketNotes};
 
 // Parse decimal SOL without floating point multiplication or silent rounding.

@@ -3,11 +3,12 @@ import {timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
 import {ByteError,ByteService} from './byte.js';
 import {DEVNET_GENESIS,marketId} from './byte-model.js';
+import type {ByteTwitchMirror} from './byte-twitch.js';
 import type {Points} from './points.js';
 
 const rpcMethods=new Set(['getGenesisHash','getBalance','getLatestBlockhash','getBlockHeight','getSignatureStatuses','getAccountInfo','getMinimumBalanceForRentExemption','simulateTransaction','sendTransaction']);
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
-export function byteRouter(service:ByteService,points:Points,localToken:string,environment:NodeJS.ProcessEnv=process.env,extensionId=''){
+export function byteRouter(service:ByteService,points:Points,localToken:string,environment:NodeJS.ProcessEnv=process.env,extensionId='',mirror?:ByteTwitchMirror){
   const router=express.Router();
   const rpcURL=environment.BYTE_RPC_URL||'https://api.devnet.solana.com';
   const rpc=new URL(rpcURL);
@@ -24,7 +25,15 @@ export function byteRouter(service:ByteService,points:Points,localToken:string,e
   const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{
     try{await fn(req,res);}catch(e){res.status(e instanceof ByteError?e.status:e instanceof z.ZodError?400:500).json({error:e instanceof ByteError?e.message:e instanceof z.ZodError?'Datos inválidos. Revisá los campos de la operación.':'No se pudo completar la operación de byte.'});}
   };
-  router.get('/status',(_req,res)=>res.json({configured:service.configured,network:'devnet',currency:'sol',operatorMode:operators.length?'wallet':'local',automaticTwitchResolution:false,extensionId}));
+  router.get('/status',(_req,res)=>res.json({configured:service.configured,network:'devnet',currency:'sol',operatorMode:operators.length?'wallet':'local',automaticTwitchResolution:!!mirror,extensionId}));
+  router.get('/twitch/channels',(_req,res)=>res.json({channels:mirror?.channels()??[]}));
+  router.post('/twitch/watch',route(async(req,res)=>{
+    if(!mirror)throw new ByteError(503,'La réplica de Twitch no está disponible');
+    if(operators.length){const wallet=points.me(bearer(req)).wallet;if(!wallet||!operators.includes(wallet))throw new ByteError(403,'Esta wallet no está habilitada para replicar mercados');}
+    else if(!local(req)||!equal(req.get('x-operator-token')??bearer(req),localToken))throw new ByteError(403,'Vinculá la extensión al panel para replicar las predicciones');
+    const input=z.object({channel:z.string().regex(/^[a-zA-Z0-9_]{1,40}$/).transform(v=>v.toLowerCase())}).parse(req.body);
+    try{res.json(await mirror.watch(input.channel));}catch(e){throw new ByteError(502,`No se pudo verificar Twitch: ${(e as Error).message}`);}
+  }));
   router.get('/config',route(async(_req,res)=>res.json(await service.config())));
   router.get('/markets',route(async(_req,res)=>res.json({markets:await service.list()})));
   router.get('/markets/:id',route(async(req,res)=>res.json({market:await service.get(marketId.parse(req.params.id))})));
