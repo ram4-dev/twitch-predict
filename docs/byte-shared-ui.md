@@ -49,3 +49,9 @@ Se agregó soporte al proveedor legado de Phantom y mensajes para proveedor ause
 URL actual del preview: `https://twitch-predict-byte.localhost:1357/`. El HTTP anterior redirige conservando ruta y query. El alias TLS de Byte usa el proxy confiable existente y `AUTH_PROXY_NAME=twitch-predict-byte`, sin reemplazar el alias del panel de puntos. Para reiniciar el preview se conservan los argumentos anteriores con `AUTH_ORIGIN=https://twitch-predict-byte.localhost:1357`, `AUTH_PROXY_STATE_DIR=/Users/ramiro/.t3/projects/twitch-predict.poc-twitch-solana/data/portless-auth` y `AUTH_PROXY_NAME=twitch-predict-byte`.
 
 `npm run check`: typecheck, lint, 39 tests unitarios y build aprobados. Auth y Byte: 12 E2E aprobados, incluyendo proveedor legado, ausencia de proveedor, firma y rechazo de red incorrecta. La prueba unitaria SIWS y el fixture rechazan cualquier Chain ID forzado en el login. Rama/worktree conservados, origen de esta corrección `9ef93a7`, sin merge a main.
+
+## Integración y servicios principales · 2026-10-26
+
+La corrección anterior estaba activa únicamente en el preview. El servicio Byte de HTTP 1356 y el panel de puntos HTTPS 1357 todavía devolvían `Chain ID: solana:mainnet`. Se integró la rama en main hasta `4d33ba5`, se publicó en origin y se reconstruyó desde el checkout principal. Se reiniciaron ambos servicios launchd. Byte usa ahora su alias HTTPS `https://twitch-predict-byte.localhost:1357`; las rutas HTTP redirigen allí. Se incorporaron las notas y operaciones de prueba del preview al directorio durable de Byte, preservando entradas existentes y rechazando conflictos.
+
+Se verificó la ausencia de Chain ID en los desafíos de las cuatro URLs de puntos, Byte y preview. Después se repitió la firma con Phantom real contra el servicio principal actualizado: el panel mostró wallet conectada y saldo devnet. Los originales sin seguimiento en `output/` permanecieron intactos. El worktree de desarrollo se conserva.
