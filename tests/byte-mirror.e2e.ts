@@ -29,6 +29,6 @@ test('MV3 detects a Twitch prediction, creates exactly one Byte mirror and track
   native.status='RESOLVED';native.winningOutcome={id:'odd'};await writeFile(twitchFile,JSON.stringify([native]));
   await expect.poll(async()=>(await list())[0].status,{timeout:20000}).toBe('resolved');expect((await list())[0].winner).toBe(1);expect(JSON.parse(await readFile(byteFile,'utf8')).resolutions).toBe(1);
   const short={...native,id:randomUUID(),status:'ACTIVE',winningOutcome:null,createdAt:new Date().toISOString(),predictionWindowSeconds:60};await writeFile(twitchFile,JSON.stringify([short]));
-  await panel.getByRole('button',{name:'Buscar streamer',exact:true}).click();await panel.getByRole('searchbox',{name:'Canal de Twitch',exact:true}).fill(channel);await panel.getByRole('button',{name:'Seguir canal',exact:true}).click();await expect(panel.getByText('La ventana restante es demasiado corta',{exact:false})).toBeVisible();expect((await list()).length).toBe(1);
+  await panel.getByLabel('Canal de Twitch',{exact:true}).fill(channel);await panel.getByRole('button',{name:'Seguir canal',exact:true}).click();await expect(panel.getByText('La ventana restante es demasiado corta',{exact:false})).toBeVisible();expect((await list()).length).toBe(1);
  }finally{await context.close();await rm(profile,{recursive:true,force:true});await writeFile(twitchFile,'[]');}
 });
