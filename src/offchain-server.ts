@@ -34,7 +34,7 @@ const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async
 const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
 app.get('/api/health',(_req,res)=>res.json({ok:true,network:'offchain',protocol:'Puntos internos',features:['bet','resolve','claim'],sourceError:source.lastError}));
 app.get('/api/markets',(_req,res)=>res.json(points.markets()));
-app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),sourceError:source.lastError}));
+app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),details:source.channels(),sourceError:source.lastError}));
 app.get('/api/pair',(req,res)=>{if(req.get('sec-fetch-site')!=='same-origin'){res.status(403).json({error:'Open the dashboard to pair'});return;}res.json({token});});
 const appOrigin=(req:express.Request)=>`${req.protocol}://${req.get('host')}`;
 const twitchOrigin=process.env.AUTH_ORIGIN??`http://twitch-predict.localhost:${process.env.PORTLESS_PORT??1356}`;
@@ -108,7 +108,7 @@ app.post('/api/predictions',route(async(req,res)=>{
   const verified=await source.prediction(input.id,input.channel);
   const market=await points.accept(verified);await points.watch(verified.channel);res.status(202).json(market);
 }));
-app.post('/api/channels',route(async(req,res)=>{const channel=z.string().regex(/^[a-zA-Z0-9_]{1,40}$/).parse(req.body.channel);await points.watch(channel);await source.sync();res.json({channels:points.channels(),sourceError:source.lastError});}));
+app.post('/api/channels',route(async(req,res)=>{const channel=z.string().regex(/^[a-zA-Z0-9_]{1,40}$/).parse(req.body.channel);await source.watch(channel);res.json({channels:points.channels(),details:source.channels(),sourceError:source.lastError});}));
 app.delete('/api/channels/:channel',route(async(req,res)=>res.json({channels:await points.unwatch(String(req.params.channel))})));
 app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.accept(demoPrediction(),true))));
 app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));

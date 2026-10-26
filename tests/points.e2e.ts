@@ -60,7 +60,7 @@ test('following a channel creates a fresh mirror automatically and skips an expi
   const expired={...source,id:randomUUID(),createdAt:new Date(Date.now()-3600_000).toISOString()};
   await writeFile(fixture,JSON.stringify([expired,source]));
   try {
-    await page.goto('/#channels');await page.getByLabel('Canal de Twitch',{exact:true}).fill(source.channel);await page.getByRole('button',{name:'Seguir canal',exact:true}).click();
+    await page.goto('/#channels');await page.getByLabel('Canal de Twitch',{exact:true}).fill(source.channel);await page.getByRole('button',{name:'Agregar streamer',exact:true}).click();
     await page.getByRole('link',{name:'Mercados',exact:true}).click();const card=page.locator(`[data-key="offchain:${source.channel}:${source.id}"]`);await expect(card).toBeVisible();await expect(card.locator('.points-pool')).toContainText('0 pts');
     const response=await page.request.get('/api/markets');const markets=await response.json();expect(markets.some((m:{prediction:{id:string}})=>m.prediction.id===expired.id)).toBe(false);
     const mirrored=await operator(page,'/api/predictions',{...source,title:'Untrusted title'});expect(mirrored.prediction.title).toBe(source.title);expect(mirrored.totalPoints).toBe(0);
