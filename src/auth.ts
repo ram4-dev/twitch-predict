@@ -10,6 +10,8 @@ const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return
 export class Auth {
   private flows=new Map<string,Flow>();private challenges=new Map<string,Challenge>();
   constructor(readonly points:Points,readonly clock=()=>Date.now()){}
+  exportState(){return {flows:Object.fromEntries(this.flows),challenges:Object.fromEntries(this.challenges)};}
+  importState(state:ReturnType<Auth['exportState']>){this.flows=new Map(Object.entries(state.flows));this.challenges=new Map(Object.entries(state.challenges));}
   private prune(){for(const [key,f] of this.flows)if(f.expires<=this.clock())this.flows.delete(key);for(const [key,c] of this.challenges)if(c.expires<=this.clock())this.challenges.delete(key);}
   private flow(flowId:string){const f=this.flows.get(flowId);if(!f||f.expires<=this.clock())throw new Error('El acceso venció. Volvé a abrirlo desde la extensión.');return f;}
   start(extensionId:string,state:string,preferredToken?:string,origin?:string){

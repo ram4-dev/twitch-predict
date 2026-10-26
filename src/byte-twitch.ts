@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {closesAt,type Prediction} from './prediction.js';
 import {ByteService} from './byte.js';
 import type {CreateByteMarket} from './byte-model.js';
+import type {Documents} from './cloud/documents.js';
 import type {TwitchSource} from './twitch-source.js';
 type Mirror={outcomeIds:string[];prediction:Prediction;input?:CreateByteMarket;marketId?:string;phase:'pending'|'created'|'skipped'|'failed'|'resolved';error?:string};
 type State={version:1;channels:string[];mirrors:Record<string,Mirror>};
@@ -13,14 +14,14 @@ export class ByteTwitchMirror {
  private syncing?:Promise<void>;
  private queue:Promise<unknown>=Promise.resolve();
  lastError:string|null=null;
- constructor(readonly directory:string,private byte:ByteService,private source:Pick<TwitchSource,'active'|'prediction'>,private clock=Date.now){}
- async load(){await mkdir(this.directory,{recursive:true});try{const data=JSON.parse(await readFile(join(this.directory,'byte-twitch.json'),'utf8'));if(data.version!==1||!Array.isArray(data.channels)||!data.mirrors)throw new Error('Estado de réplica incompatible');this.state=data;}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}}
- private async save(){const file=join(this.directory,'byte-twitch.json');await writeFile(file+'.tmp',JSON.stringify(this.state),{mode:0o600});await rename(file+'.tmp',file);}
+ constructor(readonly directory:string,private byte:ByteService,private source:Pick<TwitchSource,'active'|'prediction'>,private clock=Date.now,private documents?:Documents){}
+ async load(){if(this.documents){this.state=await this.documents.read('byte-twitch',():State=>({version:1,channels:[],mirrors:{}}));return;}await mkdir(this.directory,{recursive:true});try{const data=JSON.parse(await readFile(join(this.directory,'byte-twitch.json'),'utf8'));if(data.version!==1||!Array.isArray(data.channels)||!data.mirrors)throw new Error('Estado de réplica incompatible');this.state=data;}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}}
+ private async save(){if(this.documents){const {state}=await this.documents.update('byte-twitch',():State=>({version:1,channels:[],mirrors:{}}),state=>{state.channels=[...new Set([...state.channels,...this.state.channels])];state.mirrors=this.state.mirrors;});this.state=state;return;}const file=join(this.directory,'byte-twitch.json');await writeFile(file+'.tmp',JSON.stringify(this.state),{mode:0o600});await rename(file+'.tmp',file);}
  private serial<T>(fn:()=>Promise<T>):Promise<T>{const result=this.queue.then(fn);this.queue=result.catch(()=>{});return result;}
  channels(){return [...this.state.channels];}
- private snapshot(channel:string){return Object.values(this.state.mirrors).filter(m=>m.prediction.channel===channel&&(m.marketId||this.activeIds.get(channel)?.has(m.prediction.id))).slice(-20).map(m=>({prediction:m.prediction,market:{state:m.phase,byteMarketId:m.marketId,error:m.error??null}}));}
+ snapshot(channel:string){return Object.values(this.state.mirrors).filter(m=>m.prediction.channel===channel&&(m.marketId||this.activeIds.get(channel)?.has(m.prediction.id))).slice(-20).map(m=>({prediction:m.prediction,market:{state:m.phase,byteMarketId:m.marketId,error:m.error??null}}));}
  watch(channel:string){return this.serial(async()=>{if(!this.state.channels.includes(channel)){this.state.channels.push(channel);await this.save();}await this.refresh(channel);return {channel,predictions:this.snapshot(channel)};});}
- sync(){if(this.syncing)return this.syncing;this.syncing=this.serial(async()=>{const errors:string[]=[];for(const channel of this.state.channels)try{await this.refresh(channel);}catch(e){errors.push(`${channel}: ${(e as Error).message}`);}this.lastError=errors.length?errors.join('; '):null;}).finally(()=>{this.syncing=undefined;});return this.syncing;}
+ sync(){if(this.syncing)return this.syncing;this.syncing=this.serial(async()=>{if(this.documents)await this.load();const errors:string[]=[];for(const channel of this.state.channels)try{await this.refresh(channel);}catch(e){errors.push(`${channel}: ${(e as Error).message}`);}this.lastError=errors.length?errors.join('; '):null;}).finally(()=>{this.syncing=undefined;});return this.syncing;}
  private async refresh(channel:string){
   const active=await this.source.active(channel),seen=new Set<string>();this.activeIds.set(channel,new Set(active.map(p=>p.id)));
   for(const p of active){seen.add(p.id);await this.observe(p);}

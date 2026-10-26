@@ -28,3 +28,10 @@ mobile/ios/
 mobile/dist/
 mobile/artifacts/
 mobile/coverage/
+.vercel
+
+extension/app-config.js
+
+artifacts/
+
+public/downloads/*.apk

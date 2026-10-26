@@ -1,0 +1,17 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/**
+!scripts/**
+!public/**
+!extension/**
+!legacy-public/**
+
+!Dockerfile.backup
+
+!migrations/**
+
+!cloud/package.json
+!cloud/package-lock.json

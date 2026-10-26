@@ -74,7 +74,7 @@ test('MV3 popup signs through an existing Twitch tab and retains receipts and ca
  const market=await createMarket(page,'¿Gana el mercado de la extensión?');
  const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
  const profile=await mkdtemp(`${tmpdir()}/byte-extension-`),extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
- for(const file of ['background.js','popup.js']){const p=resolve(extension,file);await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+ for(const file of ['background.js','popup.js','app-config.js']){const p=resolve(extension,file);await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  let releaseSignature:(()=>void)|undefined;
  try{

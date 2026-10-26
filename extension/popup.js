@@ -1,3 +1,4 @@
+import {defaultBridge,isAppOrigin} from './app-config.js';
 import {popupScope,matchingCache,cacheAllowsBet,cachedBalance} from './popup-cache.js';
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
@@ -5,10 +6,9 @@ import './surfaces.js';
 import {byteMarketView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
-const defaultBridge='http://twitch-predict.localhost:1356';
 let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
-function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname)?u.origin:defaultBridge;}catch{return defaultBridge;}}
+function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return isAppOrigin(u.href)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
 function fact(list,title,value){list.append(el('dt',title),el('dd',value??'Sin informar'));}
 function sourceView(p){

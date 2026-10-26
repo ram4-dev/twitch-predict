@@ -41,7 +41,7 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
 test('native action popup is 700px wide without resizing the browser window',async()=>{
   const profile=await mkdtemp(`${tmpdir()}/mirror-native-popup-`);const extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
   const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
-  for(const name of ['background.js','popup.js']){const path=resolve(extension,name);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+  for(const name of ['background.js','popup.js','app-config.js']){const path=resolve(extension,name);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,viewport:null,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   try {
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
