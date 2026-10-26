@@ -21,10 +21,14 @@ body *{font-variant-numeric:inherit}.points-status,.points-pool>span,.pool-peopl
 /* Explicit control styles also isolate the search from the legacy global form rules. */
 .expandable-search .search-toggle,.expandable-search .search-submit{margin:0;padding:0;height:44px;min-height:44px;width:44px;flex-shrink:0;font:inherit;border-radius:999px;transform:none}
 .expandable-search .search-toggle{display:grid;place-items:center;background:var(--secondary);color:var(--foreground);border:1px solid var(--input)}
-.expandable-search .search-form{margin:0;min-height:44px;gap:0}
-.expandable-search .search-input{height:42px;min-height:0;margin:0;border:0;border-radius:0;padding-top:0;padding-bottom:0;background:transparent;color:var(--foreground);font:14px Inter,system-ui,sans-serif;box-shadow:none}
+.expandable-search .search-form{overflow:clip;margin:0;padding:0;min-height:44px;gap:0}
+.expandable-search[data-direction="right"] .search-form{padding-left:44px}
+.expandable-search[data-direction="left"] .search-form{padding-right:44px}
+.expandable-search .search-input{height:42px;min-height:0;margin:0;border:0;border-radius:0;padding:0 12px;background:transparent;color:var(--foreground);font:14px Inter,system-ui,sans-serif;box-shadow:none}
 .expandable-search .search-submit{background:transparent;color:var(--muted-foreground);border:0}
 .expandable-search .search-input:focus-visible{outline:none}
 .expandable-search .search-form:focus-within{outline:2px solid var(--ring);outline-offset:3px}
 .search-demo>div{min-height:80px}.search-demo p{font-size:14px;color:var(--muted-foreground)}
 .expandable-search .search-input::-webkit-search-cancel-button,.expandable-search .search-input::-webkit-search-decoration{-webkit-appearance:none;appearance:none}
+
+.expandable-search[data-direction="left"] .search-input{padding-left:40px}

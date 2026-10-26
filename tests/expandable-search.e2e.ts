@@ -6,7 +6,9 @@ test('Twitch search expands, submits exactly once, keeps nonempty queries and re
  await page.route('**/api/byte/twitch/watch',async route=>{searches++;channels.push(route.request().postDataJSON().channel);await route.fulfill({json:{predictions:[]}});});
  await page.goto('/byte');
  const toggle=page.getByRole('button',{name:'Buscar streamer',exact:true});await expect(toggle).toHaveAttribute('aria-expanded','false');await toggle.click();
- const input=page.getByRole('searchbox',{name:'Canal de Twitch',exact:true});await expect(input).toBeFocused();await input.fill('  @Eggsterr  ');await input.press('Enter');
+ const input=page.getByRole('searchbox',{name:'Canal de Twitch',exact:true});await expect(input).toBeFocused();await input.fill('  @Eggsterr  ');
+ const webClose=await page.getByRole('button',{name:'Cerrar búsqueda',exact:true}).boundingBox(),webField=await input.boundingBox();expect(webClose).toBeTruthy();expect(webField).toBeTruthy();expect(webField!.x).toBeGreaterThanOrEqual(webClose!.x+webClose!.width);
+ await input.press('Enter');
  await expect(page.getByLabel('Filtrar canal')).toHaveValue('eggsterr');expect(searches).toBe(1);expect(channels).toEqual(['eggsterr']);
  await page.getByRole('heading',{level:1}).click();await expect(input).toHaveValue('  @Eggsterr  ');
  await input.focus();await input.press('Escape');await expect(input).toHaveCount(0);await expect(toggle).toBeFocused();
@@ -25,7 +27,13 @@ test('both expansion directions fit phone and tablet viewports under CSP and red
   for(const direction of ['derecha','izquierda']){
    const input=page.getByRole('searchbox',{name:`Búsqueda hacia la ${direction}`,exact:true});await page.getByRole('button',{name:`Abrir búsqueda hacia la ${direction}`,exact:true}).click();await expect(input).toBeFocused();
    const form=page.getByRole('search',{name:`Búsqueda hacia la ${direction}`,exact:true}),bounds=await form.boundingBox();expect(bounds).toBeTruthy();expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(width);
-   await input.fill('eggsterr');await input.press('Enter');await expect(page.getByRole('status').filter({hasText:'Búsqueda de ejemplo: eggsterr'})).toBeVisible();
+   await input.fill('eggsterr');
+   const root=form.locator('..'),close=await root.getByRole('button',{name:'Cerrar búsqueda',exact:true}).boundingBox(),field=await input.boundingBox();expect(close).toBeTruthy();expect(field).toBeTruthy();
+   if(direction==='derecha')expect(field!.x).toBeGreaterThanOrEqual(close!.x+close!.width);
+   else expect(field!.x+field!.width).toBeLessThanOrEqual(close!.x);
+   const contentStart=await input.evaluate(node=>node.getBoundingClientRect().left+parseFloat(getComputedStyle(node).paddingLeft));
+   if(direction==='derecha')expect(contentStart).toBeGreaterThanOrEqual(close!.x+close!.width+8);
+   await input.press('Enter');await expect(page.getByRole('status').filter({hasText:'Búsqueda de ejemplo: eggsterr'})).toBeVisible();
    await form.screenshot({path:`test-results/search-${direction}-${width}.png`});await input.press('Escape');await expect(input).toHaveCount(0);
   }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);

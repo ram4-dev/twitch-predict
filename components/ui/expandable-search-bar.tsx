@@ -28,7 +28,7 @@ export default function ExpandableSearchBar({expandDirection='right',placeholder
   useEffect(()=>{
     if(!open)return;
     const measure=()=>{const rect=containerRef.current?.getBoundingClientRect();if(rect)setExpandedWidth(Math.max(COLLAPSED_SIZE,Math.min(width,expandDirection==='right'?window.innerWidth-rect.left-16:rect.right-16)));};
-    measure();window.addEventListener('resize',measure);inputRef.current?.focus();
+    measure();window.addEventListener('resize',measure);inputRef.current?.focus({preventScroll:true});
     return()=>window.removeEventListener('resize',measure);
   },[open,width,expandDirection]);
   useEffect(()=>{
@@ -42,9 +42,9 @@ export default function ExpandableSearchBar({expandDirection='right',placeholder
       {open?<X className="size-4" aria-hidden="true"/>:<Search className="size-4" aria-hidden="true"/>}
     </button>
     <AnimatePresence initial={false}>
-      {open&&<motion.form id={id} role="search" aria-label={inputLabel} aria-busy={loading} onSubmit={submit} className={cn('search-form absolute top-0 flex h-11 items-center overflow-hidden rounded-full border border-input bg-background text-foreground',expandDirection==='left'?'right-0 pr-11':'left-0')} initial={reducedMotion?false:{width:COLLAPSED_SIZE,opacity:0.98}} animate={{width:expandedWidth,opacity:1}} exit={{width:COLLAPSED_SIZE,opacity:0}} transition={reducedMotion?{duration:0}:{type:'spring',stiffness:260,damping:26}}>
+      {open&&<motion.form id={id} role="search" aria-label={inputLabel} aria-busy={loading} onSubmit={submit} className={cn('search-form absolute top-0 flex h-11 items-center overflow-hidden rounded-full border border-input bg-background text-foreground',expandDirection==='left'?'right-0':'left-0')} initial={reducedMotion?false:{width:COLLAPSED_SIZE,opacity:0.98}} animate={{width:expandedWidth,opacity:1}} exit={{width:COLLAPSED_SIZE,opacity:0}} transition={reducedMotion?{duration:0}:{type:'spring',stiffness:260,damping:26}}>
         {expandDirection==='left'&&<Search className="pointer-events-none absolute left-3 size-4 text-muted-foreground" aria-hidden="true"/>}
-        <input ref={inputRef} type="search" aria-label={inputLabel} value={value} disabled={disabled} onChange={event=>setValue(event.target.value)} placeholder={placeholder} autoComplete="off" autoCapitalize="none" spellCheck={false} className={cn('search-input min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground',expandDirection==='right'?'pl-12':'pl-10')}/>
+        <input ref={inputRef} type="search" aria-label={inputLabel} value={value} disabled={disabled} onChange={event=>setValue(event.target.value)} placeholder={placeholder} autoComplete="off" autoCapitalize="none" spellCheck={false} className="search-input min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"/>
         <motion.button type="submit" disabled={disabled||loading||!value.trim()} aria-label={submitLabel} className="search-submit grid h-11 w-11 shrink-0 place-items-center text-muted-foreground hover:text-foreground" initial={reducedMotion?false:{opacity:0,scale:0.8}} animate={{opacity:1,scale:1}} exit={{opacity:0}} transition={{duration:reducedMotion?0:0.15}}>{loading?<LoaderCircle className="size-4 motion-safe:animate-spin" aria-hidden="true"/>:<Search className="size-4" aria-hidden="true"/>}</motion.button>
       </motion.form>}
     </AnimatePresence>
