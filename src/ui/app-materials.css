@@ -33,3 +33,10 @@ button:not([data-slot=button]){min-height:44px;border-radius:999px;background:va
 .plot-balloon-wordmark[data-renderer=balloon] canvas{opacity:1}
 .plot-balloon-wordmark[data-renderer=balloon] img{opacity:0}
 @media(prefers-reduced-motion:reduce){.plot-balloon-wordmark canvas{display:none!important}.plot-balloon-wordmark img{opacity:1!important}}
+
+/* Shared across the full page and the entire MV3 popup, behind all content. */
+body:has(.plot-latex-field){isolation:isolate}
+.popup-atmosphere:has(.plot-latex-field){position:fixed;inset:0;z-index:-2;opacity:.55;pointer-events:none;overflow:hidden}
+.plot-latex-field{position:absolute;inset:0;background:#080808;pointer-events:none}
+.plot-latex-field canvas{display:block;width:100%;height:100%;pointer-events:none}
+body.plot-glow-stage:has(.plot-latex-field)::before,body:has(.plot-latex-field) .plot-glow-stage::before{background:none!important}
