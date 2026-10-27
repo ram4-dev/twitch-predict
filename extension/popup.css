@@ -8,7 +8,7 @@ body{background:var(--background);color:var(--foreground)}header{border-color:va
 header .plot-scene.compact{height:56px;width:200px;max-width:200px;overflow:visible;background:transparent}header .compact>.plot-halftone{width:148px;margin:0}header .compact .scene-pause{right:0;bottom:10px}header .scene-atmosphere{border-radius:12px;overflow:hidden}.channel-row{display:flex;align-items:center;gap:14px}.channel-row label{flex-shrink:0}.channel-row>div{flex:1;min-width:0;margin-top:0}.freshness{margin:8px 0 12px}.prediction{padding:18px}.prediction h1{font-size:26px;margin:12px 0 18px}.prediction .pool-summary{margin:14px 0 12px}.prediction .points-pool strong{font-size:26px}.prediction .points-option{padding:12px}.prediction .points-option p{margin:8px 0}.prediction .stake-row{margin-top:12px;margin-bottom:12px}
 .prediction .points-pool{display:flex;align-items:baseline;gap:8px}.prediction .points-pool>span{margin:0;font-size:12px}.prediction .points-stake{display:flex;align-items:center;gap:10px}.prediction .stake-row{align-items:center}
 main{padding-top:14px}.prediction h1{margin:10px 0 12px}.prediction .points-option p{margin:6px 0}
-header .plot-scene.compact>.plot-halftone{width:148px;max-width:calc(100% - 44px);margin:0}
+header .plot-scene.compact>.plot-halftone{width:148px;max-width:100%;margin:0}
 
 /* Resolution owns its heading; do not nest it inside another painted panel. */
 .prediction:has(.plot-resolution){background:transparent;border:0;padding:0}
