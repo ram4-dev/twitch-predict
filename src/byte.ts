@@ -14,7 +14,7 @@ export class ByteService {
   private state:State={version:1,notes:{},operations:{}};
   private queue:Promise<unknown>=Promise.resolve();
   private readonly base:string;
-  constructor(readonly directory:string,private readonly key:string,base='https://app.bytearena.fun',private readonly transport:typeof fetch=fetch,private readonly documents?:Documents){
+  constructor(readonly directory:string,private readonly key:string,base='https://app.bytearena.fun',private readonly transport:typeof fetch=fetch,private readonly documents?:Documents,private readonly onChange?:()=>void){
     const url=new URL(base);
     if((url.protocol!=='https:'&&!(url.protocol==='http:'&&['127.0.0.1','localhost'].includes(url.hostname)))||url.username||url.password||url.search||url.hash)throw new Error('BYTE_BASE_URL debe ser HTTPS (HTTP solo para fixtures locales).');
     this.base=url.href.replace(/\/$/,'');
@@ -29,7 +29,7 @@ export class ByteService {
   private async save(){const file=join(this.directory,'byte.json');await writeFile(file+'.tmp',JSON.stringify(this.state),{mode:0o600});await rename(file+'.tmp',file);}
   private async mutate<T>(work:(state:State)=>T):Promise<T>{
     if(this.documents){const committed=await this.documents.update('byte',()=>({version:1,notes:{},operations:{}}) as State,work);this.state=committed.state;return committed.result;}
-    const before=structuredClone(this.state);try{const result=work(this.state);await this.save();return result;}catch(e){this.state=before;throw e;}
+    const before=structuredClone(this.state);try{const result=work(this.state);await this.save();if(JSON.stringify(before)!==JSON.stringify(this.state))this.onChange?.();return result;}catch(e){this.state=before;throw e;}
   }
   private async refresh(){if(this.documents)await this.load();}
   private serial<T>(fn:()=>Promise<T>):Promise<T>{const result=this.queue.then(fn);this.queue=result.catch(()=>{});return result;}
@@ -124,5 +124,5 @@ export class ByteService {
     await this.request(`/api/partner/markets/${encodeURIComponent(id)}/${winner===null?'invalidate':'resolve'}`,winner===null?{reason:evidence}:{winner});
     return this.get(id);
   });}
-  async sync(id:string,wallet:string){await this.get(id);return this.parseMarket(await this.request(`/api/predictions/${encodeURIComponent(id)}/chain-sync?wallet=${encodeURIComponent(wallet)}`,{},false));}
+  async sync(id:string,wallet:string){await this.get(id);const result=this.parseMarket(await this.request(`/api/predictions/${encodeURIComponent(id)}/chain-sync?wallet=${encodeURIComponent(wallet)}`,{},false));if(this.documents)await this.documents.notifyMarketChange().catch(()=>{});else this.onChange?.();return result;}
 }

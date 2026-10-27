@@ -15,7 +15,7 @@ test('MV3 searches a new streamer by Twitch URL, mirrors once, and preserves key
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
   const panel=await context.newPage();await panel.goto(base);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);
-  await expect(popup.getByRole('combobox',{name:'Canal de Twitch'})).toHaveCount(0);
+  await expect(popup.getByRole('combobox',{name:'Canal de Twitch'})).toHaveCount(0);await expect(popup.locator('#live-status')).toHaveText('Conexión en vivo');
   await popup.getByRole('button',{name:'Buscar canal',exact:true}).click();const input=popup.getByRole('searchbox',{name:'Canal de Twitch',exact:true});await expect(input).toBeFocused();
   await input.fill('https://evil.example/streamer');await input.press('Enter');await expect(popup.getByText('Pegá el enlace de un canal de Twitch.')).toBeVisible();
   await input.fill('search_');const suggestion=popup.getByRole('option',{name:new RegExp(channel)});await expect(suggestion).toBeVisible();await suggestion.click();await expect(popup.getByRole('heading',{name:native.title,exact:true})).toBeVisible({timeout:20000});
@@ -28,6 +28,7 @@ test('MV3 searches a new streamer by Twitch URL, mirrors once, and preserves key
   expect(JSON.parse(await readFile('test-results/byte-fixture.json','utf8')).markets).toHaveLength(1);
   const same=await context.newPage();await same.addInitScript(({url})=>{const api=(globalThis as unknown as {chrome:{tabs:{query:()=>Promise<unknown[]>}}}).chrome;api.tabs.query=async()=>[{url}];},{url:`https://www.twitch.tv/${channel}`});await same.goto(`chrome-extension://${id}/popup.html`);await expect(same.locator('.channel-current')).toHaveText('@'+channel);await expect(same.getByRole('link',{name:`Abrir stream de ${channel} en Twitch`})).toHaveCount(0);await same.close();
   await popup.screenshot({path:'test-results/extension-channel-search.png',fullPage:true});
+  await popup.route('**/api/live/markets',route=>route.abort());const disconnected=popup.waitForEvent('requestfailed',request=>new URL(request.url()).pathname==='/api/live/markets');await popup.reload();await disconnected;await expect(popup.locator('#live-status')).toHaveText('Actualización periódica');await popup.unroute('**/api/live/markets');await expect(popup.locator('#live-status')).toHaveText('Conexión en vivo',{timeout:12000});
   await popup.emulateMedia({reducedMotion:'reduce'});await popup.getByRole('button',{name:'Buscar canal',exact:true}).click();await expect(input).toBeFocused();await input.press('Escape');
  }finally{await context.close();await rm(profile,{recursive:true,force:true});await writeFile('test-results/twitch-fixture.json','[]');}
 });

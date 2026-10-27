@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "plot",
-  "version": "0.13.7",
+  "version": "0.14.0",
   "description": "Predicciones de Twitch y apuestas en SOL devnet desde el stream.",
   "permissions": [
     "storage",

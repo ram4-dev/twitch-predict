@@ -1,3 +1,4 @@
+import {LiveMarkets} from './live.js';
 import {TwitchChannelSearch} from '../twitch-search.js';
 import express from 'express';
 import {z} from 'zod';
@@ -13,6 +14,7 @@ import {CloudTwitchAuth} from './twitch-auth.js';
 import {cloudConfig} from './config.js';
 export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
+ const liveMarkets=new LiveMarkets(documents);app.locals.liveMarkets=liveMarkets;
  const extensionOrigin=`chrome-extension://${config.extensionId}`;
  app.use((req,res,next)=>{
   res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});
@@ -23,6 +25,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
   if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.sendStatus(204);return;}next();
  });
+ app.get('/api/live/markets',(_req,res)=>liveMarkets.subscribe(res));
  app.use(express.json({limit:'16kb'}));
  const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
  const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{

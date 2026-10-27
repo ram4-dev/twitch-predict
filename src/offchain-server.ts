@@ -1,3 +1,4 @@
+import {EventEmitter} from 'node:events';
 import {TwitchChannelSearch} from './twitch-search.js';
 import {contentSecurityPolicy} from './content-security-policy.js';
 import express from 'express';
@@ -23,7 +24,8 @@ await mkdir(directory,{recursive:true,mode:0o700});
 try{await writeFile(`${directory}/bridge-token`,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});}catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
 const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
 const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
-const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined);await byte.load();
+const marketEvents=new EventEmitter();marketEvents.setMaxListeners(0);
+const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,undefined,()=>marketEvents.emit('markets'));await byte.load();
 const byteMirror=new ByteTwitchMirror(directory,byte,source);await byteMirror.load();
 const channelSearch=new TwitchChannelSearch();
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
@@ -40,6 +42,13 @@ app.use((req,res,next)=>{
 app.use(express.json({limit:'16kb'}));
 const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
 const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
+app.get('/api/live/markets',(req,res)=>{
+  const origin=req.get('origin');if(origin&&/^chrome-extension:\/\/[a-p]{32}$/.test(origin))res.set('Access-Control-Allow-Origin',origin).vary('Origin');
+  if(marketEvents.listenerCount('markets')>=100){res.status(503).set('Retry-After','5').end();return;}
+  res.status(200).set({'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no','Connection':'keep-alive'});res.flushHeaders();
+  const changed=()=>{if(!res.destroyed)res.write('event: markets\ndata: {}\n\n');};marketEvents.on('markets',changed);res.write('retry: 5000\nevent: ready\ndata: {}\n\n');
+  const heartbeat=setInterval(()=>res.write(': heartbeat\n\n'),15000);heartbeat.unref();res.on('close',()=>{clearInterval(heartbeat);marketEvents.off('markets',changed);});
+});
 app.get('/api/health',(_req,res)=>res.json({ok:true,marketMode:process.env.MARKET_MODE==='byte'?'byte':'offchain',network:process.env.MARKET_MODE==='byte'?'devnet':'offchain',protocol:process.env.MARKET_MODE==='byte'?'byte partner markets':'Puntos internos',features:process.env.MARKET_MODE==='byte'?['wallet-bet','resolve','automatic-payout']:['bet','resolve','claim'],sourceError:source.lastError}));
 app.get('/api/markets',(_req,res)=>res.json(points.markets()));
 app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),details:source.channels(),sourceError:source.lastError}));
