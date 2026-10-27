@@ -19,3 +19,5 @@ button:not([data-slot=button]){min-height:44px;border-radius:999px;background:va
 @media(prefers-reduced-motion:reduce){button:not([data-slot=button]):hover{transform:none}}
 
 .console-primary .plot-button-content{width:100%;justify-content:space-between}
+/* Scoped layout for the optional halftone footer. The app uses its transparent canvas. */
+.hwf-root{position:relative;width:100%;overflow:hidden;isolation:isolate}.hwf-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;max-width:none}.hwf-top{position:relative;z-index:1;display:flex;justify-content:space-between;gap:24px;padding:28px 24px;font-size:14px}.hwf-top strong,.hwf-top h3{font-size:14px;font-weight:600}.hwf-top p{margin:6px 0}.hwf-top ul{list-style:none;padding:0;margin:8px 0}.hwf-top a{color:inherit;text-decoration:none}.hwf-rule{position:relative;z-index:1;display:flex;justify-content:flex-end;padding:0 24px}.hwf-rule button{font:inherit;color:inherit;background:transparent;border:0;cursor:pointer}.hwf-top a:focus-visible,.hwf-rule button:focus-visible{outline:2px solid currentColor;outline-offset:4px}@media(max-width:720px){.hwf-top{flex-wrap:wrap}.hwf-top>div{width:100%}}
