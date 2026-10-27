@@ -1,0 +1,30 @@
+{
+  "task": "Count with selectable gain colors, completion pulse and four typeface comparison; showcase only",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "baseCommit": "2f013e2",
+    "branch": "showcase-payout-type",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.showcase-payout-type",
+    "cleanup": "retained for review"
+  },
+  "fonts": [
+    "Inter",
+    "Space Grotesk",
+    "Fraunces",
+    "Archivo Black"
+  ],
+  "motion": "1150ms count, followed by one 560ms pulse: 1 \u2192 1.09 \u2192 .975 \u2192 1; disabled under reduced motion",
+  "colors": [
+    "orange",
+    "mint",
+    "gold"
+  ],
+  "reviewGate": "New typography and real automatic popup opening are not applied to the extension. Await font/color selection.",
+  "verification": {
+    "check": "typecheck, lint, 60 tests passed; 7 SQL tests skipped; build passed",
+    "e2e": "4 local E2E passed, including 360px, 700x600, scenarios, simulated opening, reduced motion, font loading, color and replay",
+    "visual": "Desktop overview and inline preview inspected"
+  },
+  "url": "https://plot-devnet.vercel.app/payout-showcase.html"
+}
