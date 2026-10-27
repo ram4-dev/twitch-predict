@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {PlotLogo,Chameleon} from './components/plot.js';
 import {Button} from './components/button.js';
 import {ArrowRight,Check,Loader2} from 'lucide-react';
+import {StreamerOnboarding} from './streamer-onboarding.js';
 type Provider={isPhantom?:boolean;connect():Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
 type Login={token:string;account:{wallet:string;id:string};handoff?:{flowId:string;extensionId:string;code:string}};
 const provider=()=> (window as unknown as {phantom?:{solana?:Provider}}).phantom?.solana;
@@ -45,4 +46,4 @@ function Onboarding(){
       {installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><a className="auth-primary" href="https://phantom.com/download" target="_blank" rel="noopener">Instalar Phantom <ArrowRight size={16}/></a><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>}
       {error&&<p className="auth-error" role="alert">{error}</p>}<p className="auth-note">Los puntos son internos y de prueba. No necesitás depositar SOL.</p></section><p className="auth-footer">Al terminar, abrimos tu panel y la extensión queda conectada.</p></main>;
 }
-createRoot(document.getElementById('onboarding-root')!).render(<Onboarding/>);
+createRoot(document.getElementById('onboarding-root')!).render(new URLSearchParams(location.search).has('streamer')?<StreamerOnboarding/>:<Onboarding/>);

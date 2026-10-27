@@ -67,16 +67,17 @@ app.get('/api/twitch/search',async(req,res)=>{
 app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
 app.post('/api/twitch/start',route((req,res)=>{
   if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
-  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.json({url:result.url});
+  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
 }));
 app.get('/auth/twitch/callback',async(req,res)=>{
   if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
+  const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
   try{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
-    res.redirect(`/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
+    res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
   }catch{
-    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.redirect(`/?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#streamer`);
+    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';res.redirect(onboarding?`/onboarding?streamer=1&twitch_error=${error}`:`/?twitch_error=${error}#streamer`);
   }
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{
