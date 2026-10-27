@@ -96,6 +96,7 @@ export class ByteService {
     return {...market,bettable:market.bettable&&(!this.documents||!!notes)&&(!source||(source.status==='ACTIVE'&&Date.now()<source.closesAt&&Date.now()-source.checkedAt<30000)),notes};
     });
   }
+  async creationStatus(requestId:string){await this.refresh();const op=this.state.operations[requestId];return op?{state:op.state,status:op.status}:undefined;}
   async marketForRequest(requestId:string){await this.refresh();const op=this.state.operations[requestId];return op?.state==='complete'?this.get(op.marketId!):undefined;}
   operations(){return Object.values(this.state.operations).filter(op=>op.state==='pending').map(op=>({...op.input}));}
   async reconcile(requestId:string,id:string){return this.serial(async()=>{
