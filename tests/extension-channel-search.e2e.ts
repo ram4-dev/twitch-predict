@@ -20,12 +20,13 @@ test('MV3 searches a new streamer by Twitch URL, mirrors once, and preserves key
   await input.fill('https://evil.example/streamer');await input.press('Enter');await expect(popup.getByText('Pegá el enlace de un canal de Twitch.')).toBeVisible();
   await input.fill('search_');const suggestion=popup.getByRole('option',{name:new RegExp(channel)});await expect(suggestion).toBeVisible();await suggestion.click();await expect(popup.getByRole('heading',{name:native.title,exact:true})).toBeVisible({timeout:20000});
   await expect(popup.getByRole('search',{name:'Canal de Twitch'})).toHaveAttribute('aria-busy','false');await input.fill(`https://www.twitch.tv/${channel}`);await input.press('Enter');
-  await expect(popup.locator('.channel-current')).toHaveText('@'+channel);
+  await expect(popup.locator('.channel-current')).toHaveText('@'+channel);await expect(popup.getByText('Se abre Phantom para firmar esta apuesta.',{exact:false})).toHaveCount(0);expect(await popup.locator('#predictions').evaluate(el=>parseFloat(getComputedStyle(el).marginTop))).toBeGreaterThanOrEqual(24);
   await expect(popup.getByRole('search',{name:'Canal de Twitch'})).toHaveAttribute('aria-busy','false');
   const field=(await input.boundingBox())!,close=(await popup.getByRole('button',{name:'Cerrar búsqueda',exact:true}).boundingBox())!;expect(field.x+field.width).toBeLessThanOrEqual(close.x);
-  await input.press('Escape');await expect(input).toHaveCount(0);await expect(popup.getByRole('button',{name:'Buscar canal',exact:true})).toBeFocused();
+  await input.press('Escape');await expect(input).toHaveCount(0);await expect(popup.getByRole('button',{name:'Buscar canal',exact:true})).toBeFocused();const stream=popup.getByRole('link',{name:`Abrir stream de ${channel} en Twitch`});await expect(stream).toHaveAttribute('href',`https://www.twitch.tv/${channel}`);
   await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(popup.getByRole('button',{name:'Actualizar predicción',exact:true})).toBeEnabled();
   expect(JSON.parse(await readFile('test-results/byte-fixture.json','utf8')).markets).toHaveLength(1);
+  const same=await context.newPage();await same.addInitScript(({url})=>{const api=(globalThis as unknown as {chrome:{tabs:{query:()=>Promise<unknown[]>}}}).chrome;api.tabs.query=async()=>[{url}];},{url:`https://www.twitch.tv/${channel}`});await same.goto(`chrome-extension://${id}/popup.html`);await expect(same.locator('.channel-current')).toHaveText('@'+channel);await expect(same.getByRole('link',{name:`Abrir stream de ${channel} en Twitch`})).toHaveCount(0);await same.close();
   await popup.screenshot({path:'test-results/extension-channel-search.png',fullPage:true});
   await popup.emulateMedia({reducedMotion:'reduce'});await popup.getByRole('button',{name:'Buscar canal',exact:true}).click();await expect(input).toBeFocused();await input.press('Escape');
  }finally{await context.close();await rm(profile,{recursive:true,force:true});await writeFile('test-results/twitch-fixture.json','[]');}
