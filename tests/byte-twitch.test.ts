@@ -40,7 +40,7 @@ test('ambiguous upstream creation is never duplicated by polling or restart',()=
 },false,true));
 
 test('429 rejection retries safely with a shorter window after restart',()=>fixture(async f=>{
- const first=await f.mirror.watch('eggsterr');assert.equal(first.predictions[0].market.state,'failed');assert.match(first.predictions[0].market.error!,/límite/);
- const restarted=await f.restart();await restarted.watch('eggsterr');assert.equal(f.counts.create,1);
- f.advance(31000);await restarted.watch('eggsterr');assert.equal(f.counts.create,2);assert.equal((await restarted.watch('eggsterr')).predictions[0].market.state,'created');
+ const first=await f.mirror.watch('eggsterr');assert.equal(first.predictions[0].market.state,'failed');assert.match(first.predictions[0].market.error!,/límite/);assert.equal(first.predictions[0].market.rateLimited,true);assert.equal(first.predictions[0].market.byteMarketId,undefined);
+ const restarted=await f.restart();assert.equal((await restarted.watch('eggsterr')).predictions[0].market.rateLimited,true);assert.equal(f.counts.create,1);
+ f.advance(31000);await restarted.watch('eggsterr');assert.equal(f.counts.create,2);const recovered=(await restarted.watch('eggsterr')).predictions[0];assert.equal(recovered.market.state,'created');assert.equal(recovered.market.rateLimited,false);
 },false,false,true));

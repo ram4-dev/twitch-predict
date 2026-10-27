@@ -8,6 +8,8 @@ import {Input} from './components/input.js';
 import {Badge} from './components/badge.js';
 import {Notice} from './components/plot.js';
 import {enableSpotlight} from './components/materials.js';
+import {closesAt} from '../prediction.js';
+import type {TwitchPreview} from '../twitch-preview.js';
 import {solToLamports,type ByteConfig,type DisplayByteMarket} from '../byte-model.js';
 export const sol=(amount:number|string)=>new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(amount)/1e9);
 export type ByteSelection={amount:string;option:number};
@@ -54,4 +56,26 @@ function ExtensionMarket({market,config,operation}:{market:DisplayByteMarket;con
 export function byteMarketView(market:DisplayByteMarket,config:ByteConfig|undefined,operation?:ExtensionOperation){
  let view=roots.get(market.id);if(!view){const node=document.createElement('article');node.className='prediction';node.dataset.marketId=market.id;view={node,root:createRoot(node),generation};roots.set(market.id,view);enableSpotlight(node);}view.generation=generation;view.node.dataset.predictionId=market.notes?.twitch?.predictionId??'';
  flushSync(()=>view.root.render(<ExtensionMarket market={market} config={config} operation={operation}/>));return view.node;
+}
+
+// Twitch data stays separate from real markets and never enters the wallet flow.
+export function TwitchMarketPreview({item,extension=false}:{item:TwitchPreview;extension?:boolean}){
+ const p=item.prediction,[now,setNow]=useState(Date.now()),Heading=extension?'h1':'h3';
+ useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
+ const closed=p.status!=='ACTIVE'||!!p.lockedAt||now>=closesAt(p),remaining=Math.max(0,Math.ceil((closesAt(p)-now)/1000));
+ const hasPoints=p.outcomes.every(o=>o.totalPoints!=null),total=p.outcomes.reduce((sum,o)=>sum+(o.totalPoints??0),0),number=(n:number)=>new Intl.NumberFormat('es-AR').format(n);
+ return <section className="points-market byte-betting byte-preview" aria-label="Predicción de Twitch sin mercado en Solana">
+  <div className="topline market-heading"><span>@{p.channel} · Twitch</span><span>{closed?'Predicción cerrada':`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`}</span></div>
+  <Heading className="market-question">{p.title}</Heading>
+  <div className="points-market-head"><span className="points-status"><span className="status-mark"/>{p.status==='RESOLVED'?'Resultado de Twitch':p.status==='CANCELED'?'Cancelada en Twitch':closed?'Cerrada en Twitch':'Esperando mercado'}</span><Badge variant="secondary">Vista previa · Twitch</Badge></div>
+  <div className="pool-summary"><div className="points-pool"><span>Puntos del canal en Twitch</span><strong>{hasPoints?number(total):'—'} <small>puntos</small></strong></div></div>
+  <div className="pool-split" role="img" aria-label="Distribución de puntos de Twitch">{p.outcomes.map((o,i)=><span key={o.id} className={i%2===0?'share-primary':'share-secondary'} style={{width:`${hasPoints&&total?(o.totalPoints??0)/total*100:0}%`}}/>)}</div>
+  <div className="points-options">{p.outcomes.map((o,i)=><div key={o.id} className={`points-option ${i%2===0?'side-first':'side-second'}`}><div className="option-heading"><strong>{o.title}</strong><span>{hasPoints&&total?`${Math.round((o.totalPoints??0)/total*100)}%`:'—'}</span></div><p>{o.totalPoints==null?'Puntos no disponibles':`${number(o.totalPoints)} puntos de Twitch`}</p>{p.winningOutcomeId===o.id&&<span className="points-winner"><Check size={15}/>Resultado ganador</span>}<Button className="points-bet" tone={i%2===0?'positive':'negative'} disabled>Apostar a {o.title}<ArrowUpRight size={15}/></Button></div>)}</div>
+  <Notice>{closed?'Esta predicción ya cerró en Twitch.':'Byte alcanzó su límite. Mostramos la predicción y reintentamos crear el mercado automáticamente.'} Las apuestas en SOL estarán disponibles cuando exista el mercado en Solana.</Notice>
+ </section>;
+}
+export function twitchPreviewView(item:TwitchPreview){
+ const key=`twitch:${item.prediction.channel}:${item.prediction.id}`;let view=roots.get(key);
+ if(!view){const node=document.createElement('article');node.className='prediction';node.dataset.predictionId=item.prediction.id;view={node,root:createRoot(node),generation};roots.set(key,view);enableSpotlight(node);}view.generation=generation;
+ flushSync(()=>view.root.render(<TwitchMarketPreview item={item} extension/>));return view.node;
 }

@@ -1,0 +1,29 @@
+{
+  "task": "Twitch card preview when Byte creation is rejected with 429",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "baseCommit": "94d9320",
+    "branch": "feat-byte-rate-limit-preview",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-byte-rate-limit-preview",
+    "cleanup": "retained clean for review and resumption"
+  },
+  "behavior": [
+    "Expose an explicit rateLimited marker from existing persisted rejected-429 retry state; ambiguous failures are not labeled as a 429.",
+    "Include Twitch snapshots in the public market response so web and MV3 can display the same preview.",
+    "Show source question, options, Twitch points, countdown and pending status; missing points remain unknown. Never create synthetic SOL market IDs, balances, stakes or transaction links.",
+    "Disable preview bet buttons. Reconcile by Twitch event identity and replace with the real bettable Byte market after its existing safe retry succeeds.",
+    "Close the preview using the Twitch status or original deadline; never extend a betting window."
+  ],
+  "verification": {
+    "check": "typecheck, lint, 58 unit tests and build passed; 7 unrelated SQL cases skipped",
+    "e2e": "Byte-mode mirror, 429 preview and Twitch search E2E passed. Final 429 E2E rerun passed after visual corrections, including web and MV3, 390px layout, zero broadcasts and automatic replacement by one real market.",
+    "visual": "Inspected popup, desktop web and 390px web captures; corrected the inherited two-column placement of the single preview card."
+  },
+  "deployment": {
+    "web": "https://plot-devnet.vercel.app",
+    "extensionVersion": "0.17.0",
+    "railwayApiDeployment": "c1e418d4-9116-4c56-b9e2-090fcf05b934",
+    "android": "No native code changes; verified existing APK preserved in downloads."
+  }
+}

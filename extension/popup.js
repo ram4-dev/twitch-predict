@@ -4,7 +4,7 @@ import {popupScope,matchingCache,cacheAllowsBet,cachedBalance,reconcileBytePredi
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
 import './surfaces.js';
-import {byteMarketView,disposeByteViews} from './byte-ui.js';
+import {byteMarketView,twitchPreviewView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
 let liveStream,liveOrigin='',liveReady=false,lastPollAttempt=0,liveDebounce;
@@ -92,10 +92,11 @@ function renderByte(){
  if(receipts.length){history.append(el('h2','Tus apuestas en devnet'));for(const r of receipts.slice(0,8)){const row=el('div',null,'history-row'),link=el('a','Ver transacción');link.href=`https://explorer.solana.com/tx/${r.signature}?cluster=devnet`;link.target='_blank';link.rel='noopener noreferrer';row.append(el('strong',r.title),el('span',`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(r.amount)/1e9)} SOL · ${{pending:'Pendiente',confirmed:'Confirmada',failed:'Falló',expired:'Expiró'}[r.status]??r.status}`),link);history.append(row);}}
  snapshot=state[`channel:${selectedChannel}`];$('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError??'';$('#connection').textContent='SOL devnet';
  const fresh=cacheAllowsBet(byteCache);$('#freshness').hidden=fresh;$('#freshness').textContent=fresh?'':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
- const visible=reconcileBytePredictions(byteMarkets,snapshot?.predictions??[],selectedChannel);
+ const visible=reconcileBytePredictions(byteMarkets,[...(snapshot?.predictions??[]),...(byteCache.predictions??[])],selectedChannel);
  disposePointsViews();disposeByteViews();
  const cards=visible.markets.map(m=>byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation));
  for(const item of visible.predictions){
+  if(item.market?.rateLimited){cards.push(twitchPreviewView(item));continue;}
   const card=el('article',null,'prediction');card.dataset.predictionId=item.prediction.id;card.append(el('span',`@${selectedChannel} · Twitch · Ronda ${time(item.prediction.createdAt)}`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
  }
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Elegí una opción para firmar con Phantom.';
@@ -109,7 +110,7 @@ async function refreshByte(base,scope){
  const balance=async wallet=>{if(!wallet)return;const data=await query('/api/byte/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[wallet]})});if(!Number.isSafeInteger(data?.result?.value)||data.result.value<0)throw new Error('No se pudo actualizar el saldo.');await update({balance:{wallet,lamports:data.result.value,at:Date.now()}});};
  const knownWallet=byteCache.account?.wallet;
  const results=await Promise.allSettled([
-  query('/api/byte/markets').then(data=>update({markets:data.markets,marketsAt:Date.now()})),
+  query('/api/byte/markets').then(data=>update({markets:data.markets,predictions:data.predictions??[],marketsAt:Date.now()})),
   query('/api/byte/config').then(config=>update({config,configAt:Date.now()})),
   (async()=>{
    if(!state.pointsToken){await update({account:undefined,balance:undefined});return;}
