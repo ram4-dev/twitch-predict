@@ -1,0 +1,40 @@
+{
+  "task": "Four isolated payout reveal concepts for review before applying to the extension",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "baseCommit": "40c520e",
+    "branch": "showcase-payout-reveal",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.showcase-payout-reveal",
+    "cleanup": "retained for review and resumption"
+  },
+  "prototype": {
+    "url": "https://plot-devnet.vercel.app/payout-showcase.html",
+    "variants": [
+      "01 Conteo: eased numeric count",
+      "02 Rodillo: staggered rolling digits",
+      "03 Corte: masked reveal",
+      "04 Impacto: short scale entrance"
+    ],
+    "states": [
+      "illustrative net profit +0.018 SOL, stake 0.010 and total payout 0.028",
+      "illustrative loss -0.010 SOL",
+      "spectator: no amount",
+      "unconfirmed payout: no amount"
+    ],
+    "opening": "Simulated browser toolbar and popup. After a short demo delay the mock popup opens and reveals the selected animation. No real extension API is called.",
+    "constraints": "Neutral surfaces; no green background animation or individual winner/loser outcome list, per the user brief. Explicit demo labeling and reduced motion support."
+  },
+  "reviewGate": "Await the user choice before changing live resolution cards or implementing background delivery and automatic popup opening.",
+  "futureChromeImplementation": {
+    "source": "https://developer.chrome.com/docs/extensions/reference/api/action#method-openPopup",
+    "availability": "chrome.action.openPopup documented from Chrome 127; this turn verifies documentation only, not a real background event-to-popup flow.",
+    "workerSource": "https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle"
+  },
+  "verification": {
+    "check": "Typecheck, lint, 60 tests and web build passed; 7 SQL cases skipped. Generated showcase bundle excluded from lint consistently with the other generated UI bundles; TypeScript source remains linted.",
+    "e2e": "Three local E2E passed: all four variants and scenario states; simulated close/reopen, replay, Escape/focus restoration, no API writes; reduced motion, 360px layout and 700x600 visibility. Published 700x600 E2E passed.",
+    "visual": "Desktop overview and compact popup simulation screenshots inspected.",
+    "productionBoundary": "Published extension ZIP compared file by file against the previous 0.17.2 package: zero content differences. Existing resolution components, manifest, service worker and wallet code have no diff. Existing Android APK preserved; generated Vercel .env.local removed."
+  }
+}
