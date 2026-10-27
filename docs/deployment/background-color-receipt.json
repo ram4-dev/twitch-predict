@@ -1,0 +1,13 @@
+{
+  "task": "Increase orange intensity of decorative exclamation background",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "b445c5e",
+    "branch": "fix-background-orange-intensity",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-background-orange-intensity",
+    "cleanup": "retained"
+  },
+  "changes": "Raise balloon rest opacity from .16-.25 to .24-.34 and shared background opacity from .55 to .65. Original artwork, interaction radius and foreground colors preserved.",
+  "verification": "npm run check passed (68 tests; 7 SQL cases skipped). Six relevant browser E2E passed, including responsive layout, real MV3 popup, hover/reduced motion and unchanged controls; popup screenshot inspected."
+}
