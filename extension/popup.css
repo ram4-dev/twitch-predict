@@ -41,3 +41,6 @@ body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index
 
 /* Give the market breathing room and keep the stream shortcut beside the channel. */
 #predictions:not(:empty){margin-top:24px;margin-bottom:28px}.channel-identity{display:flex;align-items:center;gap:8px;min-width:0}.channel-current{flex:0 1 auto}.channel-stream-link{display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;color:var(--muted-foreground);border:1px solid #444;border-radius:50%;text-decoration:none}.channel-stream-link:hover{color:#fff;border-color:#888}.extension-channel-control:has([aria-expanded=true]) .channel-stream-link{visibility:hidden}
+
+/* The animated rim sits outside the market card rather than inside its border. */
+body .prediction.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23px}
