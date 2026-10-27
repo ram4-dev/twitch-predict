@@ -42,7 +42,7 @@ export interface HalftoneWordmarkProps {
  placement?:'center'|'bottom';assemble?:boolean;accentLast?:boolean;
 }
 /** Transparent canvas for the app header and MV3 popup, without footer navigation. */
-export function HalftoneWordmark({wordmark='plot!',label=wordmark,className='',ink='#f2f2f2',warm='#ff7049',fontFamily='Fraunces',fontWeight=800,dotGap=2,radius=28,crop=0,grain=0,interactive=true,paused=false,replayKey=0,placement='center',assemble=true,accentLast=true}:HalftoneWordmarkProps){
+export function HalftoneWordmark({wordmark='Plot!',label=wordmark,className='',ink='#f2f2f2',warm='#ff7049',fontFamily='Fraunces',fontWeight=800,dotGap=2,radius=28,crop=0,grain=0,interactive=true,paused=false,replayKey=0,placement='center',assemble=true,accentLast=true}:HalftoneWordmarkProps){
  const ref=React.useRef<HTMLCanvasElement>(null);
  const [reduced,setReduced]=React.useState(()=>typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches);
  React.useEffect(()=>{const media=matchMedia('(prefers-reduced-motion: reduce)'),change=()=>setReduced(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
@@ -117,7 +117,7 @@ export function HalftoneWordmark({wordmark='plot!',label=wordmark,className='',i
 }
 
 /** Original footer composition, available for pages that need navigation above the wordmark. */
-export default function HalftoneWordmarkFooter({wordmark='plot!',label='Plot',meta='El stream en juego',columns=[],backToTop=true,preset='night',palette,dotGap=6,radius=80,crop=.2,grain=.5,interactive=true,fontFamily='Fraunces, Georgia, serif',fontWeight=800,monoFamily='Inter, system-ui, sans-serif',height='560px',className=''}:HalftoneWordmarkFooterProps){
+export default function HalftoneWordmarkFooter({wordmark='Plot!',label='Plot',meta='El stream en juego',columns=[],backToTop=true,preset='night',palette,dotGap=6,radius=80,crop=.2,grain=.5,interactive=true,fontFamily='Fraunces, Georgia, serif',fontWeight=800,monoFamily='Inter, system-ui, sans-serif',height='560px',className=''}:HalftoneWordmarkFooterProps){
  const colors={...PRESETS[preset],...palette};
  return <footer className={`hwf-root ${className}`} style={{height,background:colors.background,color:colors.ink,fontFamily:monoFamily}}>
   <HalftoneWordmark wordmark={wordmark} label={wordmark} className="hwf-canvas" ink={colors.ink} warm={colors.warm} fontFamily={fontFamily} fontWeight={fontWeight} dotGap={dotGap} radius={radius} crop={crop} grain={grain} interactive={interactive} placement="bottom" assemble={false} accentLast={false}/>

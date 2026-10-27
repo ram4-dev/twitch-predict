@@ -46,6 +46,6 @@ export function enableSpotlight(node:HTMLElement){
  node.addEventListener('pointerenter',follow);node.addEventListener('pointermove',follow);
 }
 // Shared halftone engine, adapted from the supplied wordmark component.
-export function HalftonePlot({replayKey=0,paused=false,label='plot! en puntos'}:{replayKey?:number;paused?:boolean;label?:string}){
- return <HalftoneWordmark wordmark="plot!" className="plot-halftone" label={label} replayKey={replayKey} paused={paused}/>;
+export function HalftonePlot({replayKey=0,paused=false,label='Plot! en puntos'}:{replayKey?:number;paused?:boolean;label?:string}){
+ return <HalftoneWordmark wordmark="Plot!" className="plot-halftone" label={label} replayKey={replayKey} paused={paused}/>;
 }
