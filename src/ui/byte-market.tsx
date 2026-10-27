@@ -25,7 +25,7 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
  // Preserve that sporting result without presenting the refund as a win/payout.
  const sourceWinner=m.status==='invalid'&&m.invalidReason==='nobody bet on the outcome'&&m.notes?.twitch?.status==='RESOLVED'?m.notes.resolution?.winner:null;
  const refundedWinner=sourceWinner!=null&&!!m.options[sourceWinner]&&m.pools[sourceWinner]===0?sourceWinner:null;
- if((extension&&m.status!=='open')||(resolution&&['resolved','invalid'].includes(m.status)))return <section className="points-market byte-betting"><Resolution title={m.title} channel={m.notes?.channel??'partner'} outcomes={m.options.map((title,i)=>({id:String(i),title}))} winnerId={m.winner!==null?String(m.winner):refundedWinner!==null?String(refundedWinner):undefined} canceled={m.status==='invalid'&&refundedWinner===null} accountKnown={false} unavailableMessage="El importe de tu cobro no está disponible.">
+ if((extension&&m.status!=='open')||(resolution&&['resolved','invalid'].includes(m.status)))return <section className="points-market byte-betting"><div className="topline">Ronda {new Date(m.openMs).toLocaleString('es-AR')}</div><Resolution title={m.title} channel={m.notes?.channel??'partner'} outcomes={m.options.map((title,i)=>({id:String(i),title}))} winnerId={m.winner!==null?String(m.winner):refundedWinner!==null?String(refundedWinner):undefined} canceled={m.status==='invalid'&&refundedWinner===null} accountKnown={false} unavailableMessage="El importe de tu cobro no está disponible.">
   {refundedWinner!==null&&<Notice>Resultado confirmado en Twitch. Mercado SOL anulado: no hubo apuestas a la opción ganadora. {m.chain.settled?'Reembolsos completados en cadena.':'Reembolsos pendientes de Byte.'}</Notice>}
   <Notice tone={m.chain.settled?'success':'info'}>{m.chain.settled?'Pagos o reembolsos completados en cadena.':'Resultado registrado. Esperando que byte complete los pagos.'}</Notice>
   <a className="resolution-chain-link" href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana devnet <ArrowUpRight size={14}/></a>
@@ -71,6 +71,7 @@ export function TwitchMarketPreview({item,extension=false}:{item:TwitchPreview;e
  const hasPoints=p.outcomes.every(o=>o.totalPoints!=null),total=p.outcomes.reduce((sum,o)=>sum+(o.totalPoints??0),0),number=(n:number)=>new Intl.NumberFormat('es-AR').format(n);
  const winner=p.outcomes.find(o=>o.id===p.winningOutcomeId);
  if(p.status==='CANCELED'||(p.status==='RESOLVED'&&winner))return <section className="points-market byte-betting byte-preview" aria-label="Resultado de Twitch sin mercado en Solana">
+  <div className="topline">Ronda {new Date(p.createdAt).toLocaleString('es-AR')}</div>
   <Resolution title={p.title} channel={p.channel} outcomes={p.outcomes} winnerId={winner?.id} canceled={p.status==='CANCELED'}>
    <Notice>{p.status==='CANCELED'?'Twitch canceló esta ronda.':'Resultado confirmado en Twitch.'} Esta ronda no tuvo mercado ni apuestas en SOL.</Notice>
   </Resolution>
