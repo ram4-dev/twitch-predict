@@ -35,7 +35,7 @@ export function byteRouter(service:ByteService,points:Points,localToken:string,e
     try{res.json(await mirror.watch(input.channel));}catch(e){throw new ByteError(502,`No se pudo verificar Twitch: ${(e as Error).message}`);}
   }));
   router.get('/config',route(async(_req,res)=>res.json(await service.config())));
-  router.get('/markets',route(async(_req,res)=>res.json({markets:await service.list()})));
+  router.get('/markets',route(async(_req,res)=>res.json({markets:await service.list(),predictions:mirror?.channels().flatMap(channel=>mirror.snapshot(channel))??[]})));
   router.get('/markets/:id',route(async(req,res)=>res.json({market:await service.get(marketId.parse(req.params.id))})));
   router.post('/markets',route(async(req,res)=>{operator(req);res.status(201).json({market:await service.create(req.body)});}));
   router.get('/operations',route((req,res)=>{operator(req);res.json({operations:service.operations()});}));

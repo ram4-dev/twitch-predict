@@ -21,3 +21,5 @@
 .byte-app .market-card.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23px}.byte-app .market-card.plot-glow-card::after{z-index:3;background:radial-gradient(250px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
 .byte-app .market-card:has(.plot-resolution){padding:0;background:transparent;border:0}.byte-app .market-card .byte-betting:has(.plot-resolution){padding:0;background:transparent}.byte-app .market-card:has(.plot-resolution)>.market-heading{padding:18px 22px 0}.byte-app .market-card:has(.plot-resolution)>details{padding:0 22px 18px}.byte-app .market-card .plot-resolution .plot-notice{margin:16px 0 0}
 @media(prefers-reduced-motion:reduce){.byte-app.plot-glow-stage::before{background:radial-gradient(640px circle at 50% 160px,rgb(255 112 73 / .2),transparent 85%)}}
+
+.byte-app .market-card:only-child>.byte-preview{grid-column:1/-1;grid-row:auto}
