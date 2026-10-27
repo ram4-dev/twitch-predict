@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {ArrowRight,Check,Loader2} from 'lucide-react';
-import {PlotLogo,Chameleon} from './components/plot.js';
+import {PlotLogo,PlotMascot} from './components/plot.js';
 import {Button} from './components/button.js';
 
 type Provider={isPhantom?:boolean;connect(options?:{onlyIfTrusted?:boolean}):Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
@@ -39,7 +39,7 @@ export function StreamerOnboarding(){
  }catch(e){const err=e as Error&{code?:number};setError(err.code===4001?'Cancelaste la conexión o la firma. Podés volver a intentar.':err.message);}finally{setBusy('');}};
  const connectTwitch=async()=>{setError('');setBusy('Abriendo Twitch…');try{const result=await request<{url:string}>('/api/twitch/start',{streamerOnboarding:true});location.assign(result.url);}catch(e){setError((e as Error).message);setBusy('');}};
  const register=async()=>{if(!account?.twitch)return;setError('');setBusy('Activando tu canal…');try{await watch(account.twitch.login);}catch(e){setError((e as Error).message);}finally{setBusy('');}};
- return <main className="onboarding"><a className="auth-brand" href="/"><PlotLogo/></a><section className="auth-card streamer-onboarding"><div className="auth-progress"><span>Plot para streamers</span><span>SOL devnet</span></div><Chameleon/><h1>Tu stream, en Plot.</h1><p>Conectá tu wallet y verificá tu canal para seguir tus predicciones de Twitch.</p>
+ return <main className="onboarding"><a className="auth-brand" href="/"><PlotLogo/></a><section className="auth-card streamer-onboarding"><div className="auth-progress"><span>Plot para streamers</span><span>SOL devnet</span></div><PlotMascot/><h1>Tu stream, en Plot.</h1><p>Conectá tu wallet y verificá tu canal para seguir tus predicciones de Twitch.</p>
   <ol className="streamer-steps"><li><div><strong>Wallet Phantom</strong><p>{account?.wallet?`${account.wallet.slice(0,6)}…${account.wallet.slice(-5)}`:'Conectá y firmá para crear tu cuenta.'}</p></div>{account?.wallet?<Check aria-label="Conectada" size={20}/>:installed?<Button variant="outline" disabled={!!busy} onClick={()=>void connectWallet()}>Conectar Phantom</Button>:<a href="https://phantom.com/download" target="_blank" rel="noopener">Instalar Phantom</a>}</li>
   <li><div><strong>Canal de Twitch</strong><p>{account?.twitch?`@${account.twitch.login}`:configured===false?'La conexión con Twitch todavía no está configurada.':'Verificá que el canal es tuyo.'}</p></div>{account?.twitch?<Check aria-label="Conectado" size={20}/>:<Button variant="outline" disabled={!account?.wallet||configured!==true||!!busy} onClick={()=>void connectTwitch()}>Conectar Twitch</Button>}</li></ol>
   {busy&&<p role="status"><Loader2 size={16} className="animate-spin"/> {busy}</p>}{error&&<p className="auth-error" role="alert">{error}</p>}

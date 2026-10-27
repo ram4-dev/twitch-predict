@@ -89,8 +89,9 @@ export function Mascot() {
     <View style={{ width: 92, height: 92, overflow: "hidden" }}>
       <Image
         accessible={false}
-        source={require("../../assets/brand/chameleon-poses.png")}
-        style={{ width: 276, height: 92, position: "absolute", left: -92 }}
+        source={require("../../assets/brand/mascot-watching.png")}
+        style={{ width: 92, height: 92 }}
+        resizeMode="contain"
       />
     </View>
   );
