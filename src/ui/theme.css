@@ -32,3 +32,5 @@ body *{font-variant-numeric:inherit}.points-status,.points-pool>span,.pool-peopl
 .expandable-search .search-input::-webkit-search-cancel-button,.expandable-search .search-input::-webkit-search-decoration{-webkit-appearance:none;appearance:none}
 
 .expandable-search[data-direction="left"] .search-input{padding-left:40px}
+
+@import "./spotlight-card.css";

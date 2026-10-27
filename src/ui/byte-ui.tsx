@@ -8,7 +8,7 @@ import {Input} from './components/input.js';
 import {PlotLogo,Chameleon,Notice,Field,Select} from './components/plot.js';
 import {type ByteConfig,type DisplayByteMarket,solToLamports} from '../byte-model.js';
 import {Scene} from './scene.js';
-import {enableSpotlight} from './components/materials.js';
+import {GlowCard} from '@/components/ui/spotlight-card';
 import {ByteBetting,sol,type ByteSelection} from './byte-market.js';
 import {connection,phantom,sendBet,checkReceipt,receipts,type BetReceipt} from '../byte-wallet.js';
 
@@ -136,9 +136,9 @@ function MarketCard({market:m,config,wallet,disabled,onDone}:{market:DisplayByte
     try{const receipt=await sendBet(m,option,amount,wallet,config,setMessage);setMessage(receipt.status==='confirmed'?'Apuesta confirmada en Solana.':receipt.status==='pending'?'Confirmación pendiente. Revisá la firma en Mis apuestas antes de enviar otra.':receipt.status==='expired'?'La transacción expiró sin confirmación.':'La transacción falló en cadena.');setFailed(receipt.status==='failed');}
     catch(e){setMessage(walletError(e));setFailed(true);}finally{setBusy(false);await onDone();}
   };
-  return <article className="market-card byte-market" data-market-id={m.id} ref={node=>{if(node)enableSpotlight(node);}}><div className="market-heading"><a href={m.notes?`https://twitch.tv/${m.notes.channel}`:undefined} target="_blank" rel="noopener noreferrer">{m.notes?`@${m.notes.channel}`:'Mercado del partner'}</a><span>Cierre: {new Date(m.closeMs).toLocaleString('es-AR')}</span></div><h3>{m.title}</h3><ByteBetting market={m} config={config} initial={selection} disabled={disabled||busy} onBet={next=>void bet(next)}/>
+  return <GlowCard className="market-card byte-market" data-market-id={m.id}><div className="market-heading"><a href={m.notes?`https://twitch.tv/${m.notes.channel}`:undefined} target="_blank" rel="noopener noreferrer">{m.notes?`@${m.notes.channel}`:'Mercado del partner'}</a><span>Cierre: {new Date(m.closeMs).toLocaleString('es-AR')}</span></div><h3>{m.title}</h3><ByteBetting market={m} config={config} initial={selection} disabled={disabled||busy} onBet={next=>void bet(next)}/>
     {message&&<Notice tone={failed?'error':'info'}>{message}</Notice>}
-    <details><summary>Reglas y evidencia</summary><p>{m.notes?.rules??'Este mercado no tiene reglas registradas en esta aplicación.'}</p>{m.notes?.resolution&&<p>Evidencia: {m.notes.resolution.evidence}</p>}{m.invalidReason&&<p>Anulación: {m.invalidReason}</p>}<p>Si no hay apuestas ganadoras o se anula, byte devuelve las apuestas. Sin resolución, el protocolo prevé anular a los 7 días del cierre.</p><a href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana <ExternalLink size={13}/></a></details></article>;
+    <details><summary>Reglas y evidencia</summary><p>{m.notes?.rules??'Este mercado no tiene reglas registradas en esta aplicación.'}</p>{m.notes?.resolution&&<p>Evidencia: {m.notes.resolution.evidence}</p>}{m.invalidReason&&<p>Anulación: {m.invalidReason}</p>}<p>Si no hay apuestas ganadoras o se anula, byte devuelve las apuestas. Sin resolución, el protocolo prevé anular a los 7 días del cierre.</p><a href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana <ExternalLink size={13}/></a></details></GlowCard>;
 }
 function CreateMarket({disabled,token,onDone}:{disabled:boolean;token:string;onDone:()=>Promise<void>}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');

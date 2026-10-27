@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {enhanceGlowCard} from '@/components/ui/spotlight-card';
 import {ShaderMount,liquidMetalFragmentShader,ditheringFragmentShader} from '@paper-design/shaders';
 
 // Liquid Metal Button: adapted from johuniq / Joly UI (MIT).
@@ -38,6 +39,7 @@ export function DitherField({shape='swirl',paused=false}:{shape?:'swirl'|'simple
 // Spotlight Card by Hossain Jahed: own implementation of the documented pointer-light behavior.
 const spotlightNodes=new WeakSet<HTMLElement>();
 export function enableSpotlight(node:HTMLElement){
+ if(node.matches('.market-card,.prediction')){enhanceGlowCard(node);return;}
  if(spotlightNodes.has(node))return;spotlightNodes.add(node);node.classList.add('plot-spotlight');
  const follow=(e:PointerEvent)=>{if(e.pointerType==='touch')return;const r=node.getBoundingClientRect();node.style.setProperty('--spot-x',`${e.clientX-r.left}px`);node.style.setProperty('--spot-y',`${e.clientY-r.top}px`);};
  node.addEventListener('pointerenter',follow);node.addEventListener('pointermove',follow);
