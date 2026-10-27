@@ -35,3 +35,6 @@ body.plot-glow-stage::before{position:fixed;inset:0;border-radius:0}
 
 /* The light remains visible over opaque card surfaces without blocking controls. */
 body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index:3;background:radial-gradient(320px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
+
+/* The logo's animated texture fills the popup behind the spotlight and content. */
+.popup-atmosphere{position:fixed;inset:0;z-index:-2;opacity:.55;pointer-events:none;overflow:hidden}.popup-atmosphere .plot-dither-field{z-index:0;background:#080808;border-radius:0}
