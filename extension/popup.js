@@ -82,7 +82,7 @@ function renderByte(){
  const receipts=(state.byteReceipts??[]).filter(r=>r.wallet===account?.wallet);
  if(receipts.length){history.append(el('h2','Tus apuestas en devnet'));for(const r of receipts.slice(0,8)){const row=el('div',null,'history-row'),link=el('a','Ver transacción');link.href=`https://explorer.solana.com/tx/${r.signature}?cluster=devnet`;link.target='_blank';link.rel='noopener noreferrer';row.append(el('strong',r.title),el('span',`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(r.amount)/1e9)} SOL · ${{pending:'Pendiente',confirmed:'Confirmada',failed:'Falló',expired:'Expiró'}[r.status]??r.status}`),link);history.append(row);}}
  snapshot=state[`channel:${selectedChannel}`];$('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError??'';$('#connection').textContent='SOL devnet';
- const fresh=cacheAllowsBet(byteCache);$('#freshness').textContent=fresh?'Mercados actualizados · SOL devnet':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
+ const fresh=cacheAllowsBet(byteCache);$('#freshness').hidden=fresh;$('#freshness').textContent=fresh?'':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
  const visible=reconcileBytePredictions(byteMarkets,snapshot?.predictions??[],selectedChannel);
  disposePointsViews();disposeByteViews();
  const cards=visible.markets.map(m=>byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation));
