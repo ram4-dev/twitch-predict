@@ -23,7 +23,7 @@ export function LatexAtmosphere(){
     const size=75+(seed%5)*15,inflate=1+influence*.12;
     ctx.save();ctx.translate(cx+x*8*influence,cy+y*8*influence);
     ctx.rotate(((seed%7)-3)*.14+influence*x*.08);ctx.scale(inflate+influence*.04,inflate-influence*.025);
-    ctx.globalAlpha=.16+(seed%3)*.045+influence*.23;
+    ctx.globalAlpha=.24+(seed%3)*.05+influence*.25;
     // Source rectangle contains only ! (including its dot), never the letters.
     ctx.drawImage(image,1230,268,158,425,-size*158/425/2,-size/2,size*158/425,size);
     ctx.restore();
