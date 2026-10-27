@@ -22,3 +22,5 @@
 .catalog-page .plot-button[data-tone=positive] .liquid-metal-surface{background-image:linear-gradient(110deg,#20543c,#a1f4c8 18%,#23865b 40%,#59e9a3 60%,#194a33 80%,#a1f4c8)}
 .catalog-page .plot-button[data-tone=negative] .liquid-metal-surface{background-image:linear-gradient(110deg,#6d2028,#ffc0c4 18%,#bc3444 40%,#ff7483 60%,#651c26 80%,#ffc0c4)}
 .dia-pool{margin:24px 0}
+
+.resolution-nav-link{padding:12px 0;font-size:14px;color:#ddd;white-space:nowrap}.resolution-nav-link:hover{color:#fff}

@@ -13,6 +13,7 @@ await build({entryPoints:['src/extension-page-wallet.ts'],outfile:'extension/pag
 await build({entryPoints:['src/ui/byte-ui.tsx'],outfile:'public/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/byte-market.tsx'],outfile:'extension/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/catalog.tsx'],outfile:'public/catalog.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['src/ui/resolution.tsx'],outfile:'public/resolution.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 execFileSync('./node_modules/.bin/tailwindcss',['-i','src/ui/theme.css','-o','public/points-ui.css','--minify'],{stdio:'inherit'});
 await build({entryPoints:['src/ui/surfaces.tsx'],outfile:'public/surfaces.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await cp('node_modules/@paper-design/shaders/LICENSE','public/brand/Paper-Shaders-LICENSE.txt');
@@ -23,6 +24,7 @@ await cp('public/surfaces.js','extension/surfaces.js');
 await cp('public/fonts','extension/fonts',{recursive:true});
 await cp('public/points-ui.js', 'extension/points-ui.js');
 await cp('public/points-ui.css', 'extension/points-ui.css');
+await cp('src/ui/resolution-card.css','public/resolution-card.css');
 await mkdir('dist', { recursive: true });
 await build({ entryPoints: ['src/server.ts'], outfile: 'dist/server.js', platform: 'node', format: 'esm', packages: 'external', bundle: true });
 await cp('legacy-public', 'dist/legacy-public', { recursive: true });
