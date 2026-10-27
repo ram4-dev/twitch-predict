@@ -5,11 +5,14 @@
   --glow-color: 255 112 73;
   --glow-x: 50%;
   --glow-y: 30%;
+  --glow-strength: .12;
   position: relative;
   isolation: isolate;
   border: 1px solid rgb(255 255 255 / .18);
   border-radius: 20px;
-  background: rgb(24 24 24 / .78);
+  background-color: rgb(24 24 24 / .9);
+  background-image: radial-gradient(ellipse farthest-corner at var(--glow-x) var(--glow-y), /* taste-skill-ignore: requested full card spotlight background. */
+    rgb(var(--glow-color) / var(--glow-strength)), rgb(var(--glow-color) / .025) 85%);
   backdrop-filter: blur(5px); /* taste-skill-ignore: translucent card explicitly selected by user. */
 }
 .plot-glow-card::before,
@@ -30,27 +33,22 @@
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); /* taste-skill-ignore: border mask, no decorative fill. */
   mask-composite: exclude;
 }
-.plot-glow-card::after,
-.plot-glow-card.plot-spotlight::after {
-  z-index: -1;
-  background: radial-gradient(320px circle at var(--glow-x) var(--glow-y), /* taste-skill-ignore: requested cursor spotlight. */
-    rgb(var(--glow-color) / .13), transparent 75%);
-}
+.plot-glow-card.plot-spotlight::after { display: none; }
+.plot-glow-card:has(:focus-visible) { --glow-strength: .22; }
+.plot-glow-card:has(:focus-visible)::before { opacity: 1; }
 @media (hover: hover) and (pointer: fine) {
-  .plot-glow-card[data-glow-active=true]::before,
-  .plot-glow-card[data-glow-active=true]::after { opacity: 1; }
+  .plot-glow-card[data-glow-active=true] { --glow-strength: .28; }
+  .plot-glow-card[data-glow-active=true]::before { opacity: 1; }
 }
-.plot-glow-card:has(:focus-visible)::before,
-.plot-glow-card:has(:focus-visible)::after { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   .plot-glow-card::before,
   .plot-glow-card::after { transition: none; }
-  .plot-glow-card[data-glow-active=true]::before,
-  .plot-glow-card[data-glow-active=true]::after { opacity: 0; }
+  .plot-glow-card[data-glow-active=true] { --glow-strength: .12; }
+  .plot-glow-card[data-glow-active=true]::before { opacity: 0; }
   .plot-glow-card:has(:focus-visible)::before { opacity: 1; }
 }
 @media (forced-colors: active) {
   .plot-glow-card::before,
   .plot-glow-card::after { display: none; }
-  .plot-glow-card { border-color: CanvasText; }
+  .plot-glow-card { border-color: CanvasText; background-image: none; }
 }
