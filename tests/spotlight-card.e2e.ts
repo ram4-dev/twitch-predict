@@ -7,9 +7,9 @@ test('spotlight sits behind bet cards without changing stakes, intercepting cont
  const card=page.locator('[data-market-id="pm_spotlight"]'),amount=card.getByRole('textbox',{name:'Importe en SOL devnet'});
  await expect(card).toHaveClass(/plot-glow-card/);
  const stage=page.locator('.byte-app.plot-glow-stage');
- await expect(stage).toBeVisible();await expect(page.locator('body > .popup-atmosphere .plot-dither-field canvas')).toHaveCount(1);await expect(page.getByRole('button',{name:/Pausar animación|Reanudar animación/})).toHaveCount(0);expect(await stage.evaluate(el=>getComputedStyle(el,'::before').filter)).toBe('blur(18px)');
+ await expect(stage).toBeVisible();await expect(page.locator('body > .popup-atmosphere .plot-latex-field canvas')).toHaveCount(1);await expect(page.getByRole('button',{name:/Pausar animación|Reanudar animación/})).toHaveCount(0);expect(await stage.evaluate(el=>getComputedStyle(el,'::before').filter)).toBe('blur(18px)');
  expect(await card.evaluate(el=>getComputedStyle(el).backgroundImage)).toBe('none');
- expect(await stage.evaluate(el=>getComputedStyle(el,'::before').backgroundImage)).toContain('radial-gradient');
+ expect(await stage.evaluate(el=>getComputedStyle(el,'::before').backgroundImage)).toBe('none');
  expect(await stage.evaluate(el=>getComputedStyle(el,'::before').zIndex)).toBe('-1');await amount.fill('0.05');
  await card.scrollIntoViewIfNeeded();const box=(await card.boundingBox())!;
  for(const x of [30,box.width-30]){

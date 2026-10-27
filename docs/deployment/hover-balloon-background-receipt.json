@@ -1,0 +1,13 @@
+{
+  "task": "Hover-only balloon logo and reflective latex background",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "5d227e2",
+    "branch": "feat-hover-balloon-background",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-hover-balloon-background",
+    "cleanup": "retained"
+  },
+  "scope": "Logo renders once at rest, moves during hover/press and stops after settling. The old dither and global halo are replaced in live surfaces by pointer-following reflective latex folds. Full viewport coverage; no input interception; reduced motion static.",
+  "verification": "npm run check passed: typecheck, lint, 65 tests; 7 SQL cases skipped; build passed. Seven relevant E2E passed: hover-only logo with pixel-stable idle; reduced motion and context loss; whole-viewport background pointer response; compact header; responsive dashboard; real MV3 forms and renderer; native popup size; card light/input interactions. Popup screenshot inspected."
+}
