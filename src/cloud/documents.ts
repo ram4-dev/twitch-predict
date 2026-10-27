@@ -32,11 +32,13 @@ export class Documents {
    if(fence){const lease=await client.query('SELECT owner FROM plot_private.leases WHERE namespace=$1 AND name=$2 AND owner=$3 AND expires_at>clock_timestamp() FOR SHARE',[this.namespace,fence.name,fence.owner]);if(!lease.rowCount)throw new Error('Worker lease lost');}
    await client.query('INSERT INTO plot_private.documents(namespace,name,data) VALUES($1,$2,$3::jsonb) ON CONFLICT DO NOTHING',[this.namespace,name,JSON.stringify(initial())]);
    const {rows}=await client.query('SELECT data FROM plot_private.documents WHERE namespace=$1 AND name=$2 FOR UPDATE',[this.namespace,name]);
-   const state=rows[0].data as T,result=await work(state);
+   const state=rows[0].data as T,before=JSON.stringify(state),result=await work(state);
    await client.query('UPDATE plot_private.documents SET data=$3::jsonb, revision=revision+1, updated_at=now() WHERE namespace=$1 AND name=$2',[this.namespace,name,JSON.stringify(state)]);
+   if((name==='byte'||name==='byte-twitch')&&before!==JSON.stringify(state))await client.query("SELECT pg_notify('plot_market_events', $1)",[JSON.stringify({namespace:this.namespace,name})]);
    return {state,result};
   });
  }
+ async notifyMarketChange(){await this.pool.query("SELECT pg_notify('plot_market_events', $1)",[JSON.stringify({namespace:this.namespace,name:'byte'})]);}
  async allowRequest(name:string,limit:number){
   const result=await this.pool.query(`INSERT INTO plot_private.request_limits(namespace,name,window_start,requests) VALUES($1,$2,date_trunc('minute',now()),1)
    ON CONFLICT(namespace,name) DO UPDATE SET window_start=excluded.window_start,requests=CASE WHEN plot_private.request_limits.window_start=excluded.window_start THEN plot_private.request_limits.requests+1 ELSE 1 END

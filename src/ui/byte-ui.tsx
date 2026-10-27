@@ -35,7 +35,17 @@ function App(){
       const next=await request<ByteConfig>('/byte/config');setConfig(next);setLoadError('');
     }catch(e){setLoadError((e as Error).message);}finally{setLoading(false);setHistory(receipts());}
   };
-  useEffect(()=>{void refresh();const timer=setInterval(()=>void refresh(),6000);return()=>clearInterval(timer);},[]);
+  useEffect(()=>{
+    let ready=false,lastRefresh=0,pending:ReturnType<typeof setTimeout>|undefined;
+    const reload=()=>{lastRefresh=Date.now();void refresh();};
+    const stream=new EventSource('/api/live/markets');
+    stream.addEventListener('ready',()=>{ready=true;reload();});
+    stream.addEventListener('markets',()=>{if(pending)clearTimeout(pending);pending=setTimeout(reload,250);});
+    stream.onerror=()=>{ready=false;};
+    reload();const timer=setInterval(()=>{if(!ready||Date.now()-lastRefresh>=30000)reload();},6000);
+    const visible=()=>{if(!document.hidden)reload();};document.addEventListener('visibilitychange',visible);
+    return()=>{stream.close();clearInterval(timer);if(pending)clearTimeout(pending);document.removeEventListener('visibilitychange',visible);};
+  },[]);
   useEffect(()=>{if(!wallet){setBalance(undefined);return;}let active=true;const refreshBalance=()=>void connection().getBalance(new (PublicKeyClass)(wallet)).then(n=>{if(active)setBalance(n);}).catch(()=>{if(active)setBalance(undefined);});refreshBalance();const timer=setInterval(refreshBalance,12000);return()=>{active=false;clearInterval(timer);};},[wallet]);
   useEffect(()=>{
     let active=true;

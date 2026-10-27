@@ -7,6 +7,15 @@ import './surfaces.js';
 import {byteMarketView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
+let liveStream,liveOrigin='',liveReady=false,lastPollAttempt=0,liveDebounce;
+function connectLive(base){
+ if(liveStream&&liveOrigin===base)return;liveStream?.close();liveReady=false;liveOrigin=base;
+ const stream=new EventSource(`${base}/api/live/markets`);liveStream=stream;$('#live-status').textContent='Actualización periódica';
+ stream.addEventListener('ready',()=>{if(liveStream!==stream)return;liveReady=true;$('#live-status').textContent='Conexión en vivo';void load(true);void requestPoll();});
+ stream.addEventListener('markets',()=>{if(liveStream!==stream)return;clearTimeout(liveDebounce);liveDebounce=setTimeout(()=>void load(true),250);});
+ stream.onerror=()=>{if(liveStream===stream){liveReady=false;$('#live-status').textContent='Actualización periódica';}};
+}
+window.addEventListener('pagehide',()=>{liveStream?.close();clearTimeout(liveDebounce);});
 let selectedChannel='',activeChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
 const settledCards=new Map();
@@ -119,9 +128,10 @@ async function load(force=false){
     state=await chrome.storage.local.get(null);contextDirty=false;const base=bridgeUrl(),scope=await popupScope(base,state.pointsToken);
     const stored=matchingCache(state.popupCache,base,scope);
     if(byteCache?.scope!==scope){byteCache=stored??(byteMode?{version:1,base,scope,markets:[],marketsAt:0,configAt:0}:undefined);lastRefresh=0;byteError='';}
-    if(byteCache){byteMode=true;renderByte();if(!force&&Date.now()-lastRefresh<4000)return;}
+    if(byteCache){byteMode=true;renderByte();if(!force&&Date.now()-lastRefresh<(liveReady?20000:4000))return;}
     const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);if(health)byteMode=health.marketMode==='byte';
     if(byteMode){
+      connectLive(base);
       if(['pending','signing'].includes(state.byteOperation?.status))void chrome.runtime.sendMessage({type:'BYTE_CHECK'}).catch(()=>{});
       await refreshByte(base,scope);return;
     }
@@ -138,7 +148,7 @@ async function load(force=false){
   }finally{loading=false;if(again){const force=forceAgain;again=false;forceAgain=false;void load(force);}}
 }
 async function requestPoll(force=false){
- const channel=selectedChannel;
+ const channel=selectedChannel;lastPollAttempt=Date.now();
  if(!channel||channel==='demo_streamer'){await load(force);return;}
  if(polling.has(channel)){if(force)await load(true);return;}
  polling.add(channel);if(force)$('#refresh').disabled=true;
@@ -154,4 +164,4 @@ chrome.storage.onChanged.addListener((changes,area)=>{
  if(Object.keys(changes).some(key=>key!=='popupCache'))void load();
 });
 try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=activeChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
-setInterval(tick,1000);await load();void requestPoll();setInterval(()=>{void load();void requestPoll();},5000);
+setInterval(tick,1000);await load();void requestPoll();setInterval(()=>{void load();if(!liveReady||Date.now()-lastPollAttempt>=30000)void requestPoll();},5000);
