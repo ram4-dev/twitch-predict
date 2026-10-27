@@ -41,7 +41,7 @@ await build({entryPoints:['src/cloud/server.ts','src/cloud/worker.ts','src/cloud
 
 if(cloudOrigin){
  const manifest=JSON.parse(await readFile('extension/manifest.json','utf8'));
- manifest.version='0.10.0';manifest.host_permissions.push(cloudOrigin+'/*');manifest.externally_connectable.matches.push(cloudOrigin+'/*');
+ manifest.host_permissions.push(cloudOrigin+'/*');manifest.externally_connectable.matches.push(cloudOrigin+'/*');
  await writeFile('dist/extension/manifest.json',JSON.stringify(manifest,null,2));
 }
 await cp('public','dist/web',{recursive:true});

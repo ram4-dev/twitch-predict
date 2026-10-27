@@ -28,7 +28,7 @@ test('public HTTPS → signed wallet login → MV3 scoped session; no bridge or 
   await web.screenshot({path:'test-results/cloud-linked-web.png',fullPage:true});
   await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(v:unknown):Promise<void>}}}}).chrome.storage.local.set({bridgeUrl:'http://twitch-predict.localhost:1356',bridgeToken:'a'.repeat(64)});});
   await context.close();
-  const manifestPath=join(extension,'manifest.json'),manifest=JSON.parse(await readFile(manifestPath,'utf8'));manifest.version='0.10.1';await writeFile(manifestPath,JSON.stringify(manifest));
+  const manifestPath=join(extension,'manifest.json'),manifest=JSON.parse(await readFile(manifestPath,'utf8'));manifest.version=manifest.version.split('.').map((part:string,index:number)=>Number(part)+(index===2?1:0)).join('.');await writeFile(manifestPath,JSON.stringify(manifest));
   updatedContext=await chromium.launchPersistentContext(join(directory,'profile'),{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   const updated=updatedContext.serviceWorkers()[0]??await updatedContext.waitForEvent('serviceworker');
   await expect.poll(()=>updated.evaluate(async()=>{const s=await (globalThis as unknown as {chrome:{storage:{local:{get(k:string[]):Promise<{bridgeUrl?:string;bridgeToken?:string;pointsToken?:string}>}}}}).chrome.storage.local.get(['bridgeUrl','bridgeToken','pointsToken']);return {base:s.bridgeUrl,bridge:!!s.bridgeToken,session:!!s.pointsToken};}),{timeout:15000}).toEqual({base:origin,bridge:false,session:true});
