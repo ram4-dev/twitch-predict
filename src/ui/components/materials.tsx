@@ -45,8 +45,8 @@ export function enableSpotlight(node:HTMLElement){
  node.addEventListener('pointerenter',follow);node.addEventListener('pointermove',follow);
 }
 // Own canvas treatment informed by Halftone Wordmark Footer and Murmuration Wordmark.
-// It preserves Fraunces and the open-outcome o; no third-party particle source is copied.
-export function HalftonePlot({replayKey=0,paused=false,label='plot en puntos, con desenlace abierto'}:{replayKey?:number;paused?:boolean;label?:string}){
+// It preserves Fraunces; no third-party particle source is copied.
+export function HalftonePlot({replayKey=0,paused=false,label='plot! en puntos'}:{replayKey?:number;paused?:boolean;label?:string}){
  const canvas=useRef<HTMLCanvasElement>(null);const reducedMotion=useReducedMotion();const reduced=reducedMotion||paused;
  useEffect(()=>{
   const el=canvas.current;if(!el)return;const ctx=el.getContext('2d');if(!ctx)return;
@@ -66,7 +66,7 @@ export function HalftonePlot({replayKey=0,paused=false,label='plot en puntos, co
    font*=Math.min(1,width*.82/initial);c.font=`800 ${font}px Fraunces`;
    const metrics=c.measureText('plot');
    const pl=c.measureText('pl').width,o=font*.5,t=c.measureText('t').width,x=(width-pl-o-t-font*.25)/2,baseline=(height+metrics.actualBoundingBoxAscent-metrics.actualBoundingBoxDescent)/2;
-   c.fillText('pl',x,baseline);c.lineWidth=font*.09;c.beginPath();c.arc(x+pl+o*.5,baseline-o*.45,o*.37,.12,Math.PI*1.88);c.stroke();c.fillText('t',x+pl+o,baseline);
+   c.fillText('pl',x,baseline);c.lineWidth=font*.09;c.beginPath();c.arc(x+pl+o*.5,baseline-o*.45,o*.37,0,Math.PI*2);c.stroke();c.fillText('t',x+pl+o,baseline);
    dotRadius=Math.max(2.4,font*.09);dotX=x+pl+o+t+font*.12;dotY=baseline-dotRadius*1.5;
    const data=c.getImageData(0,0,mask.width,mask.height).data,step=Math.max(2.6,width/250);dots=[];
    for(let y=1;y<height;y+=step)for(let x=1;x<width;x+=step)if(data[(Math.floor(y)*mask.width+Math.floor(x))*4+3]>130){const i=dots.length,seed=Math.sin(i*127.1+replayKey*7.7);dots.push({x:reduced?x:x+seed*width*.38,y:reduced?y:y+Math.cos(i*91.7)*height*.6,tx:x,ty:y,vx:0,vy:0});}
