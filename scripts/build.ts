@@ -17,6 +17,7 @@ await build({entryPoints:['src/ui/consoles.tsx'],outfile:'public/consoles.js',pl
 await build({entryPoints:['src/extension-transaction.ts'],outfile:'extension/byte-transaction.js',platform:'browser',format:'esm',bundle:true,minify:true});
 await build({entryPoints:['src/extension-page-wallet.ts'],outfile:'extension/page-wallet.js',platform:'browser',format:'iife',bundle:true,minify:true});
 await build({entryPoints:['src/ui/byte-ui.tsx'],outfile:'public/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['src/ui/extension-search.tsx'],outfile:'extension/channel-search.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/byte-market.tsx'],outfile:'extension/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/catalog.tsx'],outfile:'public/catalog.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/resolution.tsx'],outfile:'public/resolution.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});

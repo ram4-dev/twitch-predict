@@ -21,7 +21,7 @@ while(!stopping){
     const points=new Points('',documents);await points.load();
     const byte=new ByteService('',process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,documents);await byte.load();
     const mirror=new ByteTwitchMirror('',byte,new TwitchSource(points),Date.now,documents);await mirror.load();
-    // Explicit pilot admission is configuration, not permission granted to arbitrary viewers.
+    // Configured channels seed the list; authenticated viewers can enqueue any valid channel.
     await documents.update('byte-twitch',()=>({version:1,channels:[] as string[],mirrors:{}}),s=>{s.channels=[...new Set([...s.channels,...config.channels])];});
     if(!lost&&!stopping)await mirror.sync();
     if(lost)throw new Error('Worker lease lost');
