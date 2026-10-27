@@ -1,0 +1,39 @@
+{
+  "task": "Investigate avice source result and repair rate-limited preview lifecycle",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "baseCommit": "b5cc74e",
+    "branch": "fix-twitch-preview-resolution",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-twitch-preview-resolution",
+    "cleanup": "retained for review and resumption"
+  },
+  "diagnosis": {
+    "channel": "avice",
+    "title": "инвокер",
+    "predictionId": "df35850f-d231-479e-a048-98a09e08db79",
+    "persistedStatusAtAudit": "ACTIVE",
+    "persistedCreationStatus": "failed, rejected with partner limit 429; no Byte market ID",
+    "verifiedTwitchStatusAtAudit": "LOCKED, lockedAt 2026-10-27T14:38:53.707441477Z; no endedAt or winningOutcomeId",
+    "cause": "Only mirrors with a Byte market ID were followed after disappearing from activePredictionEvents. Preview lock/result updates were missed and expired previews were filtered out."
+  },
+  "changes": [
+    "Track rejected-429 previews by their verified Twitch event ID after they leave the active feed.",
+    "Persist lock, cancellation and validated winner states; retain the existing bounded 20-event snapshots after restart.",
+    "Only finalize source-only previews when the creation was absent or definitively rejected with 429; uncertain or complete submissions still use normal reconciliation.",
+    "Emit local SSE invalidations after changed mirror state is saved; cloud uses the existing PostgreSQL notifications.",
+    "Show an explicit waiting-for-Twitch-result label after betting closes, and distinguish source results from nonexistent Solana settlement."
+  ],
+  "verification": {
+    "check": "60 passed, 7 SQL cases skipped; typecheck, lint and build passed",
+    "e2e": "Three Byte E2E passed: real mirror lifecycle, rejected-429 recovery to one market, source-only lock/winner followed in web and MV3 with no Byte market/settlement/broadcast. Final label change also passed the lifecycle E2E.",
+    "restart": "Unit cases verify LOCKED followed by RESOLVED/CANCELED after the active feed disappears and after process reload.",
+    "accessCleanup": "Temporary diagnostic SSH key removed from Railway and local disk; no secrets printed and no private database row was manually changed."
+  },
+  "deployment": {
+    "api": "7bde0555-e9d2-4dfd-8b54-7d0d20783d32",
+    "worker": "dcea2a45-230d-4736-aef9-78badbc8be4b",
+    "web": "https://plot-devnet.vercel.app",
+    "extensionVersion": "0.17.1"
+  }
+}

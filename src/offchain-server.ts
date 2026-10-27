@@ -26,7 +26,7 @@ const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
 const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
 const marketEvents=new EventEmitter();marketEvents.setMaxListeners(0);
 const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,undefined,()=>marketEvents.emit('markets'));await byte.load();
-const byteMirror=new ByteTwitchMirror(directory,byte,source);await byteMirror.load();
+const byteMirror=new ByteTwitchMirror(directory,byte,source,Date.now,undefined,()=>marketEvents.emit('markets'));await byteMirror.load();
 const channelSearch=new TwitchChannelSearch();
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
