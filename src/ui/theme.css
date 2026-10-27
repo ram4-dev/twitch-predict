@@ -34,3 +34,4 @@ body *{font-variant-numeric:inherit}.points-status,.points-pool>span,.pool-peopl
 .expandable-search[data-direction="left"] .search-input{padding-left:40px}
 
 @import "./spotlight-card.css";
+@import "./resolution-card.css";

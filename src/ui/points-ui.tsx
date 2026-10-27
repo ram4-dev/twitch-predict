@@ -6,6 +6,7 @@ import {Button} from './components/button.js';
 import {Input} from './components/input.js';
 import {enableSpotlight} from './components/materials.js';
 import {EmptyState} from './components/plot.js';
+import {Resolution} from './components/resolution.js';
 import {Badge} from './components/badge.js';
 import type {Points} from '../points.js';
 type Market=ReturnType<Points['market']>;
@@ -38,11 +39,11 @@ function marketRoot(key:string,className:string){
 export function emptyMarketView(){
   const {node,root}=marketRoot('__empty__','plot-empty-container');flushSync(()=>root.render(<EmptyState title="La próxima está por venir" action={<Button variant="outline" asChild><a href="#channels">Seguir un canal</a></Button>}>Todavía no hay predicciones. Seguí un canal o creá un ejemplo para probar.</EmptyState>));return node;
 }
-export function bettingView(market:Market,account:Account|undefined,onAction:(a:Action)=>unknown,forms:Map<string,Form>){
+export function bettingView(market:Market,account:Account|undefined,onAction:(a:Action)=>unknown,forms:Map<string,Form>,extension=false){
   const form=forms.get(market.key)??{amount:100,busy:false,message:'',failed:false};forms.set(market.key,form);
-  const {node,root}=marketRoot(market.key,'points-market');node.dataset.marketKey=market.key;enableSpotlight(node);flushSync(()=>root.render(<Betting market={market} account={account} form={form} onAction={onAction}/>));return node;
+  const {node,root}=marketRoot(market.key,'points-market');node.dataset.marketKey=market.key;enableSpotlight(node);flushSync(()=>root.render(<Betting market={market} account={account} form={form} onAction={onAction} extension={extension}/>));return node;
 }
-export function Betting({market,account,form,onAction}:{market:Market;account?:Account;form:Form;onAction:(a:Action)=>unknown}){
+export function Betting({market,account,form,onAction,extension=false}:{market:Market;account?:Account;form:Form;onAction:(a:Action)=>unknown;extension?:boolean}){
   const [amount,setAmount]=useState(String(form.amount));
   const own=(account?.bets??[]).filter(b=>b.marketKey===market.key);
   const pending=own.filter(b=>!b.claimed).reduce((n,b)=>n+b.payout,0);
@@ -50,6 +51,15 @@ export function Betting({market,account,form,onAction}:{market:Market;account?:A
   const status={open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
   const change=(value:string)=>{setAmount(value);form.amount=value;form.pending=undefined;};
   const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message='Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
+  if(extension&&['resolved','void'].includes(market.phase)){
+    const payout=own.reduce((n,b)=>n+b.payout,0);
+    return <Resolution key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}>
+      {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recuperar':'Cobrar'} {number(pending)} pts<ArrowUpRight size={16}/></Button>}
+      {payout>0&&pending===0&&<p className="resolution-credited">{market.phase==='void'?'Reembolso acreditado':'Cobro acreditado'} · {number(payout)} pts</p>}
+      {market.reason&&<p className="points-rule">{market.reason}</p>}
+      {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?'Guardando operación…':form.message}</p>}
+    </Resolution>;
+  }
   return <>
     <div className="points-market-head"><span className={`points-status ${market.canBet?'live':''}`}><span className="status-mark"/>{status[market.phase]}</span><Badge variant="secondary">{market.demo?'Ejemplo':'Puntos internos'}</Badge></div>
     <div className="pool-summary"><div className="points-pool"><span>Pozo de la comunidad</span><strong>{number(market.totalPoints)} <small>pts</small></strong></div><div className="pool-people"><span>{number(market.participants)} {market.participants===1?'jugador':'jugadores'}</span><span>{number(market.totalBets)} {market.totalBets===1?'apuesta':'apuestas'}</span></div></div>
