@@ -8,6 +8,7 @@ const el=(tag,value,className)=>{const node=document.createElement(tag);if(value
 const defaultBridge='http://twitch-predict.localhost:1356';
 let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
+const settledCards=new Map();
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
 function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
@@ -23,9 +24,16 @@ function sourceView(p){
   const list=el('dl');fact(list,'Predicción de Twitch',p.id);fact(list,'Inicio',time(p.createdAt));fact(list,'Cierre previsto',time(new Date(Date.parse(p.createdAt)+p.predictionWindowSeconds*1000).toISOString()));fact(list,'Estado en Twitch',statusLabel(p.status));details.append(list);return details;
 }
 function predictionCard(p,market,item){
+  if(market&&['resolved','void'].includes(market.phase)){
+    let settled=settledCards.get(market.key);
+    if(!settled){settled=el('article',null,'prediction');settled.dataset.predictionId=p.id;settledCards.set(market.key,settled);}
+    const view=bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load),forms,true);
+    if(settled.firstElementChild!==view)settled.replaceChildren(view,sourceView(p));
+    return settled;
+  }
   const card=el('article',null,'prediction');card.dataset.predictionId=p.id;
   const line=el('div',null,'topline');line.append(el('span',`@${p.channel}`,'status'));const timer=el('span',countdown(p),'countdown');timer.dataset.timer=p.id;line.append(timer);card.append(line,el('h1',p.title));
-  if(market)card.append(bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load),forms));
+  if(market)card.append(bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load),forms,true));
   else{const pending=el('section',null,'market');const labels={unpaired:'Conectá la extensión para crear la copia',offline:'Mercado sin conexión',closed:'La predicción ya está cerrada',failed:'No se pudo crear el mercado'};pending.append(el('strong',labels[item?.market?.state]||'Creando la copia automáticamente…'));if(item?.market?.error)pending.append(el('p',item.market.error,'market-error'));card.append(pending);}
   card.append(sourceView(p));return card;
 }
@@ -34,7 +42,7 @@ function render(){
   const current=snapshot?.predictions??[];const visible=markets.filter(m=>m.prediction.channel===selectedChannel&&(current.some(p=>p.prediction.id===m.prediction.id)||['open','locked'].includes(m.phase)||account?.bets.some(b=>b.marketKey===m.key)));
   const cards=current.map(item=>predictionCard(item.prediction,markets.find(m=>m.prediction.id===item.prediction.id&&m.prediction.channel===selectedChannel),item));
   for(const m of visible)if(!current.some(p=>p.prediction.id===m.prediction.id))cards.push(predictionCard(m.prediction,m));
-  $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;
+  reconcileCards(cards);for(const key of settledCards.keys())if(!markets.some(m=>m.key===key))settledCards.delete(key);$('#empty').hidden=!!cards.length;
   $('#empty-copy').textContent=selectedChannel?`No hay apuestas disponibles en @${selectedChannel}. La próxima aparecerá automáticamente.`:'Abrí un canal de Twitch. La próxima apuesta se copiará automáticamente.';
   $('#account-name').textContent=account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Conectá Phantom';$('#own-balance').textContent=account?number(account.balance):'—';
   const history=$('#history');history.replaceChildren();const bets=account?.bets??[];

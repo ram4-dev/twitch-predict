@@ -16,3 +16,5 @@ body *{font-variant-numeric:inherit}.points-status,.points-pool>span,.pool-peopl
 @import "./plot.css";
 
 @import "./app-materials.css";
+
+@import "./resolution-card.css";

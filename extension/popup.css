@@ -9,3 +9,21 @@ header .plot-scene.compact{height:56px;width:200px;max-width:200px;overflow:visi
 .prediction .points-pool{display:flex;align-items:baseline;gap:8px}.prediction .points-pool>span{margin:0;font-size:12px}.prediction .points-stake{display:flex;align-items:center;gap:10px}.prediction .stake-row{align-items:center}
 main{padding-top:14px}.prediction h1{margin:10px 0 12px}.prediction .points-option p{margin:6px 0}
 header .plot-scene.compact>.plot-halftone{width:148px;max-width:calc(100% - 44px);margin:0}
+
+/* Resolution owns its heading; do not nest it inside another painted panel. */
+.prediction:has(.plot-resolution){background:transparent;border:0;padding:0}
+.prediction>.points-market:has(.plot-resolution){padding:0;background:transparent}
+.prediction .plot-resolution .resolution-outcomes{grid-template-columns:1fr 1fr}
+@media(max-width:400px){.prediction .plot-resolution .resolution-outcomes{grid-template-columns:1fr}}
+
+@media(min-width:520px){
+ .prediction .plot-resolution .resolution-content{display:grid;grid-template-columns:1fr 1fr;column-gap:20px;padding:16px 18px}
+ .prediction .plot-resolution .resolution-meta,.prediction .plot-resolution h3,.prediction .plot-resolution .resolution-outcomes,.prediction .plot-resolution .resolution-detail-toggle,.prediction .plot-resolution .resolution-detail,.prediction .plot-resolution .points-claim,.prediction .plot-resolution .points-rule,.prediction .plot-resolution .points-message,.prediction .plot-resolution .resolution-credited{grid-column:1/-1}
+ .prediction .plot-resolution .resolution-content>h3{margin:12px 0}
+ .prediction .plot-resolution .resolution-personal{margin-top:16px}
+ .prediction .plot-resolution .resolution-net{font-size:56px}
+ .prediction .plot-resolution .resolution-receipt{border:0;padding-top:0;margin-top:16px;align-self:end}
+ .prediction .plot-resolution .resolution-detail-toggle{margin-top:10px}
+}
+
+.prediction .byte-betting:has(.plot-resolution){background:transparent;padding:0}.prediction .plot-resolution .plot-notice{grid-column:1/-1;margin-top:16px}

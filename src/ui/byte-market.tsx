@@ -2,6 +2,7 @@ import {useEffect,useState} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {ArrowUpRight,Check} from 'lucide-react';
+import {Resolution} from './components/resolution.js';
 import {Button} from './components/button.js';
 import {Input} from './components/input.js';
 import {Badge} from './components/badge.js';
@@ -18,6 +19,10 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
  const open=m.status==='open'&&m.bettable&&now<m.closeMs;
  const change=(value:string)=>{setAmount(value);setError('');onEdit?.();};
  const choose=(option:number)=>{try{const value=solToLamports(amount);if(config&&(value>BigInt(config.sol.maxBet)||BigInt(m.total)+value>BigInt(config.sol.maxPool)))throw new Error('La apuesta supera los límites del mercado.');setError('');setSelected(option);onBet({option,amount});}catch(e){setError((e as Error).message);}};
+ if(extension&&m.status!=='open')return <section className="points-market byte-betting"><Resolution title={m.title} channel={m.notes?.channel??'partner'} outcomes={m.options.map((title,i)=>({id:String(i),title}))} winnerId={m.winner===null?undefined:String(m.winner)} canceled={m.status==='invalid'} accountKnown={false} unavailableMessage="El importe de tu cobro no está disponible.">
+  <Notice tone={m.chain.settled?'success':'info'}>{m.chain.settled?'Pagos o reembolsos completados en cadena.':'Resultado registrado. Esperando que byte complete los pagos.'}</Notice>
+  <a className="resolution-chain-link" href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana devnet <ArrowUpRight size={14}/></a>
+ </Resolution></section>;
  return <section className="points-market byte-betting">
   <div className="points-market-head"><span className={`points-status ${open?'live':''}`}><span className="status-mark"/>{m.status==='invalid'?'Anulado':m.status==='resolved'?'Resultado confirmado':open?'Apuestas abiertas':'Esperando resultado'}</span><Badge variant="secondary">{m.currency==='sol'?'SOL devnet':'BYTE devnet'}</Badge></div>
   <div className="pool-summary"><div className="points-pool"><span>Pozo de la comunidad</span><strong>{units(m.total)} <small>{unit}</small></strong></div><div className="pool-people"><span>{m.bettors} {m.bettors===1?'participante':'participantes'}</span></div></div>
@@ -44,7 +49,7 @@ function ExtensionMarket({market,config,operation}:{market:DisplayByteMarket;con
   }catch(e){setError((e as Error).message);}finally{setOpening(false);}
  };
  const active=operation?.marketId===market.id&&!['confirmed','failed','expired','cancelled'].includes(operation.status);
- return <><div className="topline"><span>@{market.notes?.channel??'partner'} · Ronda {new Date(market.openMs).toLocaleString('es-AR')}</span><span>Cierre: {new Date(market.closeMs).toLocaleString('es-AR')}</span></div><h1>{market.title}</h1><ByteBetting market={market} config={config} extension disabled={opening||active} onBet={selection=>void open(selection)}/>{error&&<Notice tone="error">{error}</Notice>}{operation?.marketId===market.id&&<Notice tone={operation.error?'error':'info'}>{operation.error??({signing:'Confirmá en Phantom…',pending:'Transacción enviada. Esperando confirmación…',confirmed:'Apuesta confirmada en Solana.',failed:'La transacción falló.',expired:'La transacción expiró.',cancelled:'Firma cancelada.'}[operation.status]??operation.status)}{operation.receipt&&<a href={`https://explorer.solana.com/tx/${operation.receipt.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"> Ver transacción</a>}</Notice>}</>;
+ return <>{market.status==='open'&&<><div className="topline"><span>@{market.notes?.channel??'partner'} · Ronda {new Date(market.openMs).toLocaleString('es-AR')}</span><span>Cierre: {new Date(market.closeMs).toLocaleString('es-AR')}</span></div><h1>{market.title}</h1></>}<ByteBetting market={market} config={config} extension disabled={opening||active} onBet={selection=>void open(selection)}/>{error&&<Notice tone="error">{error}</Notice>}{operation?.marketId===market.id&&<Notice tone={operation.error?'error':'info'}>{operation.error??({signing:'Confirmá en Phantom…',pending:'Transacción enviada. Esperando confirmación…',confirmed:'Apuesta confirmada en Solana.',failed:'La transacción falló.',expired:'La transacción expiró.',cancelled:'Firma cancelada.'}[operation.status]??operation.status)}{operation.receipt&&<a href={`https://explorer.solana.com/tx/${operation.receipt.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"> Ver transacción</a>}</Notice>}</>;
 }
 export function byteMarketView(market:DisplayByteMarket,config:ByteConfig|undefined,operation?:ExtensionOperation){
  let view=roots.get(market.id);if(!view){const node=document.createElement('article');node.className='prediction';node.dataset.marketId=market.id;view={node,root:createRoot(node),generation};roots.set(market.id,view);enableSpotlight(node);}view.generation=generation;view.node.dataset.predictionId=market.notes?.twitch?.predictionId??'';
