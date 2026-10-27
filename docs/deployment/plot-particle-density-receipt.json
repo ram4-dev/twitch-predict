@@ -1,0 +1,50 @@
+{
+  "task": "Larger, denser Plot wordmark with localized pointer response",
+  "source": {
+    "repository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "branch": "branding/plot-mascot",
+    "baseCommit": "cf6ed11"
+  },
+  "workspace": {
+    "branch": "fix-plot-particle-density",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-plot-particle-density",
+    "cleanup": "kept for review and resumption"
+  },
+  "changes": {
+    "pointerRadius": {
+      "before": 65,
+      "after": 28
+    },
+    "dotGap": {
+      "before": 3,
+      "after": 2
+    },
+    "minimumGap": {
+      "before": 2.6,
+      "after": 1.6
+    },
+    "responsiveGridColumns": {
+      "before": 250,
+      "after": 400
+    },
+    "headerCanvas": {
+      "before": "148x56",
+      "after": "210x76"
+    },
+    "glyphWidthFraction": {
+      "before": 0.82,
+      "after": 0.92
+    },
+    "extensionVersion": "0.16.1"
+  },
+  "verification": {
+    "check": "typecheck, lint, 58 unit tests and web build passed; 7 SQL cases skipped",
+    "e2e": "10 design-system and Dia E2E passed. Halftone E2E initially hit the reduced-motion pixel snapshot race, then passed on isolated rerun without code/assertion changes.",
+    "visual": "MV3 700px popup screenshot inspected: larger complete Plot! wordmark, wallet and betting controls fit"
+  },
+  "deployment": {
+    "url": "https://plot-devnet.vercel.app",
+    "installedExtension": "0.16.1",
+    "android": "Previously verified APK preserved; no native app source changes"
+  }
+}

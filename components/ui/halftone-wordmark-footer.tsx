@@ -42,7 +42,7 @@ export interface HalftoneWordmarkProps {
  placement?:'center'|'bottom';assemble?:boolean;accentLast?:boolean;
 }
 /** Transparent canvas for the app header and MV3 popup, without footer navigation. */
-export function HalftoneWordmark({wordmark='plot!',label=wordmark,className='',ink='#f2f2f2',warm='#ff7049',fontFamily='Fraunces',fontWeight=800,dotGap=3,radius=65,crop=0,grain=0,interactive=true,paused=false,replayKey=0,placement='center',assemble=true,accentLast=true}:HalftoneWordmarkProps){
+export function HalftoneWordmark({wordmark='plot!',label=wordmark,className='',ink='#f2f2f2',warm='#ff7049',fontFamily='Fraunces',fontWeight=800,dotGap=2,radius=28,crop=0,grain=0,interactive=true,paused=false,replayKey=0,placement='center',assemble=true,accentLast=true}:HalftoneWordmarkProps){
  const ref=React.useRef<HTMLCanvasElement>(null);
  const [reduced,setReduced]=React.useState(()=>typeof matchMedia!=='undefined'&&matchMedia('(prefers-reduced-motion: reduce)').matches);
  React.useEffect(()=>{const media=matchMedia('(prefers-reduced-motion: reduce)'),change=()=>setReduced(media.matches);media.addEventListener('change',change);return()=>media.removeEventListener('change',change);},[]);
@@ -59,15 +59,15 @@ export function HalftoneWordmark({wordmark='plot!',label=wordmark,className='',i
    width=rect.width;height=rect.height;dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
    const mask=document.createElement('canvas');mask.width=Math.ceil(width);mask.height=Math.ceil(height);const m=mask.getContext('2d',{willReadFrequently:true});if(!m)return;
    m.font=`${fontWeight} 100px ${fontFamily}`;
-   const fit=hwfFitSize(m.measureText(wordmark||' ').width,width*(placement==='bottom'?1.02:.82));
-   const size=placement==='bottom'?fit:Math.min(height*.92,fit);m.font=`${fontWeight} ${size}px ${fontFamily}`;
+   const fit=hwfFitSize(m.measureText(wordmark||' ').width,width*(placement==='bottom'?1.02:.92));
+   const size=placement==='bottom'?fit:Math.min(height*.98,fit);m.font=`${fontWeight} ${size}px ${fontFamily}`;
    const box=m.measureText(wordmark),ascent=box.actualBoundingBoxAscent||size*.72,descent=box.actualBoundingBoxDescent||0;
    const x=(width-box.width)/2,baseline=placement==='bottom'?height+ascent*Math.max(0,Math.min(.6,crop)):(height+ascent-descent)/2;
    m.fillText(wordmark,x,baseline);const pixels=m.getImageData(0,0,mask.width,mask.height).data;
    // A second coverage mask identifies the punctuation without guessing glyph widths.
    m.clearRect(0,0,mask.width,mask.height);
    if(accentLast&&wordmark){const advance=m.measureText(wordmark).width-m.measureText(wordmark.slice(-1)).width;m.fillText(wordmark.slice(-1),x+advance,baseline);}
-   const accent=m.getImageData(0,0,mask.width,mask.height).data,gap=Math.max(2.6,dotGap,width/250),values:number[]=[];
+   const accent=m.getImageData(0,0,mask.width,mask.height).data,gap=Math.max(1.6,dotGap,width/400),values:number[]=[];
    for(let gy=0;gy<height;gy+=gap)for(let gx=0;gx<width;gx+=gap){
     let alpha=0,tint=0;
     for(let sy=0;sy<3;sy++)for(let sx=0;sx<3;sx++){const px=Math.min(mask.width-1,Math.floor(gx+(sx+.5)*gap/3)),py=Math.min(mask.height-1,Math.floor(gy+(sy+.5)*gap/3)),index=(py*mask.width+px)*4+3;alpha+=pixels[index];tint+=accent[index];}
