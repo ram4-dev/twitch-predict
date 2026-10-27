@@ -10,6 +10,8 @@ type Pending=Flow&{identity:TwitchIdentity};
 export class TwitchAuth {
   private flows=new Map<string,Flow>();private pending=new Map<string,Pending>();
   constructor(readonly points:Points,private readonly config:Config,private readonly request:typeof fetch=fetch,private readonly clock=()=>Date.now()){}
+  exportState(){return {flows:Object.fromEntries(this.flows),pending:Object.fromEntries(this.pending)};}
+  importState(state:ReturnType<TwitchAuth['exportState']>){this.flows=new Map(Object.entries(state.flows));this.pending=new Map(Object.entries(state.pending));}
   get configured(){return !!this.config.clientId&&!!this.config.clientSecret;}
   get callbackUrl(){return `${this.config.origin}/auth/twitch/callback`;}
   private prune(){for(const map of [this.flows,this.pending])for(const [key,f] of map)if(f.expires<=this.clock())map.delete(key);}
@@ -21,12 +23,16 @@ export class TwitchAuth {
     const url=new URL('https://id.twitch.tv/oauth2/authorize');url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:'',state,force_verify:'true'}).toString();
     return {url:url.href,cookie};
   }
-  async callback(state:string,cookie:string,code:string|undefined,denied=false){
+  consume(state:string,cookie:string,code:string|undefined,denied=false){
     this.prune();const flow=this.flows.get(state);
     if(!flow||!cookie||!equal(flow.cookieHash,hash(cookie)))throw new Error('La conexión venció o se abrió en otro navegador. Volvé a conectar Twitch.');
     this.flows.delete(state);
     if(denied)throw new Error('Cancelaste la conexión con Twitch. Podés volver a intentar.');
     if(!code||code.length>2048)throw new Error('Twitch no devolvió un código de autorización válido');
+    return flow;
+  }
+  async callback(state:string,cookie:string,code:string|undefined,denied=false){return this.exchange(this.consume(state,cookie,code,denied),code!);}
+  async exchange(flow:Flow,code:string){
     const response=await this.request('https://id.twitch.tv/oauth2/token',{method:'POST',body:new URLSearchParams({client_id:this.config.clientId,client_secret:this.config.clientSecret,code,grant_type:'authorization_code',redirect_uri:this.callbackUrl}),signal:AbortSignal.timeout(10000)});
     if(!response.ok)throw new Error('Twitch no pudo confirmar el acceso. Volvé a conectar.');
     const tokens=z.object({access_token:z.string().min(1),token_type:z.string()}).parse(await response.json());

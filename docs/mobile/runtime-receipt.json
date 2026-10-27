@@ -1,0 +1,26 @@
+{
+  "worktree": "/Users/ramiro/.t3/worktrees/twitch-predict/feat-expo-seeker-mobile",
+  "branch": "feat/expo-seeker-mobile",
+  "baseCommit": "ceee878041560d58b9d0b39b0e7fa50a6dba1f15",
+  "emulator": "plot_mobile_api36",
+  "serial": "emulator-5554",
+  "routes": [
+    {
+      "hostname": "plot-mobile-api.localhost",
+      "port": 4955,
+      "pid": 61584
+    },
+    {
+      "hostname": "plot-mobile-test.localhost",
+      "port": 4963,
+      "pid": 74109
+    },
+    {
+      "hostname": "plot-mobile-fixture.localhost",
+      "port": 4021,
+      "pid": 74131
+    }
+  ],
+  "fixtureDirectory": "/Users/ramiro/.t3/worktrees/twitch-predict/feat-expo-seeker-mobile/mobile/artifacts/fixture",
+  "note": "Local dev/test services preserved for review; no production deployment. Metro stopped."
+}

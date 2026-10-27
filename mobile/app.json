@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Plot",
+    "slug": "plot-mobile",
+    "version": "0.1.0",
+    "scheme": "plot",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "fun.plot.mobile",
+      "predictiveBackGestureEnabled": true,
+      "permissions": ["INTERNET"],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/plot-icon.png",
+        "backgroundColor": "#fff4dd"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "minSdkVersion": 24,
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "icon": "./assets/plot-icon.png"
+  }
+}

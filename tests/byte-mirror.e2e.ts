@@ -11,7 +11,7 @@ test('MV3 detects a Twitch prediction, creates exactly one Byte mirror and track
  const twitchFile=resolve('test-results/twitch-fixture.json'),byteFile=resolve('test-results/byte-fixture.json');
  await writeFile(twitchFile,JSON.stringify([native]));await writeFile(byteFile,JSON.stringify({markets:[],signatures:{},broadcasts:0,resolutions:0,invalidations:0,syncs:0}));
  const profile=await mkdtemp(`${tmpdir()}/byte-twitch-extension-`),extension=resolve(profile,'extension');await cp('extension',extension,{recursive:true});
- for(const name of ['background.js','popup.js']){const p=resolve(extension,name);await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+ for(const name of ['background.js','popup.js','app-config.js']){const p=resolve(extension,name);await writeFile(p,(await readFile(p,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
  let releaseWatch:(()=>void)|undefined;
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
@@ -21,6 +21,10 @@ test('MV3 detects a Twitch prediction, creates exactly one Byte mirror and track
   const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${channel}`);
   const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:native.title,exact:true})).toBeVisible({timeout:20000});
   await expect(popup.locator('.points-options')).toContainText('EVENNNNZ :D');await expect(popup.locator('.points-options')).toContainText('ODDSTERR :O');await expect(popup.locator('.points-bet')).toHaveCount(2);
+  const card=popup.locator('.prediction'),stake=card.getByRole('textbox',{name:'Importe en SOL devnet'});
+  await expect(card).toHaveClass(/plot-glow-card/);await stake.fill('0.05');
+  await card.hover({position:{x:30,y:20}});await expect.poll(()=>card.evaluate(el=>getComputedStyle(el,'::before').opacity)).toBe('1');
+  await expect(stake).toHaveValue('0.05');await popup.mouse.move(0,0);await stake.focus();await expect.poll(()=>card.evaluate(el=>getComputedStyle(el,'::before').opacity)).toBe('1');
   const list=async()=>{const r=await panel.request.get(`${base}/api/byte/markets`);return (await r.json()).markets as DisplayByteMarket[];};
   const mirrored=(await list())[0];expect((await list()).length).toBe(1);expect(mirrored.notes?.channel).toBe(channel);expect(mirrored.notes?.twitch?.predictionId).toBe(native.id);expect(mirrored.closeMs).toBeLessThanOrEqual(Date.parse(native.createdAt)+600000);
   await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(popup.getByRole('button',{name:'Actualizar predicción',exact:true})).toBeEnabled();expect((await list()).length).toBe(1);

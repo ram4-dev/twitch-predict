@@ -8,7 +8,7 @@ test.skip(process.env.MARKET_MODE==='solana','Offchain onboarding');
 test('install → Phantom signature → automatic extension link → dashboard; same wallet keeps balance and history in another browser',async({browser})=>{
   const profile=await mkdtemp(`${tmpdir()}/phantom-install-`);const extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
   // Only the deployment URL changes; wallet verification and extension messaging use production code.
-  for(const file of ['background.js','popup.js']){const path=resolve(extension,file);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+  for(const file of ['background.js','popup.js','app-config.js']){const path=resolve(extension,file);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   try{
     const wallet=await phantomProvider(context);const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');

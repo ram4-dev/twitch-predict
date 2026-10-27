@@ -1,5 +1,7 @@
 # plot · Predicciones
 
+La app Android en Expo está en `mobile`. Recorrido, API móvil, compilación y pruebas: [Plot para Android](docs/mobile/implementation.md).
+
 La integración de mercados con byte está en [BYTE_MARKETS.md](BYTE_MARKETS.md). El `.env` local está preparado para agregar `BYTE_API_KEY`; `npm run dev:byte` abre el modo SOL devnet con Phantom, panel de operador y acceso desde la extensión.
 
 ## POC anterior: puntos internos

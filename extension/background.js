@@ -1,8 +1,8 @@
+import {defaultBridge,isAppOrigin} from './app-config.js';
 import {installByteWallet} from './byte-wallet.js';
 import { TWITCH_CLIENT_ID, TWITCH_QUERY } from './twitch.js';
 import { parseTwitchPrediction, isOpen } from './model.js';
 const inflight = new Map();
-const defaultBridge = 'http://twitch-predict.localhost:1356';
 const channelKey = channel => `channel:${channel.toLowerCase()}`;
 async function saveSnapshot(channel, snapshot) { await chrome.storage.local.set({ [channelKey(channel)]: snapshot }); }
 async function mirrorPrediction(prediction, previous, config) {
@@ -27,14 +27,14 @@ async function poll(channel, tabId) {
     const health=await fetch(`${stored.bridgeUrl||defaultBridge}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
     if(health?.marketMode==='byte'){
       let observed;
-      if(stored.bridgeToken){
-        const watch=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/twitch/watch`,{method:'POST',headers:{'Content-Type':'application/json','x-operator-token':stored.bridgeToken,...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({channel}),signal:AbortSignal.timeout(40000)});
+      if(stored.bridgeToken||stored.pointsToken){
+        const watch=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/twitch/watch`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.bridgeToken?{'x-operator-token':stored.bridgeToken}:{}),...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({channel}),signal:AbortSignal.timeout(40000)});
         observed=await watch.json();if(!watch.ok)throw new Error(observed.error||'No se pudo replicar la predicción de Twitch');
       }
       const response=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});
       const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo consultar byte');
       const byteMarkets=result.markets.filter(m=>m.notes?.channel===channel);
-      await saveSnapshot(channel,{channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken?null:'Vinculá la extensión al panel para replicar las predicciones.',predictions:observed?.predictions??[],byteMarkets,mode:'byte'});
+      await saveSnapshot(channel,{channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken||stored.pointsToken?null:'Vinculá la extensión al panel para replicar las predicciones.',predictions:observed?.predictions??[],byteMarkets,mode:'byte'});
       await chrome.storage.local.set({lastPoll:{channel,at:new Date().toISOString(),count:byteMarkets.length},lastError:null});
       if(Number.isInteger(tabId))try{await chrome.action.setBadgeText({tabId,text:byteMarkets.filter(m=>m.bettable).length?String(byteMarkets.filter(m=>m.bettable).length):''});}catch{/* The tab may have closed. */}
       return;
@@ -76,15 +76,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   return true;
 });
 chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
-  if (!sender.url || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(new URL(sender.url).hostname) || message.type !== 'PAIR') return;
+  if (!sender.url || !isAppOrigin(sender.url) || message.type !== 'PAIR') return;
   let url; try { url = new URL(message.bridgeUrl); } catch { return; }
-  if (new URL(sender.url).origin!==url.origin || !['http:','https:'].includes(url.protocol) || !['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(url.hostname) || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
+  if (new URL(sender.url).origin!==url.origin || !isAppOrigin(url.href) || typeof message.token !== 'string' || !/^[a-f0-9]{64}$/.test(message.token)) return;
   chrome.storage.local.set({ bridgeUrl: url.origin, bridgeToken: message.token }).then(() => reply({ ok: true }));
   return true;
 });
 
 let authStart;
-function appUrl(value){const u=new URL(value||defaultBridge);if(!['http:','https:'].includes(u.protocol)||!['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname))throw new Error('URL de la app inválida');return u.origin;}
+function appUrl(value){const u=new URL(value||defaultBridge);if(!isAppOrigin(u.href))throw new Error('URL de la app inválida');return u.origin;}
 async function beginSession(base){
   const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
@@ -100,6 +100,7 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
   })().catch(e=>reply({error:e.message}));return true;
 });
 async function startAuth(){
+  await cloudReady;
   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','pendingAuth']);
   let base=appUrl(stored.bridgeUrl);
   const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
@@ -115,7 +116,17 @@ chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
   if(message.type!=='CONNECT_PHANTOM')return;
   const task=authStart??=startAuth().finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
 });
-chrome.runtime.onInstalled.addListener(({reason})=>{if(reason==='install')void (authStart??=startAuth().finally(()=>{authStart=undefined;})).catch(e=>chrome.storage.local.set({authError:e.message}));});
+async function migrateCloudConfig(){
+  if(new URL(defaultBridge).protocol!=='https:'||new URL(defaultBridge).hostname.endsWith('.localhost'))return;
+  const stored=await chrome.storage.local.get(['bridgeUrl']);
+  const previous=stored.bridgeUrl?new URL(stored.bridgeUrl):null;
+  if(!previous||['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(previous.hostname))await chrome.storage.local.set({bridgeUrl:defaultBridge,bridgeToken:null,pendingAuth:null,authError:null});
+}
+// Unpacked Chrome updates do not always emit onInstalled. Migrate whenever the worker starts.
+const cloudReady=migrateCloudConfig().catch(e=>chrome.storage.local.set({authError:e.message}));
+chrome.runtime.onInstalled.addListener(({reason})=>{
+  void (async()=>{await cloudReady;if(reason==='install')await (authStart??=startAuth().finally(()=>{authStart=undefined;}));})().catch(e=>chrome.storage.local.set({authError:e.message}));
+});
 chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
   if(message.type!=='AUTH_COMPLETE')return;
   void (async()=>{
@@ -126,14 +137,14 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
     if(typeof message.code!=='string'||!/^[a-f0-9]{64}$/.test(message.code))throw new Error('Código de acceso inválido');
     const response=await fetch(`${pending.base}/api/auth/extension/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flowId:pending.flowId,state:pending.state,extensionId:chrome.runtime.id,code:message.code}),signal:AbortSignal.timeout(12000)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo vincular la extensión');
-    await chrome.storage.local.set({...(stored.pointsToken?{previousPointsToken:stored.pointsToken}:{}),pointsToken:result.token,walletAddress:result.account.wallet,bridgeToken:result.bridgeToken,bridgeUrl:pending.base,pendingAuth:null,lastAuthFlow:message.flowId,authError:null});
+    await chrome.storage.local.set({...(stored.pointsToken?{previousPointsToken:stored.pointsToken}:{}),pointsToken:result.token,walletAddress:result.account.wallet,bridgeToken:result.bridgeToken??null,bridgeUrl:pending.base,pendingAuth:null,lastAuthFlow:message.flowId,authError:null});
     reply({ok:true});
   })().catch(e=>reply({error:e.message}));return true;
 });
 
 chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
   if(message.type!=='CONNECT_PHANTOM'||!sender.url)return;
-  const origin=new URL(sender.url);if(!['http:','https:'].includes(origin.protocol)||origin.hostname!=='twitch-predict.localhost')return;
+  const origin=new URL(sender.url);if(!isAppOrigin(origin.href))return;
   const task=authStart??=startAuth().finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
 });
 

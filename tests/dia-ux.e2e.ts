@@ -1,3 +1,4 @@
+import {chooseChannel} from './fixtures/extension-search.js';
 import {test,expect,chromium,type Page} from '@playwright/test';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -25,7 +26,7 @@ test('extension uses the same Dia materials and preserves amount through refresh
   try{
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
     await worker.evaluate(async({base,token})=>{await (globalThis as unknown as {chrome:{storage:{local:{set(data:unknown):Promise<void>}}}}).chrome.storage.local.set({bridgeUrl:base,pointsToken:token});},{base,token});
-    const popup=await context.newPage(),errors:string[]=[];await popup.setViewportSize({width:700,height:600});popup.on('pageerror',e=>errors.push(e.message));await popup.goto(`chrome-extension://${id}/popup.html`);await popup.getByLabel('Canal de Twitch',{exact:true}).selectOption('demo_streamer');
+    const popup=await context.newPage(),errors:string[]=[];await popup.setViewportSize({width:700,height:600});popup.on('pageerror',e=>errors.push(e.message));await popup.goto(`chrome-extension://${id}/popup.html`);await chooseChannel(popup,'demo_streamer');
     const card=popup.locator(`[data-prediction-id="${market.prediction.id}"]`),yes=card.getByRole('button',{name:'Apostar a Gana',exact:true});await expect(yes).toBeEnabled();
     expect(await popup.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(8, 8, 8)');await expect(popup.getByRole('img',{name:'plot',exact:true})).toBeVisible();await expect(popup.locator('#plot-scene .plot-dither-field canvas')).toHaveCount(1);await expect(yes).toHaveAttribute('data-tone','positive');expect(await popup.locator('body').evaluate(el=>el.getBoundingClientRect().width)).toBe(700);const logoBox=(await popup.getByRole('img',{name:'plot',exact:true}).boundingBox())!,pauseBox=(await popup.getByRole('button',{name:'Pausar animación',exact:true}).boundingBox())!;expect(logoBox.x+logoBox.width).toBeLessThanOrEqual(pauseBox.x);
     await card.getByLabel('Puntos a apostar').fill('250');await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(popup.getByRole('button',{name:'Actualizar predicción',exact:true})).toBeEnabled();await expect(card.getByLabel('Puntos a apostar')).toHaveValue('250');

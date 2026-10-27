@@ -20,3 +20,18 @@ public/byte-ui.js
 .taste-skill/final/
 .taste-skill/dia/
 .taste-skill/black-showcase/
+
+# Android/Expo build outputs
+mobile/.expo/
+mobile/android/
+mobile/ios/
+mobile/dist/
+mobile/artifacts/
+mobile/coverage/
+.vercel
+
+extension/app-config.js
+
+artifacts/
+
+public/downloads/*.apk

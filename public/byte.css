@@ -9,3 +9,7 @@
 .byte-app .intro .wallet-strip{display:flex}.byte-app .intro .wallet-strip>div:first-child{display:block}.byte-app .wallet-strip .plot-button{white-space:nowrap}.byte-app .wallet-strip .plot-button-content{display:flex;align-items:center;gap:8px;color:inherit}
 
 .byte-watch{margin:0 0 24px;max-width:620px}.byte-watch>label{display:block;margin-bottom:8px;font-size:14px;color:var(--muted-foreground)}.byte-watch .form-row{gap:12px}.byte-watch .plot-input{flex:1;min-width:0}.byte-watch .plot-button{flex-shrink:0;min-height:44px}
+
+.byte-watch>p{margin:0 0 12px;font-size:14px;color:var(--muted-foreground)}
+
+.byte-section-head>.byte-market-tools{justify-content:flex-end}

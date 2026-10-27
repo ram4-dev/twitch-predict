@@ -1,3 +1,5 @@
+import ExpandableSearchBar from '@/components/ui/expandable-search-bar';
+import {twitchChannel} from '../mobile-model.js';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {createRoot} from 'react-dom/client';
 import {RefreshCw,Wallet,Plus,ExternalLink} from 'lucide-react';
@@ -6,11 +8,11 @@ import {Input} from './components/input.js';
 import {PlotLogo,Chameleon,Notice,Field,Select} from './components/plot.js';
 import {type ByteConfig,type DisplayByteMarket,solToLamports} from '../byte-model.js';
 import {Scene} from './scene.js';
-import {enableSpotlight} from './components/materials.js';
+import {GlowCard,GlowStage} from '@/components/ui/spotlight-card';
 import {ByteBetting,sol,type ByteSelection} from './byte-market.js';
 import {connection,phantom,sendBet,checkReceipt,receipts,type BetReceipt} from '../byte-wallet.js';
 
-type Status={configured:boolean;network:'devnet';operatorMode:'wallet'|'local';extensionId:string};
+type Status={configured:boolean;network:'devnet';operatorMode:'wallet'|'local';manualOperations?:boolean;extensionId:string};
 type Operation={requestId:string;title:string;options:string[];channel:string};
 const short=(address:string)=>`${address.slice(0,5)}…${address.slice(-5)}`;
 class ApiError extends Error {constructor(readonly status:number,message:string){super(message);}}
@@ -20,14 +22,14 @@ async function request<T>(path:string,body?:unknown,operatorToken?:string):Promi
   const data=await response.json();if(!response.ok)throw new ApiError(response.status,data.error??'No se pudo completar la operación');return data;
 }
 function App(){
-  const [status,setStatus]=useState<Status>(),[config,setConfig]=useState<ByteConfig>(),[markets,setMarkets]=useState<DisplayByteMarket[]>([]),[wallet,setWallet]=useState(''),[balance,setBalance]=useState<number>(),[tab,setTab]=useState(new URLSearchParams(location.search).get('view')==='history'?'history':'markets'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false),[channel,setChannel]=useState(new URLSearchParams(location.search).get('channel')??''),[history,setHistory]=useState<BetReceipt[]>(receipts()),[operations,setOperations]=useState<Operation[]>([]),[loading,setLoading]=useState(true),[pairing,setPairing]=useState(false),[watched,setWatched]=useState<string[]>([]),[watchName,setWatchName]=useState(''),[watchBusy,setWatchBusy]=useState(false);
+  const [status,setStatus]=useState<Status>(),[config,setConfig]=useState<ByteConfig>(),[markets,setMarkets]=useState<DisplayByteMarket[]>([]),[wallet,setWallet]=useState(''),[balance,setBalance]=useState<number>(),[tab,setTab]=useState(new URLSearchParams(location.search).get('view')==='history'?'history':'markets'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[connected,setConnected]=useState(false),[channel,setChannel]=useState(new URLSearchParams(location.search).get('channel')??''),[history,setHistory]=useState<BetReceipt[]>(receipts()),[operations,setOperations]=useState<Operation[]>([]),[loading,setLoading]=useState(true),[pairing,setPairing]=useState(false),[watchName,setWatchName]=useState(''),[watchBusy,setWatchBusy]=useState(false);
   const operatorToken=useRef('');
   const [operatorReady,setOperatorReady]=useState(false),[loadError,setLoadError]=useState('');
   const refresh=async()=>{
     try{
       const current=await request<Status>('/byte/status');setStatus(current);
       if(current.configured){const result=await request<{markets:DisplayByteMarket[]}>('/byte/markets');setMarkets(result.markets);}
-      const next=await request<ByteConfig>('/byte/config');setConfig(next);setWatched((await request<{channels:string[]}>('/byte/twitch/channels')).channels);setLoadError('');
+      const next=await request<ByteConfig>('/byte/config');setConfig(next);setLoadError('');
     }catch(e){setLoadError((e as Error).message);}finally{setLoading(false);setHistory(receipts());}
   };
   useEffect(()=>{void refresh();const timer=setInterval(()=>void refresh(),6000);return()=>clearInterval(timer);},[]);
@@ -75,10 +77,13 @@ function App(){
     if(pairing)return;setPairing(true);if(!automatic)setError('');try{
       const runtime=(globalThis as unknown as {chrome?:{runtime?:{sendMessage(id:string,message:unknown):Promise<{ok?:boolean;error?:string;flowId?:string}>}}}).chrome?.runtime;
       if(!runtime?.sendMessage||!status?.extensionId)throw new Error('Cargá la extensión de Plot en Chrome y volvé a intentar.');
-      const {token}=await request<{token:string}>('/pair');
-      const result=await runtime.sendMessage(status.extensionId,{type:'PAIR',bridgeUrl:location.origin,token});
-      if(!result?.ok)throw new Error(result?.error??'No se pudo vincular la extensión.');
+      if(status.operatorMode==='local'){
+        const {token}=await request<{token:string}>('/pair');
+        const result=await runtime.sendMessage(status.extensionId,{type:'PAIR',bridgeUrl:location.origin,token});
+        if(!result?.ok)throw new Error(result?.error??'No se pudo vincular la extensión.');
+      }
       const session=await request<{wallet:string|null}>('/points/me').catch(()=>undefined);
+      if(status.operatorMode!=='local'&&!session?.wallet)throw new Error('Conectá Phantom para vincular tu cuenta con la extensión.');
       if(session?.wallet){
         const flow=await runtime.sendMessage(status.extensionId,{type:'LINK_SESSION',bridgeUrl:location.origin});if(!flow?.ok||!flow.flowId)throw new Error(flow?.error??'Actualizá la extensión para vincular la cuenta.');
         const handoff=await request<{flowId:string;code:string;extensionId:string}>('/auth/extension/authorize',{flowId:flow.flowId});
@@ -93,22 +98,22 @@ function App(){
     try{for(const receipt of receipts().filter(r=>r.wallet===wallet&&(r.status==='pending'||r.status==='confirmed'&&!r.synced)))await checkReceipt(receipt);setHistory(receipts());await refresh();}
     catch(e){setError(walletError(e));}finally{setBusy(false);}
   };
-  const watch=async(event:FormEvent)=>{
-    event.preventDefault();if(watchBusy)return;setWatchBusy(true);setError('');
-    try{const name=watchName.trim().replace(/^@/,'').toLowerCase();const token=status?.operatorMode==='local'?(await request<{token:string}>('/pair')).token:undefined;
-      const result=await request<{predictions:{market:{error?:string}}[]}>('/byte/twitch/watch',{channel:name},token);setChannel(name);setWatchName('');await refresh();setNotice(`Siguiendo @${name}. ${result.predictions.find(p=>p.market.error)?.market.error??'Las próximas predicciones se replicarán en devnet.'}`);
+  const watch=async(query:string)=>{
+    if(watchBusy)return;setWatchBusy(true);setError('');
+    try{const name=twitchChannel(query);const token=status?.operatorMode==='local'?(await request<{token:string}>('/pair')).token:undefined;
+      const result=await request<{predictions:{market:{error?:string}}[]}>('/byte/twitch/watch',{channel:name},token);setWatchName('');await refresh();setNotice(`Siguiendo @${name}. ${result.predictions.find(p=>p.market.error)?.market.error??'Las próximas predicciones se replicarán en devnet.'}`);
     }catch(e){setError((e as Error).message);}finally{setWatchBusy(false);}
   };
-  const visibleMarkets=markets.filter(m=>!channel||m.notes?.channel===channel);
-  const channels=[...new Set([...watched,...(channel?[channel]:[]),...markets.map(m=>m.notes?.channel).filter((v):v is string=>!!v)])];
-  return <div className="byte-app"><header><a className="brand" href="/"><PlotLogo/></a><nav aria-label="Secciones"><button aria-current={tab==='markets'?'page':undefined} onClick={()=>setTab('markets')}>Mercados</button><button aria-current={tab==='history'?'page':undefined} onClick={()=>setTab('history')}>Mis apuestas</button><button aria-current={tab==='operator'?'page':undefined} onClick={()=>void operate()}>Operador</button></nav><span className="mode">SOL devnet</span></header>
+  const visibleMarkets=markets.filter(m=>!channel||m.notes?.channel.toLowerCase().includes(channel));
+
+  return <div className="byte-app"><header><a className="brand" href="/"><PlotLogo/></a><nav aria-label="Secciones"><button aria-current={tab==='markets'?'page':undefined} onClick={()=>setTab('markets')}>Mercados</button><button aria-current={tab==='history'?'page':undefined} onClick={()=>setTab('history')}>Mis apuestas</button>{status?.manualOperations!==false&&<button aria-current={tab==='operator'?'page':undefined} onClick={()=>void operate()}>Operador</button>}</nav><span className="mode">SOL devnet</span></header>
     <main><div className="plot-scene"><Scene/></div><section className="intro"><div><h1>{tab==='history'?'Mis apuestas':tab==='operator'?'Consola del streamer':'Predicciones de la comunidad'}</h1><p>{tab==='history'?'Tus transacciones y su confirmación en Solana.':tab==='operator'?'Creá mercados, definí el resultado y seguí los pagos.':'Las jugadas del stream. Un pozo compartido en SOL devnet.'}</p></div><section className="wallet-strip"><div><small>{wallet?short(wallet):'Conectá Phantom'}</small><span>Saldo disponible</span></div><div><strong>{wallet?(balance===undefined?'—':sol(balance)):'—'}</strong><span>SOL devnet</span></div><Button variant="outline" disabled={busy} onClick={()=>void connect()}><Wallet size={16}/>{connected?'Reconectar wallet':'Conectar Phantom'}</Button></section></section>
       <div className="byte-connection"><span>Solana devnet · sin dinero real</span><Button variant="ghost" disabled={pairing||busy} onClick={()=>void pairExtension()}>Vincular extensión</Button></div>
-      {tab==='markets'&&<form className="byte-watch" onSubmit={e=>void watch(e)}><label htmlFor="byte-watch-channel">Canal de Twitch</label><div className="form-row"><Input id="byte-watch-channel" value={watchName} onChange={e=>setWatchName(e.target.value)} placeholder="@eggsterr" pattern="@?[a-zA-Z0-9_]{1,40}" required disabled={watchBusy}/><Button type="submit" disabled={watchBusy}>{watchBusy?'Verificando Twitch…':'Seguir canal'}</Button></div></form>}
+      {tab==='markets'&&<form className="byte-watch" onSubmit={event=>{event.preventDefault();void watch(watchName);}}><label htmlFor="byte-watch-channel">Canal de Twitch</label><div className="form-row"><Input id="byte-watch-channel" value={watchName} onChange={event=>setWatchName(event.target.value)} placeholder="@eggsterr" required disabled={watchBusy}/><Button type="submit" disabled={watchBusy}>{watchBusy?'Verificando Twitch…':'Seguir canal'}</Button></div></form>}
       {status&&!status.configured&&<Notice tone="warning">Los mercados todavía no están habilitados. El operador debe completar la conexión con byte.</Notice>}
       {loadError&&<Notice tone="error">{loadError}</Notice>}{error&&<Notice tone="error">{error}</Notice>}{notice&&<Notice>{notice}</Notice>}
-      {tab==='markets'&&<><div className="byte-section-head section-title"><h2>Mercados</h2><div><Select aria-label="Filtrar canal" value={channel} onChange={e=>setChannel(e.target.value)}><option value="">Todos los canales</option>{channels.map(c=><option key={c}>{c}</option>)}</Select><Button size="icon" variant="ghost" aria-label="Actualizar mercados" onClick={()=>void refresh()}><RefreshCw size={16}/></Button></div></div>
-        {loading?<p role="status">Consultando mercados…</p>:loadError?<div className="byte-empty"><h2>No pudimos consultar los mercados</h2><Button variant="outline" onClick={()=>void refresh()}>Reintentar</Button></div>:!visibleMarkets.length?<div className="byte-empty"><Chameleon mood="doubt"/><h2>Todavía no hay mercados</h2><p>Creá el primero desde el panel del operador.</p><Button onClick={()=>void operate()}><Plus size={16}/>Crear un mercado</Button></div>:<div className="byte-grid market-grid">{visibleMarkets.map(m=><MarketCard key={m.id} market={m} config={config} wallet={wallet} disabled={busy} onDone={async()=>{setHistory(receipts());await refresh();}}/>)}</div>}</>}
+      {tab==='markets'&&<><div className="byte-section-head section-title"><h2>Mercados</h2><div className="byte-market-tools"><ExpandableSearchBar expandDirection="left" width={320} placeholder="Buscar canal…" inputLabel="Filtrar canal" openLabel="Buscar canal" submitLabel="Filtrar mercados" defaultOpen={!!channel} defaultValue={channel} onSearch={query=>{setError('');try{setChannel(twitchChannel(query));}catch(error){setError((error as Error).message);}}} onClear={()=>{setChannel('');setError('');}}/><Button size="icon" variant="ghost" aria-label="Actualizar mercados" onClick={()=>void refresh()}><RefreshCw size={16}/></Button></div></div>
+        {loading?<p role="status">Consultando mercados…</p>:loadError?<div className="byte-empty"><h2>No pudimos consultar los mercados</h2><Button variant="outline" onClick={()=>void refresh()}>Reintentar</Button></div>:!visibleMarkets.length?<div className="byte-empty"><Chameleon mood="doubt"/><h2>Todavía no hay mercados</h2>{status?.manualOperations===false?<p>Las predicciones de los canales seguidos aparecerán acá cuando estén abiertas.</p>:<><p>Creá el primero desde el panel del operador.</p><Button onClick={()=>void operate()}><Plus size={16}/>Crear un mercado</Button></>}</div>:<GlowStage className="byte-grid market-grid">{visibleMarkets.map(m=><MarketCard key={m.id} market={m} config={config} wallet={wallet} disabled={busy} onDone={async()=>{setHistory(receipts());await refresh();}}/>)}</GlowStage>}</>}
       {tab==='history'&&<section><div className="byte-section-head"><h2>Mis apuestas en devnet</h2><Button variant="outline" disabled={busy||!wallet} onClick={()=>void checkHistory()}><RefreshCw size={15}/>Revisar transacciones</Button></div><p className="byte-muted">Recibos guardados en este navegador para la wallet conectada. La confirmación se consulta en cadena; no es un historial completo de tu wallet.</p>{!wallet?<Notice>Conectá la wallet con la que apostaste.</Notice>:!history.some(r=>r.wallet===wallet)?<div className="byte-empty"><p>Todavía no hay apuestas guardadas para esta wallet.</p></div>:history.filter(r=>r.wallet===wallet).map(r=><article className="byte-receipt" key={r.signature}><div><strong>{r.title}</strong><p>{sol(r.amount)} SOL · opción {r.option+1} · {{pending:'Confirmación pendiente',confirmed:'Confirmada',failed:'Falló en cadena',expired:'Expiró sin confirmación'}[r.status]}</p>{r.status==='confirmed'&&!r.synced&&<small>Confirmada en Solana; sincronización con byte pendiente.</small>}</div><a href={`https://explorer.solana.com/tx/${r.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver transacción <ExternalLink size={14}/></a></article>)}</section>}
       {tab==='operator'&&<section><div className="byte-section-head"><h2>Panel del operador</h2><span className="byte-muted">{status?.operatorMode==='local'?'Acceso local · no publicar este servidor':'Wallets autorizadas'}</span></div><Notice tone="warning">Los mercados propios se resuelven con evidencia. Las réplicas usan el resultado verificado de la predicción de Twitch.</Notice>{operatorReady?<CreateMarket disabled={!status?.configured} token={operatorToken.current} onDone={async()=>{await refresh();setTab('markets');}}/>:<Notice>Se necesita acceso de operador. Conectá una wallet autorizada o volvé a abrir esta sección.</Notice>}
         {operations.map(op=><Recovery key={op.requestId} operation={op} token={operatorToken.current} onDone={()=>void operate()}/>)}
@@ -131,9 +136,9 @@ function MarketCard({market:m,config,wallet,disabled,onDone}:{market:DisplayByte
     try{const receipt=await sendBet(m,option,amount,wallet,config,setMessage);setMessage(receipt.status==='confirmed'?'Apuesta confirmada en Solana.':receipt.status==='pending'?'Confirmación pendiente. Revisá la firma en Mis apuestas antes de enviar otra.':receipt.status==='expired'?'La transacción expiró sin confirmación.':'La transacción falló en cadena.');setFailed(receipt.status==='failed');}
     catch(e){setMessage(walletError(e));setFailed(true);}finally{setBusy(false);await onDone();}
   };
-  return <article className="market-card byte-market" data-market-id={m.id} ref={node=>{if(node)enableSpotlight(node);}}><div className="market-heading"><a href={m.notes?`https://twitch.tv/${m.notes.channel}`:undefined} target="_blank" rel="noopener noreferrer">{m.notes?`@${m.notes.channel}`:'Mercado del partner'}</a><span>Cierre: {new Date(m.closeMs).toLocaleString('es-AR')}</span></div><h3>{m.title}</h3><ByteBetting market={m} config={config} initial={selection} disabled={disabled||busy} onBet={next=>void bet(next)}/>
+  return <GlowCard className="market-card byte-market" data-market-id={m.id}><div className="market-heading"><a href={m.notes?`https://twitch.tv/${m.notes.channel}`:undefined} target="_blank" rel="noopener noreferrer">{m.notes?`@${m.notes.channel}`:'Mercado del partner'}</a><span>Cierre: {new Date(m.closeMs).toLocaleString('es-AR')}</span></div><h3>{m.title}</h3><ByteBetting market={m} config={config} initial={selection} disabled={disabled||busy} onBet={next=>void bet(next)}/>
     {message&&<Notice tone={failed?'error':'info'}>{message}</Notice>}
-    <details><summary>Reglas y evidencia</summary><p>{m.notes?.rules??'Este mercado no tiene reglas registradas en esta aplicación.'}</p>{m.notes?.resolution&&<p>Evidencia: {m.notes.resolution.evidence}</p>}{m.invalidReason&&<p>Anulación: {m.invalidReason}</p>}<p>Si no hay apuestas ganadoras o se anula, byte devuelve las apuestas. Sin resolución, el protocolo prevé anular a los 7 días del cierre.</p><a href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana <ExternalLink size={13}/></a></details></article>;
+    <details><summary>Reglas y evidencia</summary><p>{m.notes?.rules??'Este mercado no tiene reglas registradas en esta aplicación.'}</p>{m.notes?.resolution&&<p>Evidencia: {m.notes.resolution.evidence}</p>}{m.invalidReason&&<p>Anulación: {m.invalidReason}</p>}<p>Si no hay apuestas ganadoras o se anula, byte devuelve las apuestas. Sin resolución, el protocolo prevé anular a los 7 días del cierre.</p><a href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana <ExternalLink size={13}/></a></details></GlowCard>;
 }
 function CreateMarket({disabled,token,onDone}:{disabled:boolean;token:string;onDone:()=>Promise<void>}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');

@@ -1,0 +1,9 @@
+.git
+node_modules
+mobile
+.env
+.env.*
+data
+test-results
+playwright-report
+artifacts

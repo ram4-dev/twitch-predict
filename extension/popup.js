@@ -1,3 +1,5 @@
+import {mountChannelSearch} from './channel-search.js';
+import {defaultBridge,isAppOrigin} from './app-config.js';
 import {popupScope,matchingCache,cacheAllowsBet,cachedBalance,reconcileBytePredictions} from './popup-cache.js';
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
@@ -5,12 +7,12 @@ import './surfaces.js';
 import {byteMarketView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
-const defaultBridge='http://twitch-predict.localhost:1356';
 let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
 const settledCards=new Map();
+const updateChannelSearch=mountChannelSearch($('#channel-search'),async channel=>{selectedChannel=channel;await load();await requestPoll();});
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
-function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname)?u.origin:defaultBridge;}catch{return defaultBridge;}}
+function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return isAppOrigin(u.href)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
 function fact(list,title,value){list.append(el('dt',title),el('dd',value??'Sin informar'));}
 function sourceView(p){
@@ -69,7 +71,7 @@ function renderByte(){
  const {markets:byteMarkets,config,base}=byteCache;
  const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...byteMarkets.map(m=>m.notes?.channel).filter(Boolean)])].sort();
  if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
- const channelOptions=channels.join('|');if($('#channel').dataset.options!==channelOptions){$('#channel').replaceChildren(...channels.map(c=>{const option=el('option',`@${c}`);option.value=c;return option;}));$('#channel').dataset.options=channelOptions;}$('#channel').value=selectedChannel;
+ updateChannelSearch(selectedChannel);
  account=byteCache.account;
  $('#wallet').hidden=!account?.wallet;$('#login').hidden=!!account?.wallet;
  $('#points-error').hidden=!byteError;$('#points-error').textContent=byteError;
@@ -129,7 +131,7 @@ async function load(force=false){
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}
     const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
-    $('#channel').replaceChildren(...(channels.length?channels.map(c=>{const o=el('option',`@${c}`);o.value=c;return o;}):[el('option','Esperando un canal…')]));$('#channel').value=selectedChannel;snapshot=state[`channel:${selectedChannel}`];
+    updateChannelSearch(selectedChannel);snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
     $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
@@ -145,7 +147,7 @@ async function requestPoll(force=false){
  finally{polling.delete(channel);if(force)$('#refresh').disabled=false;await load(force);}
 }
 $('#connect-phantom').onclick=async()=>{const button=$('#connect-phantom');button.disabled=true;$('#auth-message').textContent='Abriendo el acceso con Phantom…';try{const result=await chrome.runtime.sendMessage({type:'CONNECT_PHANTOM'});if(result?.error)throw new Error(result.error);}catch(e){$('#auth-message').textContent=e.message;}finally{button.disabled=false;}};
-$('#channel').onchange=async()=>{selectedChannel=$('#channel').value;await load();void requestPoll();};$('#refresh').onclick=()=>void requestPoll(true);
+$('#refresh').onclick=()=>void requestPoll(true);
 chrome.storage.onChanged.addListener((changes,area)=>{
  if(area!=='local')return;
  if(changes.pointsToken||changes.bridgeUrl){contextDirty=true;$('#wallet').hidden=true;$('#own-balance').textContent='—';$('#history').replaceChildren();document.querySelectorAll('.points-bet').forEach(button=>{button.disabled=true;});}

@@ -1,0 +1,11 @@
+{
+  "name": "plot",
+  "fontFamily": "Fraunces",
+  "fontWeight": 800,
+  "letterCase": "lowercase",
+  "symbol": "open-outcome",
+  "punctuation": "none",
+  "mascot": "chameleon",
+  "mascotAsset": "../branding-v4/chameleon-poses.png",
+  "status": "user-selected visual direction"
+}
