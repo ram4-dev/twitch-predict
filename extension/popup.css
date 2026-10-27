@@ -32,3 +32,6 @@ header .plot-scene.compact>.plot-halftone{width:148px;max-width:calc(100% - 44px
 
 /* The shared halo follows the pointer across the entire popup viewport. */
 body.plot-glow-stage::before{position:fixed;inset:0;border-radius:0}
+
+/* The light remains visible over opaque card surfaces without blocking controls. */
+body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index:3;background:radial-gradient(320px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
