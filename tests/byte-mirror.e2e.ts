@@ -53,13 +53,13 @@ test('MV3 detects a Twitch prediction, creates exactly one Byte mirror and track
   // the independent market refresh, with no click or popup reload.
   native.status='RESOLVED';native.winningOutcome={id:'odd'};await writeFile(twitchFile,JSON.stringify([native]));
   await expect.poll(async()=>(await list())[0].status,{timeout:20000}).toBe('resolved');
-  await expect(popup.locator('.plot-resolution.liquid')).toBeVisible({timeout:15000});
+  await expect(popup.locator('.plot-resolution.count')).toBeVisible({timeout:15000});
   await expect(popup.locator('.plot-resolution .resolution-meta')).toContainText('Resuelta');
-  await expect(popup.locator('.plot-resolution .winner')).toContainText('ODDSTERR :O');
-  await expect(popup.locator('.plot-resolution .loser')).toContainText('EVENNNNZ :D');
+  await expect(popup.locator('.plot-resolution .resolution-result')).toContainText('ODDSTERR :O');
+  await expect(popup.locator('.resolution-outcomes')).toHaveCount(0);
   expect((await list())[0].total).toBe(30000000);await expect(popup.locator('.prediction')).toHaveCount(1);
   expect(await popup.evaluate(()=>(window as unknown as {originalMarket:Element}).originalMarket.isConnected)).toBe(true);
-  await popup.reload();await expect(popup.locator('.plot-resolution .winner')).toContainText('ODDSTERR :O');await expect(popup.locator('.prediction')).toHaveCount(1);
+  await popup.reload();await expect(popup.locator('.plot-resolution .resolution-result')).toContainText('ODDSTERR :O');await expect(popup.locator('.prediction')).toHaveCount(1);
   expect((await list())[0].winner).toBe(1);expect(JSON.parse(await readFile(byteFile,'utf8')).resolutions).toBe(1);
   await popup.screenshot({path:'test-results/byte-twitch-mirrored-popup.png',fullPage:true});await popup.close();releaseWatch?.();
   const short={...native,id:randomUUID(),status:'ACTIVE',winningOutcome:null,createdAt:new Date().toISOString(),predictionWindowSeconds:60};await writeFile(twitchFile,JSON.stringify([short]));

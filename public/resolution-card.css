@@ -18,3 +18,21 @@
 
 .plot-resolution .resolution-chain-link{display:flex;align-items:center;gap:6px;font-size:13px;grid-column:1/-1;padding-top:12px;color:#eee}
 .plot-resolution .resolution-net{color:inherit}
+
+@font-face{font-family:"Space Grotesk";src:url('./fonts/space-grotesk.ttf') format('truetype');font-weight:300 700;font-display:swap}
+/* Selected payout treatment. Legacy materials remain only in the comparison gallery. */
+.plot-resolution.count{background:#121212;backdrop-filter:none;box-shadow:none;border-color:#363636}
+.plot-resolution.count::before,.plot-resolution.count::after{content:none;animation:none}
+.plot-resolution.count .resolution-personal{margin-top:24px;animation:none}
+.plot-resolution.count .positive{color:#79e2b4}.plot-resolution.count .negative{color:#ff8585}
+.plot-resolution.count .resolution-result{font-size:13px;color:#b4b4b4;margin:0}.plot-resolution.count .resolution-result strong{font-weight:500;color:#eee}
+.plot-resolution.count .resolution-net{font-family:"Space Grotesk",Inter,sans-serif;font-weight:600;font-size:clamp(52px,10vw,100px);letter-spacing:-.06em;line-height:1.2;margin:10px 0 4px;gap:10px;overflow-wrap:anywhere}
+.plot-resolution.count .resolution-net-value{font:inherit;max-width:100%}
+.plot-resolution.count .resolution-net-unit{color:#a4a4a4;font-family:Inter,sans-serif;font-size:16px;letter-spacing:0}
+.resolution-count{display:inline-block;max-width:100%;overflow-wrap:anywhere;transform-origin:center}
+.resolution-count[data-complete=true]{animation:payout-count-arrival 560ms ease-in-out both}
+@keyframes payout-count-arrival{0%{transform:scale(1)}40%{transform:scale(1.09)}72%{transform:scale(.975)}100%{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.resolution-count[data-complete=true]{animation:none!important}}
+[data-motion=off] .resolution-count{animation:none!important}
+
+.plot-resolution.count .resolution-net-value{padding-right:10%}.plot-resolution.count .resolution-count{transform-origin:left center}

@@ -47,3 +47,24 @@ body .prediction.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23p
 
 /* Keep the cursor halo tighter while preserving the reduced-motion fallback. */
 @media (prefers-reduced-motion:no-preference){body.plot-glow-stage::before{filter:blur(18px);background:radial-gradient(420px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .32),rgb(255 112 73 / .08) 55%,transparent 85%)}}
+
+.prediction .plot-resolution.count .resolution-content{display:block;padding:20px 24px}
+.prediction .plot-resolution.count .resolution-content>h3{margin:12px 0 8px}
+.prediction .plot-resolution.count .resolution-personal{margin-top:24px}
+.prediction .plot-resolution.count .resolution-net{font-size:clamp(52px,12vw,96px)}
+.prediction .plot-resolution.count .resolution-net:has(.resolution-net-value .resolution-count){flex-wrap:nowrap}
+.prediction .plot-resolution.count .resolution-receipt{margin-top:20px;border-top:1px solid #ffffff20;padding-top:14px}
+.prediction .plot-resolution.count .resolution-detail-toggle{margin-top:14px}
+
+@media(min-width:520px){
+ .prediction .plot-resolution.count .resolution-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.45fr);gap:0 20px;padding:16px 24px}
+ .prediction .plot-resolution.count .resolution-result{grid-column:1/-1}
+ .prediction .plot-resolution.count .resolution-personal{container-type:inline-size;margin-top:18px}
+ .prediction .plot-resolution.count .resolution-net{font-size:clamp(32px,calc((100cqw - 38px) / var(--figure-length) * 1.6),96px)}
+ .prediction .plot-resolution.count .resolution-receipt{display:grid;align-self:center;gap:8px;border:0;padding:0;margin:18px 0 0}
+ .prediction .plot-resolution.count .resolution-receipt>div{text-align:right}
+ .prediction .plot-resolution.count .resolution-receipt dt{margin:0 0 2px}
+ .prediction .plot-resolution.count .resolution-receipt dd{margin:0}
+}
+
+@media(min-width:520px){.prediction .plot-resolution.count .resolution-net{font-size:clamp(32px,calc((88cqw - 40px) / var(--figure-length) * 1.6),96px)}}

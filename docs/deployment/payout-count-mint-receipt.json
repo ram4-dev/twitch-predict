@@ -1,0 +1,26 @@
+{
+  "task": "Apply selected mint + Space Grotesk counting payout card and native result popup delivery",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "baseCommit": "1aaf65d",
+    "branch": "feat-payout-count-mint",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-payout-count-mint",
+    "cleanup": "retained for resumption"
+  },
+  "extensionVersion": "0.18.0",
+  "behavior": {
+    "card": "Neutral background, compact source result, large mint net gain, red signed loss, 1150ms count + one 560ms pulse",
+    "delivery": "Observed nonterminal to verified terminal transitions only; focused matching Twitch tab; persist delivery before native openPopup; no old-history opens or repeated opens; badge if Chrome refuses",
+    "scope": "Content script wakes worker while Twitch tab remains open. No background browser opening or focus stealing. No new permissions.",
+    "financialBoundary": "No invented SOL payout. Existing Byte API does not expose a verified personal payout; source-only 429 rounds have no SOL stake. Confirmed internal-point totals can be counted. Wallet and chain actions unchanged."
+  },
+  "verification": {
+    "check": "npm run check passed: typecheck, lint, 65 tests; 7 PostgreSQL cases skipped; build passed.",
+    "generalE2E": "npm run test:e2e: 52 passed, 13 skipped (other modes and external deployment suites).",
+    "byteE2E": "4 Byte mirror and 429 lifecycle cases passed in isolated Byte-mode server.",
+    "nativeOpeningE2E": "Real headed Chromium content-script polling -> background -> chrome.action.openPopup passed. Asserted 700px native popup, correct Twitch outcome, no invented SOL amount, and no reopening after dismissal and additional real polls. macOS test browser explicitly kept in foreground; production focus guard is not bypassed.",
+    "visual": "700x600 screenshot inspected. Claim remains visible, large and mixed-bet totals fit, pulse has reserved room; result has no green animated background. Public compact previews and reduced-motion cases pass.",
+    "financialBoundary": "No production wallet signatures or transfers. Real Ed25519 signatures in isolated fixtures only."
+  }
+}
