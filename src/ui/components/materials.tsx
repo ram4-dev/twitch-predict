@@ -79,7 +79,8 @@ export function HalftonePlot({replayKey=0,paused=false,label='plot en puntos, co
     if(!reduced){let ax=(d.tx-d.x)*130-d.vx*21,ay=(d.ty-d.y)*130-d.vy*21;const dx=d.x-pointer.x,dy=d.y-pointer.y,dist=Math.hypot(dx,dy);if(dist<65&&dist>1){const force=(65-dist)*24;ax+=dx/dist*force;ay+=dy/dist*force;}d.vx+=ax*dt;d.vy+=ay*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;energy+=Math.abs(d.vx)+Math.abs(d.vy)+Math.abs(d.tx-d.x)+Math.abs(d.ty-d.y);}
     ctx!.beginPath();ctx!.arc(d.x,d.y,Math.max(.85,width/620),0,Math.PI*2);ctx!.fill();
    }
-   ctx!.fillStyle='#ff7049';ctx!.beginPath();ctx!.arc(dotX,dotY,dotRadius,0,Math.PI*2);ctx!.fill();
+   ctx!.fillStyle='#ff7049';ctx!.beginPath();ctx!.roundRect(dotX-dotRadius*.6,dotY-dotRadius*3.2,dotRadius*1.2,dotRadius*2.8,dotRadius*.6);ctx!.fill();
+   ctx!.beginPath();ctx!.arc(dotX,dotY+dotRadius*.9,dotRadius*.6,0,Math.PI*2);ctx!.fill();
    const moving=!reduced&&energy>dots.length*.04;el!.dataset.animationState=moving?'assembling':'settled';if(moving)schedule();
   }
   const move=(e:PointerEvent)=>{if(reduced)return;const r=el.getBoundingClientRect();pointer.x=e.clientX-r.left;pointer.y=e.clientY-r.top;schedule();};
