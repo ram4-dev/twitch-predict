@@ -33,7 +33,7 @@ test('MV3 liquid resolution uses account totals for winner, mixed bets, loser, r
   const claimBox=await card.getByRole('button',{name:'Cobrar 530 pts'}).boundingBox();expect(claimBox!.y+claimBox!.height).toBeLessThan(560);
   await page.screenshot({path:'test-results/liquid-resolution-large-pnl.png',fullPage:true});
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('liquid-reflection');
-  const stage=page.locator('#predictions');await expect(stage).toHaveClass(/plot-glow-stage/);expect(await stage.evaluate(el=>getComputedStyle(el,'::before').filter)).toBe('blur(24px)');
+  const stage=page.locator('body');await expect(stage).toHaveClass(/plot-glow-stage/);expect(await stage.evaluate(el=>getComputedStyle(el,'::before').filter)).toBe('blur(24px)');expect(await stage.evaluate(el=>getComputedStyle(el,'::before').position)).toBe('fixed');await page.locator('header').hover();await expect(stage).toHaveAttribute('data-glow-active','true');await page.locator('footer').hover();await expect(stage).toHaveAttribute('data-glow-active','true');
   await page.getByRole('button',{name:'Pausar animación',exact:true}).click();await expect.poll(()=>card.evaluate(el=>getComputedStyle(el,'::before').animationPlayState)).toBe('paused');
   await page.getByRole('button',{name:'Reanudar animación',exact:true}).click();await expect.poll(()=>card.evaluate(el=>getComputedStyle(el,'::before').animationPlayState)).toBe('running');
   bets=[bet('yes',1000000,9500000)];await page.reload();await expect(card.locator('.resolution-net')).toHaveText('+8.500.000 pts');
@@ -66,7 +66,7 @@ test('MV3 SOL resolution uses animated glass and does not invent a wallet payout
   });
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
   const page=await context.newPage();await page.goto(`chrome-extension://${id}/popup.html`);
-  const card=page.locator('.plot-resolution.liquid');await expect(card).toBeVisible();await expect(card.locator('.winner')).toContainText('Gana');await expect(card.locator('.loser')).toContainText('No gana');await expect(card).toContainText('El importe de tu cobro no está disponible.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
+  const card=page.locator('.plot-resolution.liquid');await expect(card).toBeVisible();await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.winner')).toContainText('Gana');await expect(card.locator('.loser')).toContainText('No gana');await expect(card).toContainText('El importe de tu cobro no está disponible.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
   await expect(card).toContainText('Esperando que byte complete los pagos.');
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('liquid-reflection');
   market.chain.settled=true;await page.reload();await expect(card).toContainText('Pagos o reembolsos completados en cadena.');await expect(card.locator('.resolution-net')).toHaveCount(0);

@@ -5,7 +5,7 @@ import {enhanceGlowStage} from '@/components/ui/spotlight-card';
 
 let sceneMounted=false;
 function enhance(){
-  for(const node of document.querySelectorAll<HTMLElement>('#predictions,.market-grid'))enhanceGlowStage(node);
+  for(const node of document.querySelectorAll<HTMLElement>('body:has(#predictions),.market-grid'))enhanceGlowStage(node);
   const scene=document.getElementById('plot-scene');if(scene&&!sceneMounted){sceneMounted=true;createRoot(scene).render(<Scene compact={scene.classList.contains('compact')}/>);}
   for(const node of document.querySelectorAll<HTMLElement>('.market-card,.prediction,.watch-row,.managed-market,.position-card,.auth-card'))enableSpotlight(node);
 }
