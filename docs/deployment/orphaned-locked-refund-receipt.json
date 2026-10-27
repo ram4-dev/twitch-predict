@@ -1,0 +1,15 @@
+{
+  "task": "Void orphaned LOCKED Twitch markets through periodic reconciliation",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "b40ec91",
+    "branch": "fix-orphaned-locked-market-refund",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-orphaned-locked-market-refund",
+    "cleanup": "retained"
+  },
+  "policy": "For an owned open Byte mirror: require a successful channel listing that omits its Twitch ID AND an authoritative by-ID response that is still LOCKED, then invalidate with winner=null. ACTIVE, valid RESOLVED, source errors, already-final markets and source-only previews do not trigger this orphan rule. Persisted decisions survive timeouts and source changes.",
+  "scheduler": "Existing leased cloud worker runs continuously with a 5-second pause between cycles; no second scheduler or competing worker.",
+  "verification": "Full check with isolated PostgreSQL: 79 passed, zero skipped; database stopped and removed. MV3 E2E covers still-listed lock, disappearance, one invalidation, null winner, no profit and reload. Existing mirror resolution and 429 lifecycle E2E included.",
+  "authorization": "User explicitly requested automatic void/refund for LOCKED rounds missing from the active feed, including the discussed Gorgc market. No manual wallet signatures or bets."
+}

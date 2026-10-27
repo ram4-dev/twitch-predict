@@ -28,18 +28,18 @@ export class ByteTwitchMirror {
  watch(channel:string){return this.serial(async()=>{if(!this.state.channels.includes(channel)){this.state.channels.push(channel);await this.save();}await this.refresh(channel);return {channel,predictions:this.snapshot(channel)};});}
  sync(){if(this.syncing)return this.syncing;this.syncing=this.serial(async()=>{if(this.documents)await this.load();const errors:string[]=[];for(const channel of this.state.channels)try{await this.refresh(channel);}catch(e){errors.push(`${channel}: ${(e as Error).message}`);}this.lastError=errors.length?errors.join('; '):null;}).finally(()=>{this.syncing=undefined;});return this.syncing;}
  private async refresh(channel:string){
-  const seen=new Set<string>(),errors:string[]=[];
+  const seen=new Set<string>(),errors:string[]=[];let activeVerified=false;
   try{
-   const active=await this.source.active(channel);this.activeIds.set(channel,new Set(active.map(p=>p.id)));
+   const active=await this.source.active(channel);activeVerified=true;this.activeIds.set(channel,new Set(active.map(p=>p.id)));
    for(const p of active){seen.add(p.id);try{await this.observe(p);}catch(e){errors.push(`${p.id}: ${(e as Error).message}`);}}
   }catch(e){errors.push((e as Error).message);}
   // A failed channel feed or one missing historical ID must not block other rounds.
   for(const mirror of Object.values(this.state.mirrors))if(mirror.prediction.channel===channel&&(mirror.marketId||mirror.retryAt)&&mirror.phase!=='resolved'&&!seen.has(mirror.prediction.id)){
-   try{await this.observe(await this.source.prediction(mirror.prediction.id,channel));}catch(e){errors.push(`${mirror.prediction.id}: ${(e as Error).message}`);}
+   try{await this.observe(await this.source.prediction(mirror.prediction.id,channel),activeVerified);}catch(e){errors.push(`${mirror.prediction.id}: ${(e as Error).message}`);}
   }
   if(errors.length)throw new Error(errors.join('; '));
  }
- private async observe(p:Prediction){
+ private async observe(p:Prediction,absentFromActive=false){
   const key=`${p.channel}:${p.id}`;let mirror=this.state.mirrors[key];
   if(!mirror){mirror={prediction:p,outcomeIds:p.outcomes.map(o=>o.id),phase:'pending'};this.state.mirrors[key]=mirror;}else mirror.prediction=p;
   if(mirror.phase==='resolved'){await this.save();return;}
@@ -59,7 +59,7 @@ export class ByteTwitchMirror {
    const windowSecs=Math.floor((closesAt(p)-this.clock())/1000)-20;
    const reason=p.status!=='ACTIVE'||p.lockedAt?'La predicción de Twitch ya cerró.':windowSecs<60?'La ventana restante es demasiado corta: Byte requiere 60 segundos más margen de creación.':Date.parse(p.createdAt)>this.clock()+5000?'El inicio de la predicción no es válido.':p.outcomes.length>6||p.title.length>140||p.outcomes.some(o=>o.title.length>40)?'La pregunta u opciones superan los límites de Byte.':undefined;
    if(reason){mirror.phase='skipped';mirror.error=reason;await this.save();return;}
-   mirror.input={title:p.title,options:p.outcomes.map(o=>o.title),channel:p.channel,currency:'sol',windowSecs,rules:`Réplica de la predicción ${p.id} de @${p.channel}. El ganador se obtiene del resultado verificado de Twitch. Las apuestas cierran hasta 20 segundos antes. Se anula si Twitch cancela o cierra antes de que cierre el mercado en cadena.`,requestId:randomUUID()};await this.save();
+   mirror.input={title:p.title,options:p.outcomes.map(o=>o.title),channel:p.channel,currency:'sol',windowSecs,rules:`Réplica de la predicción ${p.id} de @${p.channel}. El ganador se obtiene del resultado verificado de Twitch. Las apuestas cierran hasta 20 segundos antes. Se anula si Twitch cancela, cierra antes que el mercado en cadena, o sigue LOCKED por ID tras desaparecer de las predicciones activas del canal. La anulación devuelve la apuesta sin ganancias.`,requestId:randomUUID()};await this.save();
   }
   try{
    if(!mirror.marketId){
@@ -82,8 +82,16 @@ export class ByteTwitchMirror {
    await this.byte.updateTwitch(mirror.marketId,p);
    const market=await this.byte.get(mirror.marketId);
    if(market.status!=='open'){mirror.phase='resolved';mirror.error=undefined;await this.save();return;}
+   const decision=market.notes?.resolution;
+   const orphanedLock=absentFromActive&&p.status==='LOCKED';
    const earlyClose=(p.status!=='ACTIVE'||!!p.lockedAt)&&(p.lockedAt?Date.parse(p.lockedAt):this.clock())<market.closeMs;
-   if(p.status==='CANCELED'||earlyClose){await this.byte.settle(mirror.marketId,null,`Twitch ${p.id}: ${earlyClose?'cerró antes de la ventana en cadena':'canceló la predicción'}.`,'twitch');mirror.phase='resolved';}
+   // A persisted decision is authoritative across timeouts/restarts, including
+   // a void whose source later changes from LOCKED to RESOLVED.
+   if(decision){await this.byte.settle(mirror.marketId,decision.winner,decision.evidence,'twitch');mirror.phase='resolved';}
+   else if(p.status==='CANCELED'||earlyClose||orphanedLock){
+    const reason=orphanedLock?'sigue LOCKED por ID y ya no figura entre las predicciones activas del canal; anulación para reembolso sin ganancias':earlyClose?'cerró antes de la ventana en cadena':'canceló la predicción';
+    await this.byte.settle(mirror.marketId,null,`Twitch ${p.id}: ${reason}.`,'twitch');mirror.phase='resolved';
+   }
    else if(p.status==='RESOLVED'){
     const winner=mirror.outcomeIds.indexOf(p.winningOutcomeId??'');
     if(winner<0)throw new Error('Twitch no confirmó una opción ganadora válida');
