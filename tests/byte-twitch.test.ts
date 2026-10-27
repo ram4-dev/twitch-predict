@@ -44,3 +44,12 @@ test('429 rejection retries safely with a shorter window after restart',()=>fixt
  const restarted=await f.restart();assert.equal((await restarted.watch('eggsterr')).predictions[0].market.rateLimited,true);assert.equal(f.counts.create,1);
  f.advance(31000);await restarted.watch('eggsterr');assert.equal(f.counts.create,2);const recovered=(await restarted.watch('eggsterr')).predictions[0];assert.equal(recovered.market.state,'created');assert.equal(recovered.market.rateLimited,false);
 },false,false,true));
+
+for(const status of ['RESOLVED','CANCELED'] as const)test(`429 preview tracks lock and ${status} after disappearing from active Twitch events`,()=>fixture(async f=>{
+ await f.mirror.watch('eggsterr');f.advance(601000);
+ f.set({...f.prediction,status:'LOCKED',lockedAt:new Date().toISOString()});
+ const locked=await f.restart();await locked.sync();const first=locked.snapshot('eggsterr')[0];assert.equal(first.prediction.status,'LOCKED');assert.equal(first.market.rateLimited,true);assert.equal(first.market.byteMarketId,undefined);
+ f.set({...f.prediction,status,winningOutcomeId:status==='RESOLVED'?'odd':null,endedAt:new Date().toISOString(),outcomes:[...f.prediction.outcomes].reverse()});
+ const settled=await f.restart();await settled.sync();const final=settled.snapshot('eggsterr')[0];assert.equal(final.prediction.status,status);assert.equal(final.market.state,'resolved');assert.equal(final.market.rateLimited,true);assert.equal(final.market.error,null);
+ const restored=await f.restart();await restored.sync();assert.equal(restored.snapshot('eggsterr')[0].prediction.status,status);assert.deepEqual(f.counts,{create:1,resolve:0,invalidate:0});
+},false,false,true));
