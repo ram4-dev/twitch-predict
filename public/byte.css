@@ -13,3 +13,11 @@
 .byte-watch>p{margin:0 0 12px;font-size:14px;color:var(--muted-foreground)}
 
 .byte-section-head>.byte-market-tools{justify-content:flex-end}
+
+/* The dashboard uses the extension's animated atmosphere and cursor light. */
+.byte-app{position:relative;isolation:isolate;min-height:100vh}.byte-app.plot-glow-stage::before{inset:0;border-radius:0;filter:blur(18px);background:radial-gradient(420px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .32),rgb(255 112 73 / .08) 55%,transparent 85%)}
+.popup-atmosphere{position:fixed;inset:0;z-index:-2;opacity:.55;pointer-events:none;overflow:hidden}.popup-atmosphere .plot-dither-field{z-index:0;background:#080808;border-radius:0}
+.byte-app>header .plot-scene.compact{width:148px;height:56px;margin:0;overflow:visible;background:transparent}.byte-app>header .plot-scene.compact>.plot-halftone{width:148px;height:100%}.byte-app>header .brand{flex-shrink:0}
+.byte-app .market-card.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23px}.byte-app .market-card.plot-glow-card::after{z-index:3;background:radial-gradient(250px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
+.byte-app .market-card:has(.plot-resolution){padding:0;background:transparent;border:0}.byte-app .market-card .byte-betting:has(.plot-resolution){padding:0;background:transparent}.byte-app .market-card:has(.plot-resolution)>.market-heading{padding:18px 22px 0}.byte-app .market-card:has(.plot-resolution)>details{padding:0 22px 18px}.byte-app .market-card .plot-resolution .plot-notice{margin:16px 0 0}
+@media(prefers-reduced-motion:reduce){.byte-app.plot-glow-stage::before{background:radial-gradient(640px circle at 50% 160px,rgb(255 112 73 / .2),transparent 85%)}}
