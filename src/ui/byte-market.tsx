@@ -21,7 +21,12 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
  const open=m.status==='open'&&m.bettable&&now<m.closeMs;
  const change=(value:string)=>{setAmount(value);setError('');onEdit?.();};
  const choose=(option:number)=>{try{const value=solToLamports(amount);if(config&&(value>BigInt(config.sol.maxBet)||BigInt(m.total)+value>BigInt(config.sol.maxPool)))throw new Error('La apuesta supera los límites del mercado.');setError('');setSelected(option);onBet({option,amount});}catch(e){setError((e as Error).message);}};
- if((extension&&m.status!=='open')||(resolution&&['resolved','invalid'].includes(m.status)))return <section className="points-market byte-betting"><Resolution title={m.title} channel={m.notes?.channel??'partner'} outcomes={m.options.map((title,i)=>({id:String(i),title}))} winnerId={m.winner===null?undefined:String(m.winner)} canceled={m.status==='invalid'} accountKnown={false} unavailableMessage="El importe de tu cobro no está disponible.">
+ // Byte refunds an empty winning pool even when Twitch has a valid winner.
+ // Preserve that sporting result without presenting the refund as a win/payout.
+ const sourceWinner=m.status==='invalid'&&m.invalidReason==='nobody bet on the outcome'&&m.notes?.twitch?.status==='RESOLVED'?m.notes.resolution?.winner:null;
+ const refundedWinner=sourceWinner!=null&&!!m.options[sourceWinner]&&m.pools[sourceWinner]===0?sourceWinner:null;
+ if((extension&&m.status!=='open')||(resolution&&['resolved','invalid'].includes(m.status)))return <section className="points-market byte-betting"><Resolution title={m.title} channel={m.notes?.channel??'partner'} outcomes={m.options.map((title,i)=>({id:String(i),title}))} winnerId={m.winner!==null?String(m.winner):refundedWinner!==null?String(refundedWinner):undefined} canceled={m.status==='invalid'&&refundedWinner===null} accountKnown={false} unavailableMessage="El importe de tu cobro no está disponible.">
+  {refundedWinner!==null&&<Notice>Resultado confirmado en Twitch. Mercado SOL anulado: no hubo apuestas a la opción ganadora. {m.chain.settled?'Reembolsos completados en cadena.':'Reembolsos pendientes de Byte.'}</Notice>}
   <Notice tone={m.chain.settled?'success':'info'}>{m.chain.settled?'Pagos o reembolsos completados en cadena.':'Resultado registrado. Esperando que byte complete los pagos.'}</Notice>
   <a className="resolution-chain-link" href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana devnet <ArrowUpRight size={14}/></a>
  </Resolution></section>;

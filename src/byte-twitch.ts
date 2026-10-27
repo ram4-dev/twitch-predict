@@ -28,10 +28,16 @@ export class ByteTwitchMirror {
  watch(channel:string){return this.serial(async()=>{if(!this.state.channels.includes(channel)){this.state.channels.push(channel);await this.save();}await this.refresh(channel);return {channel,predictions:this.snapshot(channel)};});}
  sync(){if(this.syncing)return this.syncing;this.syncing=this.serial(async()=>{if(this.documents)await this.load();const errors:string[]=[];for(const channel of this.state.channels)try{await this.refresh(channel);}catch(e){errors.push(`${channel}: ${(e as Error).message}`);}this.lastError=errors.length?errors.join('; '):null;}).finally(()=>{this.syncing=undefined;});return this.syncing;}
  private async refresh(channel:string){
-  const active=await this.source.active(channel),seen=new Set<string>();this.activeIds.set(channel,new Set(active.map(p=>p.id)));
-  for(const p of active){seen.add(p.id);await this.observe(p);}
-  // Continue tracking IDs after Twitch removes them from its active event list.
-  for(const mirror of Object.values(this.state.mirrors))if(mirror.prediction.channel===channel&&(mirror.marketId||mirror.retryAt)&&mirror.phase!=='resolved'&&!seen.has(mirror.prediction.id))await this.observe(await this.source.prediction(mirror.prediction.id,channel));
+  const seen=new Set<string>(),errors:string[]=[];
+  try{
+   const active=await this.source.active(channel);this.activeIds.set(channel,new Set(active.map(p=>p.id)));
+   for(const p of active){seen.add(p.id);try{await this.observe(p);}catch(e){errors.push(`${p.id}: ${(e as Error).message}`);}}
+  }catch(e){errors.push((e as Error).message);}
+  // A failed channel feed or one missing historical ID must not block other rounds.
+  for(const mirror of Object.values(this.state.mirrors))if(mirror.prediction.channel===channel&&(mirror.marketId||mirror.retryAt)&&mirror.phase!=='resolved'&&!seen.has(mirror.prediction.id)){
+   try{await this.observe(await this.source.prediction(mirror.prediction.id,channel));}catch(e){errors.push(`${mirror.prediction.id}: ${(e as Error).message}`);}
+  }
+  if(errors.length)throw new Error(errors.join('; '));
  }
  private async observe(p:Prediction){
   const key=`${p.channel}:${p.id}`;let mirror=this.state.mirrors[key];
@@ -76,7 +82,7 @@ export class ByteTwitchMirror {
    await this.byte.updateTwitch(mirror.marketId,p);
    const market=await this.byte.get(mirror.marketId);
    if(market.status!=='open'){mirror.phase='resolved';mirror.error=undefined;await this.save();return;}
-   const earlyClose=(p.status!=='ACTIVE'||!!p.lockedAt)&&this.clock()<market.closeMs;
+   const earlyClose=(p.status!=='ACTIVE'||!!p.lockedAt)&&(p.lockedAt?Date.parse(p.lockedAt):this.clock())<market.closeMs;
    if(p.status==='CANCELED'||earlyClose){await this.byte.settle(mirror.marketId,null,`Twitch ${p.id}: ${earlyClose?'cerró antes de la ventana en cadena':'canceló la predicción'}.`,'twitch');mirror.phase='resolved';}
    else if(p.status==='RESOLVED'){
     const winner=mirror.outcomeIds.indexOf(p.winningOutcomeId??'');

@@ -123,7 +123,10 @@ export class ByteService {
     // Persist the oracle decision before asking byte; retries first read its authoritative state.
     await this.mutate(state=>{const current=state.notes[id];if(current.resolution&&(current.resolution.winner!==winner||current.resolution.evidence!==evidence))throw new ByteError(409,'Hay una resolución previa pendiente. Reintentá la misma decisión.');current.resolution={winner,evidence,at:new Date().toISOString()};});
     await this.request(`/api/partner/markets/${encodeURIComponent(id)}/${winner===null?'invalidate':'resolve'}`,winner===null?{reason:evidence}:{winner});
-    return this.get(id);
+    const settled=await this.get(id);
+    if(settled.status==='open')throw new ByteError(503,'Byte todavía no confirmó la resolución. Se volverá a verificar automáticamente.');
+    if(settled.status==='resolved'&&settled.winner!==winner)throw new ByteError(409,'Byte confirmó un resultado distinto de la decisión registrada.');
+    return settled;
   });}
   async sync(id:string,wallet:string){await this.get(id);const result=this.parseMarket(await this.request(`/api/predictions/${encodeURIComponent(id)}/chain-sync?wallet=${encodeURIComponent(wallet)}`,{},false));if(this.documents)await this.documents.notifyMarketChange().catch(()=>{});else this.onChange?.();return result;}
 }

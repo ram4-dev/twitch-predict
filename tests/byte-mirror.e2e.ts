@@ -51,6 +51,7 @@ test('MV3 detects a Twitch prediction, creates exactly one Byte mirror and track
   expect((await list()).length).toBe(1);expect(JSON.parse(await readFile(byteFile,'utf8')).resolutions).toBe(0);
   // The watched stream request is still blocked: resolving must update through
   // the independent market refresh, with no click or popup reload.
+  const delayed=JSON.parse(await readFile(byteFile,'utf8'));delayed.delayResolution=true;await writeFile(byteFile+'.update',JSON.stringify(delayed));await rename(byteFile+'.update',byteFile);
   native.status='RESOLVED';native.winningOutcome={id:'odd'};await writeFile(twitchFile,JSON.stringify([native]));
   await expect.poll(async()=>(await list())[0].status,{timeout:20000}).toBe('resolved');
   await expect(popup.locator('.plot-resolution.count')).toBeVisible({timeout:15000});
@@ -60,7 +61,10 @@ test('MV3 detects a Twitch prediction, creates exactly one Byte mirror and track
   expect((await list())[0].total).toBe(30000000);await expect(popup.locator('.prediction')).toHaveCount(1);
   expect(await popup.evaluate(()=>(window as unknown as {originalMarket:Element}).originalMarket.isConnected)).toBe(true);
   await popup.reload();await expect(popup.locator('.plot-resolution .resolution-result')).toContainText('ODDSTERR :O');await expect(popup.locator('.prediction')).toHaveCount(1);
-  expect((await list())[0].winner).toBe(1);expect(JSON.parse(await readFile(byteFile,'utf8')).resolutions).toBe(1);
+  expect((await list())[0].winner).toBe(1);expect(JSON.parse(await readFile(byteFile,'utf8')).resolutions).toBe(2);
+  // Byte can refund an empty winning pool while Twitch still has a winner.
+  const refunded=JSON.parse(await readFile(byteFile,'utf8'));Object.assign(refunded.markets[0],{status:'invalid',winner:null,invalidReason:'nobody bet on the outcome',pools:[10000000,0],total:10000000,chain:{...refunded.markets[0].chain,settled:true}});await writeFile(byteFile+'.update',JSON.stringify(refunded));await rename(byteFile+'.update',byteFile);
+  await popup.reload();await expect(popup.locator('.plot-resolution .resolution-result')).toContainText('ODDSTERR :O');await expect(popup.getByText('Mercado SOL anulado:',{exact:false})).toBeVisible();await expect(popup.getByText('Ronda anulada',{exact:true})).toHaveCount(0);
   await popup.screenshot({path:'test-results/byte-twitch-mirrored-popup.png',fullPage:true});await popup.close();releaseWatch?.();
   const short={...native,id:randomUUID(),status:'ACTIVE',winningOutcome:null,createdAt:new Date().toISOString(),predictionWindowSeconds:60};await writeFile(twitchFile,JSON.stringify([short]));
   await panel.getByLabel('Canal de Twitch',{exact:true}).fill(channel);await panel.getByRole('button',{name:'Seguir canal',exact:true}).click();await expect(panel.getByText('La ventana restante es demasiado corta',{exact:false})).toBeVisible();expect((await list()).length).toBe(1);

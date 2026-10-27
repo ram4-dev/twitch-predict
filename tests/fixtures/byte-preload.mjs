@@ -46,6 +46,7 @@ globalThis.fetch=async(input,options)=>{
   const id=endpoint.pathname.split('/')[endpoint.pathname.startsWith('/api/predictions/')?3:4];
   const market=state.markets.find(m=>m.id===id);
   if(!market)return Response.json({error:'Not found'},{status:404});
+  if(endpoint.pathname.endsWith('/resolve')&&state.delayResolution){delete state.delayResolution;state.resolutions++;await save();return Response.json({accepted:true});}
   if(endpoint.pathname.endsWith('/resolve')){const body=JSON.parse(options.body);market.status='resolved';market.winner=body.winner;market.bettable=false;market.resolvable=false;state.resolutions++;await save();}
   if(endpoint.pathname.endsWith('/invalidate')){const body=JSON.parse(options.body);market.status='invalid';market.invalidReason=body.reason;market.bettable=false;market.resolvable=false;state.invalidations++;await save();}
   if(endpoint.pathname.includes('/chain-sync')){state.syncs++;await save();}
