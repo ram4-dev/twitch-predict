@@ -1,0 +1,13 @@
+{
+  "task": "Keep animated wordmark as Plot!",
+  "workspace": {
+    "source": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "429ef3b",
+    "branch": "fix-plot-wordmark-capital",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-plot-wordmark-capital",
+    "cleanup": "retained"
+  },
+  "scope": "Uppercase P and terminal orange exclamation in shared particle logo. Animation, payout cards and other UI preserved.",
+  "verification": "npm run check passed (65 tests; 7 SQL cases skipped); 2 relevant E2E passed: pointer/click particles and reduced motion, native 700px popup."
+}
