@@ -34,7 +34,7 @@ header .plot-scene.compact>.plot-halftone{width:148px;max-width:100%;margin:0}
 body.plot-glow-stage::before{position:fixed;inset:0;border-radius:0}
 
 /* The light remains visible over opaque card surfaces without blocking controls. */
-body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index:3;background:radial-gradient(320px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
+body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index:3;background:radial-gradient(250px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
 
 /* The logo's animated texture fills the popup behind the spotlight and content. */
 .popup-atmosphere{position:fixed;inset:0;z-index:-2;opacity:.55;pointer-events:none;overflow:hidden}.popup-atmosphere .plot-dither-field{z-index:0;background:#080808;border-radius:0}
@@ -44,3 +44,6 @@ body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index
 
 /* The animated rim sits outside the market card rather than inside its border. */
 body .prediction.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23px}
+
+/* Keep the cursor halo tighter while preserving the reduced-motion fallback. */
+@media (prefers-reduced-motion:no-preference){body.plot-glow-stage::before{filter:blur(18px);background:radial-gradient(420px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .32),rgb(255 112 73 / .08) 55%,transparent 85%)}}
