@@ -67,9 +67,10 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
    try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
   });
  app.get('/api/twitch/config',(_req,res)=>res.json({configured:context(res).twitch.configured,origin:config.origin}));
- app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req));res.cookie(cookieName,r.cookie,cookieOptions).json({url:r.url});}));
+ app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req));res.cookie(cookieName,r.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:r.url});}));
  app.get('/auth/twitch/callback',async(req,res)=>{
-  try{const ticket=await context(res).twitch.callback(typeof req.query.state==='string'?req.query.state:'',cookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);res.redirect(`${config.origin}/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);}
+  const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
+  try{const ticket=await context(res).twitch.callback(typeof req.query.state==='string'?req.query.state:'',cookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);res.redirect(onboarding?`${config.origin}/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`${config.origin}/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);}
   catch{res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#streamer`);}
  });
  app.post('/api/twitch/complete',route(async(req,res)=>{const i=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const r=await context(res).twitch.complete(bearer(req),i.ticket,cookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).json(r);}));
