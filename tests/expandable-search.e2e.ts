@@ -6,7 +6,7 @@ const markets=()=>[market('pm_filter_egg','eggsterr'),market('pm_filter_summit',
 test('expandable search replaces all-channels dropdown and filters without following or wallet login',async({page})=>{
  const mutations:string[]=[];page.on('request',request=>{if(request.method()==='POST')mutations.push(request.url());});
  await page.route('**/api/byte/markets',route=>route.fulfill({json:{markets:markets()}}));await page.goto('/byte');
- const cards=page.locator('.byte-grid>[data-market-id]');await expect(cards).toHaveCount(2);await expect(page.getByRole('combobox',{name:'Filtrar canal'})).toHaveCount(0);await expect(page.getByText('Todos los canales',{exact:true})).toHaveCount(0);
+ const cards=page.locator('.byte-grid>[data-market-id]');await expect(cards).toHaveCount(2);await expect(cards.first().locator('.plot-resolution.liquid')).toBeVisible();await expect(cards.first()).toContainText('El importe de tu cobro no está disponible.');await expect(page.getByRole('combobox',{name:'Filtrar canal'})).toHaveCount(0);await expect(page.getByText('Todos los canales',{exact:true})).toHaveCount(0);
  const tools=page.locator('.byte-section-head').filter({has:page.getByRole('heading',{name:'Mercados',exact:true})});
  const toggle=tools.getByRole('button',{name:'Buscar canal',exact:true});await toggle.click();const input=page.getByRole('searchbox',{name:'Filtrar canal',exact:true});await expect(input).toBeFocused();
  await input.fill('  @Eggs  ');await input.press('Enter');await expect(cards).toHaveCount(1);await expect(cards).toContainText('Mercado de eggsterr');
@@ -18,7 +18,7 @@ test('expandable search replaces all-channels dropdown and filters without follo
  await page.getByRole('button',{name:'Cerrar búsqueda'}).click();await expect(cards).toHaveCount(2);
  await toggle.click();await input.fill('   ');await input.press('Enter');await expect(cards).toHaveCount(2);await input.fill('https://evil.example/eggsterr');await input.press('Enter');await expect(page.getByText('Pegá el enlace de un canal de Twitch.')).toBeVisible();
  expect(mutations).toEqual([]);await expect(page.getByLabel('Canal de Twitch',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Seguir canal',exact:true})).toBeVisible();
- for(const width of [320,768,1440]){await page.setViewportSize({width,height:900});const bounds=await page.getByRole('search',{name:'Filtrar canal',exact:true}).boundingBox();expect(bounds!.x).toBeGreaterThanOrEqual(0);expect(bounds!.x+bounds!.width).toBeLessThanOrEqual(width);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
+ for(const width of [320,768,1440]){await page.setViewportSize({width,height:900});await expect.poll(async()=>{const bounds=await page.getByRole('search',{name:'Filtrar canal',exact:true}).boundingBox();return !!bounds&&bounds.x>=0&&bounds.x+bounds.width<=width;}).toBe(true);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
 });
 
 test('both expansion directions fit phone and tablet viewports under CSP and reduced motion',async({page})=>{
@@ -68,4 +68,17 @@ test('Twitch suggestions follow the latest query and filter an existing streamer
  await input.press('ArrowDown');await expect(option).toHaveAttribute('aria-selected','true');await input.press('Enter');
  await expect(page.locator('.byte-grid>[data-market-id]')).toHaveCount(1);await expect(page.locator('.byte-grid>[data-market-id]')).toContainText('Mercado de eggsterr');
  await expect(page.getByRole('listbox',{name:'Canales de Twitch'})).toHaveCount(0);await expect(input).toHaveValue('eggsterr');
+});
+
+
+test('selecting a Twitch channel also follows it when the wallet session is connected',async({page})=>{
+ const followed:string[]=[];
+ await page.addInitScript(()=>localStorage.setItem('pointsToken','fixture-session'));
+ await page.route('**/api/points/me',route=>route.fulfill({json:{wallet:'11111111111111111111111111111111'}}));
+ await page.route('**/api/byte/markets',route=>route.fulfill({json:{markets:markets()}}));
+ await page.route('**/api/twitch/search?**',route=>route.fulfill({json:{channels:[{login:'eggsterr',displayName:'Eggsterr',live:true}]}}));
+ await page.route('**/api/byte/twitch/watch',async route=>{followed.push(route.request().postDataJSON().channel);await route.fulfill({json:{predictions:[]}});});
+ await page.goto('/byte');await expect(page.getByRole('button',{name:'Reconectar wallet'})).toBeVisible();
+ await page.getByRole('button',{name:'Buscar canal',exact:true}).click();await page.getByRole('searchbox',{name:'Filtrar canal'}).fill('egg');await page.getByRole('option',{name:/Eggsterr/}).click();
+ await expect.poll(()=>followed).toEqual(['eggsterr']);await expect(page.locator('.byte-grid>[data-market-id]')).toHaveCount(1);await expect(page.getByText('Siguiendo @eggsterr.',{exact:false})).toBeVisible();
 });

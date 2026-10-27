@@ -37,7 +37,7 @@ test('create → real wallet signatures → byte instruction → sync → close 
   const market=await createMarket(page);await connectWallet(page);
   const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByLabel('Importe en SOL devnet').fill('0.012345678');
   await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();
-  await expect(card.getByText('Apuesta confirmada en Solana.',{exact:true})).toBeVisible();
+  await expect.poll(async()=>(await readFixture()).syncs).toBeGreaterThan(0);await expect(card.getByText('Apuesta confirmada en Solana.',{exact:true})).toHaveCount(0);
   const state=await readFixture();expect(state.broadcasts).toBe(1);expect(state.markets[0].pools[0]).toBe(12345678);expect(state.syncs).toBeGreaterThan(0);
   await page.getByRole('button',{name:'Mis apuestas',exact:true}).click();await expect(page.locator('.byte-receipt')).toContainText('Confirmada');await expect(page.locator('.byte-receipt a')).toHaveAttribute('href',/cluster=devnet/);
   await changeFixture(s=>{s.markets[0].closeMs=Date.now()-1;s.markets[0].bettable=false;s.markets[0].resolvable=true;});
@@ -126,7 +126,7 @@ test('MV3 popup signs through an existing Twitch tab and retains receipts and ca
   await expect(card.getByText('Transacción enviada.',{exact:false})).toBeVisible();
   await expect(card.getByRole('button',{name:'Apostar a No',exact:true})).toBeDisabled();
   await changeFixture(s=>{s.pending=false;});await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();
-  await expect(popup.getByText('Apuesta confirmada en Solana.',{exact:false})).toBeVisible();
+  await expect(popup.getByText('Apuesta confirmada en Solana.',{exact:false})).toHaveCount(0);
   await expect(popup.locator('#history')).toContainText('Confirmada');
   expect((await readFixture()).broadcasts).toBe(1);
   expect((await readFixture()).markets[0].pools[1]).toBe(25000000);
