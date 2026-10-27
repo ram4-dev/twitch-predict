@@ -54,3 +54,18 @@ test('filtering remains independent while following a channel refreshes in the b
   await input.press('Escape');await expect(cards).toHaveCount(2);await expect(toggle).toBeFocused();finish();await expect(page.getByRole('button',{name:'Seguir canal',exact:true})).toBeEnabled();
  }finally{finish();}
 });
+
+test('Twitch suggestions follow the latest query and filter an existing streamer by keyboard',async({page})=>{
+ await page.route('**/api/byte/markets',route=>route.fulfill({json:{markets:markets()}}));
+ await page.route('**/api/twitch/search?**',async route=>{
+  const q=new URL(route.request().url()).searchParams.get('q');
+  if(q==='eg')await new Promise(r=>setTimeout(r,600));
+  await route.fulfill({json:{channels:q==='eg'?[{login:'eggs',displayName:'Eggs',live:false}]:[{login:'eggsterr',displayName:'Eggsterr',live:true}]}}).catch(()=>{});
+ });
+ await page.goto('/byte');await page.getByRole('button',{name:'Buscar canal',exact:true}).click();const input=page.getByRole('searchbox',{name:'Filtrar canal',exact:true});
+ await input.fill('eg');await page.waitForTimeout(300);await input.fill('egg');
+ const option=page.getByRole('option',{name:/Eggsterr/});await expect(option).toBeVisible();await expect(option).toContainText('En vivo');
+ await input.press('ArrowDown');await expect(option).toHaveAttribute('aria-selected','true');await input.press('Enter');
+ await expect(page.locator('.byte-grid>[data-market-id]')).toHaveCount(1);await expect(page.locator('.byte-grid>[data-market-id]')).toContainText('Mercado de eggsterr');
+ await expect(page.getByRole('listbox',{name:'Canales de Twitch'})).toHaveCount(0);await expect(input).toHaveValue('eggsterr');
+});

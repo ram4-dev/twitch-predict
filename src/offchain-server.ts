@@ -1,3 +1,4 @@
+import {TwitchChannelSearch} from './twitch-search.js';
 import {contentSecurityPolicy} from './content-security-policy.js';
 import express from 'express';
 import {execFile} from 'node:child_process';
@@ -24,6 +25,7 @@ const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
 const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
 const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined);await byte.load();
 const byteMirror=new ByteTwitchMirror(directory,byte,source);await byteMirror.load();
+const channelSearch=new TwitchChannelSearch();
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
   if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
@@ -48,6 +50,11 @@ const twitchAuth=new TwitchAuth(points,{clientId:process.env.TWITCH_CLIENT_ID??'
 const cookieName='twitch_link';
 const linkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${cookieName}=`))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
 const cookieOptions={httpOnly:true,secure:new URL(twitchOrigin).protocol==='https:',sameSite:'lax' as const,path:'/',maxAge:10*60_000};
+app.get('/api/twitch/search',async(req,res)=>{
+  const query=typeof req.query.q==='string'?req.query.q:'';
+  if(!/^[a-zA-Z0-9_]{2,40}$/.test(query)){res.status(400).json({error:'Ingresá al menos dos caracteres del usuario de Twitch.'});return;}
+  try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
+ });
 app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
 app.post('/api/twitch/start',route((req,res)=>{
   if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');

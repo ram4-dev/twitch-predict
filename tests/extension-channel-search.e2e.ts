@@ -18,7 +18,8 @@ test('MV3 searches a new streamer by Twitch URL, mirrors once, and preserves key
   await expect(popup.getByRole('combobox',{name:'Canal de Twitch'})).toHaveCount(0);
   await popup.getByRole('button',{name:'Buscar canal',exact:true}).click();const input=popup.getByRole('searchbox',{name:'Canal de Twitch',exact:true});await expect(input).toBeFocused();
   await input.fill('https://evil.example/streamer');await input.press('Enter');await expect(popup.getByText('Pegá el enlace de un canal de Twitch.')).toBeVisible();
-  await input.fill(`https://www.twitch.tv/${channel}`);await input.press('Enter');await expect(popup.getByRole('heading',{name:native.title,exact:true})).toBeVisible({timeout:20000});
+  await input.fill('search_');const suggestion=popup.getByRole('option',{name:new RegExp(channel)});await expect(suggestion).toBeVisible();await suggestion.click();await expect(popup.getByRole('heading',{name:native.title,exact:true})).toBeVisible({timeout:20000});
+  await expect(popup.getByRole('search',{name:'Canal de Twitch'})).toHaveAttribute('aria-busy','false');await input.fill(`https://www.twitch.tv/${channel}`);await input.press('Enter');
   await expect(popup.locator('.channel-current')).toHaveText('@'+channel);
   await expect(popup.getByRole('search',{name:'Canal de Twitch'})).toHaveAttribute('aria-busy','false');
   const field=(await input.boundingBox())!,close=(await popup.getByRole('button',{name:'Cerrar búsqueda',exact:true}).boundingBox())!;expect(field.x+field.width).toBeLessThanOrEqual(close.x);

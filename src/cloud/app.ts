@@ -1,3 +1,4 @@
+import {TwitchChannelSearch} from '../twitch-search.js';
 import express from 'express';
 import {z} from 'zod';
 import {Points} from '../points.js';
@@ -11,7 +12,7 @@ import {CloudAuth} from './auth.js';
 import {CloudTwitchAuth} from './twitch-auth.js';
 import {cloudConfig} from './config.js';
 export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
- const config=cloudConfig(env),app=express();app.disable('x-powered-by');app.set('trust proxy',false);
+ const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
  const extensionOrigin=`chrome-extension://${config.extensionId}`;
  app.use((req,res,next)=>{
   res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});
@@ -57,6 +58,11 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  }));
  const cookieName='twitch_link',cookieOptions={httpOnly:true,secure:true,sameSite:'lax' as const,path:'/',maxAge:600000};
  const cookie=(req:express.Request)=>{const value=req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(cookieName+'='))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(value)?value:'';};
+ app.get('/api/twitch/search',async(req,res)=>{
+   const query=typeof req.query.q==='string'?req.query.q:'';
+   if(!/^[a-zA-Z0-9_]{2,40}$/.test(query)){res.status(400).json({error:'Ingresá al menos dos caracteres del usuario de Twitch.'});return;}
+   try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
+  });
  app.get('/api/twitch/config',(_req,res)=>res.json({configured:context(res).twitch.configured,origin:config.origin}));
  app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req));res.cookie(cookieName,r.cookie,cookieOptions).json({url:r.url});}));
  app.get('/auth/twitch/callback',async(req,res)=>{
