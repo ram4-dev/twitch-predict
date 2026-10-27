@@ -29,3 +29,6 @@ header .plot-scene.compact>.plot-halftone{width:148px;max-width:calc(100% - 44px
 .prediction .byte-betting:has(.plot-resolution){background:transparent;padding:0}.prediction .plot-resolution .plot-notice{grid-column:1/-1;margin-top:16px}
 
 .channel-row .channel-label{flex-shrink:0;color:var(--muted-foreground);font-size:12px}.channel-row>div{align-items:center}.channel-row #channel-search{min-width:0;flex:1}.extension-channel-control{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}.channel-current{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.extension-channel-control:has([aria-expanded=true]) .channel-current{visibility:hidden}#channel-search .points-error{margin:6px 0 0}.channel-row .expandable-search .search-toggle,.channel-row .expandable-search .search-submit{padding:0}
+
+/* Keep the shared halo visible around cards within the popup's scroll area. */
+#predictions.plot-glow-stage{padding:8px;margin:-8px}

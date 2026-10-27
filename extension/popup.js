@@ -1,4 +1,4 @@
-import {mountChannelSearch} from './channel-search.js';
+import {mountChannelSearch,searchTwitch} from './channel-search.js';
 import {defaultBridge,isAppOrigin} from './app-config.js';
 import {popupScope,matchingCache,cacheAllowsBet,cachedBalance,reconcileBytePredictions} from './popup-cache.js';
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
@@ -10,7 +10,7 @@ const el=(tag,value,className)=>{const node=document.createElement(tag);if(value
 let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
 const settledCards=new Map();
-const updateChannelSearch=mountChannelSearch($('#channel-search'),async channel=>{selectedChannel=channel;await load();await requestPoll();});
+const updateChannelSearch=mountChannelSearch($('#channel-search'),async channel=>{selectedChannel=channel;await load();await requestPoll();},(query,signal)=>searchTwitch(query,signal,bridgeUrl()));
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
 function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return isAppOrigin(u.href)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}

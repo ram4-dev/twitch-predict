@@ -33,6 +33,9 @@ test('MV3 liquid resolution uses account totals for winner, mixed bets, loser, r
   const claimBox=await card.getByRole('button',{name:'Cobrar 530 pts'}).boundingBox();expect(claimBox!.y+claimBox!.height).toBeLessThan(560);
   await page.screenshot({path:'test-results/liquid-resolution-large-pnl.png',fullPage:true});
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('liquid-reflection');
+  const stage=page.locator('#predictions');await expect(stage).toHaveClass(/plot-glow-stage/);expect(await stage.evaluate(el=>getComputedStyle(el,'::before').filter)).toBe('blur(24px)');
+  await page.getByRole('button',{name:'Pausar animación',exact:true}).click();await expect.poll(()=>card.evaluate(el=>getComputedStyle(el,'::before').animationPlayState)).toBe('paused');
+  await page.getByRole('button',{name:'Reanudar animación',exact:true}).click();await expect.poll(()=>card.evaluate(el=>getComputedStyle(el,'::before').animationPlayState)).toBe('running');
   bets=[bet('yes',1000000,9500000)];await page.reload();await expect(card.locator('.resolution-net')).toHaveText('+8.500.000 pts');
   expect(await card.locator('.resolution-net-value').evaluate(el=>{
    const box=el.getBoundingClientRect(),parent=el.closest('.resolution-personal')!.getBoundingClientRect();
