@@ -1,0 +1,14 @@
+{
+  "task": "Display personal SOL refund principal with mint count animation",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "ce0797e",
+    "branch": "fix-personal-sol-refund-card",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-personal-sol-refund-card",
+    "cleanup": "retained"
+  },
+  "cause": "Byte cards always set accountKnown=false, even for invalid settled markets with matching confirmed wallet receipts.",
+  "scope": "For an invalid, chain-settled SOL market only, sum unique locally recorded confirmed receipts matching active wallet and market. Reject conflicting signatures, malformed or unsafe amounts and totals above pool. Display registered principal as refund, no positive sign or profit, net 0 SOL. Unknown receipts and normal winning payouts remain unavailable rather than estimated. Shared web and MV3 rendering; count/pulse and reduced motion retained.",
+  "verification": "npm run check passed (75 tests, 7 SQL cases skipped). Twelve existing wallet/resolution E2E passed; the new signed-bet refund scenario passed in web and MV3 after configuring its extension health fixture for Byte mode. Verifies unavailable before settlement, signature deduplication, mint count/pulse, stable refresh, readable 700x600 viewport and reduced motion."
+}

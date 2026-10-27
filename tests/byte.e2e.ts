@@ -183,3 +183,24 @@ test('HTTP named host explains the HTTPS requirement without attempting wallet a
  const authRequests:string[]=[];page.on('request',r=>{if(r.url().includes('/api/auth/')&&r.method()==='POST')authRequests.push(r.url());});
  await page.goto('/byte');await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await expect(page.getByRole('alert')).toContainText('HTTPS');expect(authRequests).toEqual([]);expect((await readFixture()).broadcasts).toBe(0);
 });
+
+test('confirmed signed bets become an animated SOL refund in web and MV3 only after chain settlement',async({page})=>{
+ const market=await createMarket(page,'Reembolso personal en SOL');await connectWallet(page);
+ const card=page.locator(`[data-market-id="${market.id}"]`);await card.getByLabel('Importe en SOL devnet').fill('0.03');await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();
+ await expect.poll(async()=>(await readFixture()).broadcasts).toBe(1);await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('byteDevnetReceipts')??'[]')[0]?.status)).toBe('confirmed');
+ await changeFixture(s=>{Object.assign(s.markets[0],{status:'invalid',winner:null,bettable:false,invalidReason:'Ronda anulada para reembolso'});});await page.getByRole('button',{name:'Actualizar mercados',exact:true}).click();await expect(card.locator('.resolution-net')).toHaveCount(0);
+ await changeFixture(s=>{s.markets[0].chain.settled=true;});await page.getByRole('button',{name:'Actualizar mercados',exact:true}).click();await expect(card.getByLabel('Reembolso 0,03 SOL',{exact:true})).toBeVisible();await expect(card.locator('.resolution-count')).toHaveAttribute('data-complete','true');await expect(card.locator('.resolution-net')).toHaveText('0,03SOL');await expect(card).toContainText('Ganancia neta: 0 SOL');
+ const session=await page.evaluate(()=>({token:localStorage.getItem('pointsToken'),receipts:JSON.parse(localStorage.getItem('byteDevnetReceipts')??'[]')})),base=new URL(page.url()).origin;
+ const profile=await mkdtemp(`${tmpdir()}/plot-sol-refund-`),extension=resolve('extension'),context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+ try{
+  await context.route('**/api/health',route=>route.fulfill({json:{ok:true,marketMode:'byte',network:'devnet'}}));
+  const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
+  await worker.evaluate(async({base,session})=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({bridgeUrl:base,pointsToken:session.token,byteReceipts:[...session.receipts,...session.receipts],lastPoll:{channel:'fixture_streamer'}});},{base,session});
+  const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);
+  const refund=popup.getByRole('article',{name:'Reembolso en SOL'});await expect(refund.getByLabel('Reembolso 0,03 SOL',{exact:true})).toBeVisible();await expect(refund.locator('.resolution-count')).toHaveAttribute('data-complete','true');await expect(refund.locator('.resolution-net')).toHaveText('0,03SOL');await expect(refund).toContainText('Ganancia neta: 0 SOL');await expect(refund.getByText('El importe de tu cobro no está disponible.',{exact:true})).toHaveCount(0);
+  const animation=await refund.locator('.resolution-count').evaluate(el=>getComputedStyle(el).animationName);expect(animation).toContain('count-arrival');
+  await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(popup.getByRole('button',{name:'Actualizar predicción',exact:true})).toBeEnabled();await expect(refund.locator('.resolution-count')).toHaveAttribute('data-complete','true');
+  await refund.evaluate(el=>el.scrollIntoView({block:'start'}));await expect(refund.getByLabel('Reembolso 0,03 SOL',{exact:true})).toBeInViewport();await popup.screenshot({path:'test-results/sol-refund-popup.png'});await refund.getByRole('button',{name:'Ver detalle'}).click();await expect(refund).toContainText('1 apuesta confirmada');
+  await popup.emulateMedia({reducedMotion:'reduce'});await popup.reload();await expect(refund.locator('.resolution-count')).toHaveAttribute('data-complete','true');expect(await refund.locator('.resolution-count').evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
+ }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
