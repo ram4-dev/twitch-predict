@@ -1,0 +1,17 @@
+{
+  "task": "Inflatable soft-body motion for the supplied Plot! logo",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "48a0edd",
+    "branch": "feat-balloon-wordmark",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-balloon-wordmark",
+    "cleanup": "retained"
+  },
+  "references": [
+    "https://jamestf.com/spalding/",
+    "https://elements.envato.com/inflatable-typography-TEJ68S3"
+  ],
+  "implementation": "Original JPEG sampled onto five subdivided 2D WebGL membranes. Independent inflation, subtle float, spring squeeze on hover/press and moving highlights. This is a lightweight image-based soft-body visual, not a newly modeled volumetric 3D logo. Static original under reduced motion or unavailable WebGL; pauses outside viewport or hidden document.",
+  "verification": "npm run check passed: typecheck, lint, 65 tests; 7 SQL cases skipped; build passed. Five relevant E2E passed across runs: inflation/hover/reduced-motion/context-loss fallback; compact live Byte header; responsive dashboard; real MV3 renderer and form state; native 700px popup. Desktop texture rendering and interactive inline preview inspected. No wallet or backend changes."
+}
