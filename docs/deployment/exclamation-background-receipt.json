@@ -1,0 +1,13 @@
+{
+  "task": "Repeated original orange exclamation balloon background",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "ac5437f",
+    "branch": "feat-exclamation-background",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-exclamation-background",
+    "cleanup": "retained"
+  },
+  "scope": "Samples only the orange exclamation from the original logo; staggered responsive pattern with local pointer inflation and rotation, decorative canvas, reduced-motion static, no financial behavior changes.",
+  "verification": "npm run check passed; 65 tests passed, 7 SQL skipped. Six relevant browser E2E passed including actual MV3 popup, responsive 320/360/768/1440 widths, hover and reduced motion. Popup screenshot visually inspected."
+}
