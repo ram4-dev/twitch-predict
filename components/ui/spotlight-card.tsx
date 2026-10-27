@@ -11,10 +11,10 @@ export type GlowCardProps = HTMLAttributes<HTMLElement> & {
 };
 
 const enhanced = new WeakSet<HTMLElement>();
-export function enhanceGlowCard(node: HTMLElement) {
+function enhanceGlow(node: HTMLElement, className: string) {
   if (enhanced.has(node)) return;
   enhanced.add(node);
-  node.classList.add('plot-glow-card');
+  node.classList.add(className);
   const follow = (event: PointerEvent) => {
     if (event.pointerType === 'touch' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const bounds = node.getBoundingClientRect();
@@ -27,6 +27,15 @@ export function enhanceGlowCard(node: HTMLElement) {
   node.addEventListener('pointermove', follow);
   node.addEventListener('pointerleave', reset);
   node.addEventListener('pointercancel', reset);
+}
+
+export const enhanceGlowCard = (node: HTMLElement) => enhanceGlow(node, 'plot-glow-card');
+export const enhanceGlowStage = (node: HTMLElement) => enhanceGlow(node, 'plot-glow-stage');
+
+export function GlowStage({children,className,...props}: HTMLAttributes<HTMLDivElement>) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (ref.current) enhanceGlowStage(ref.current); }, []);
+  return <div {...props} ref={ref} className={cn('plot-glow-stage',className)}>{children}</div>;
 }
 
 export function GlowCard({children,className,glowColor,style,...props}: GlowCardProps) {
