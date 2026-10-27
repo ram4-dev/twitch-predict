@@ -6,7 +6,7 @@ import {ByteService} from './byte.js';
 import type {CreateByteMarket} from './byte-model.js';
 import type {Documents} from './cloud/documents.js';
 import type {TwitchSource} from './twitch-source.js';
-type Mirror={outcomeIds:string[];prediction:Prediction;input?:CreateByteMarket;marketId?:string;phase:'pending'|'created'|'skipped'|'failed'|'resolved';error?:string};
+type Mirror={outcomeIds:string[];prediction:Prediction;input?:CreateByteMarket;marketId?:string;phase:'pending'|'created'|'skipped'|'failed'|'resolved';error?:string;retryAt?:number};
 type State={version:1;channels:string[];mirrors:Record<string,Mirror>};
 export class ByteTwitchMirror {
  private state:State={version:1,channels:[],mirrors:{}};
@@ -19,7 +19,7 @@ export class ByteTwitchMirror {
  private async save(){if(this.documents){const {state}=await this.documents.update('byte-twitch',():State=>({version:1,channels:[],mirrors:{}}),state=>{state.channels=[...new Set([...state.channels,...this.state.channels])];state.mirrors=this.state.mirrors;});this.state=state;return;}const file=join(this.directory,'byte-twitch.json');await writeFile(file+'.tmp',JSON.stringify(this.state),{mode:0o600});await rename(file+'.tmp',file);}
  private serial<T>(fn:()=>Promise<T>):Promise<T>{const result=this.queue.then(fn);this.queue=result.catch(()=>{});return result;}
  channels(){return [...this.state.channels];}
- snapshot(channel:string){return Object.values(this.state.mirrors).filter(m=>m.prediction.channel===channel&&(m.marketId||this.activeIds.get(channel)?.has(m.prediction.id))).slice(-20).map(m=>({prediction:m.prediction,market:{state:m.phase,byteMarketId:m.marketId,error:m.error??null}}));}
+ snapshot(channel:string){return Object.values(this.state.mirrors).filter(m=>m.prediction.channel===channel&&(m.marketId||this.activeIds.get(channel)?.has(m.prediction.id)||(m.prediction.status==='ACTIVE'&&!m.prediction.lockedAt&&closesAt(m.prediction)>this.clock()))).slice(-20).map(m=>({prediction:m.prediction,market:{state:m.phase,byteMarketId:m.marketId,error:m.error??null}}));}
  watch(channel:string){return this.serial(async()=>{if(!this.state.channels.includes(channel)){this.state.channels.push(channel);await this.save();}await this.refresh(channel);return {channel,predictions:this.snapshot(channel)};});}
  sync(){if(this.syncing)return this.syncing;this.syncing=this.serial(async()=>{if(this.documents)await this.load();const errors:string[]=[];for(const channel of this.state.channels)try{await this.refresh(channel);}catch(e){errors.push(`${channel}: ${(e as Error).message}`);}this.lastError=errors.length?errors.join('; '):null;}).finally(()=>{this.syncing=undefined;});return this.syncing;}
  private async refresh(channel:string){
@@ -42,6 +42,17 @@ export class ByteTwitchMirror {
   try{
    if(!mirror.marketId){
     let created=await this.byte.marketForRequest(mirror.input.requestId);
+    if(!created&&mirror.phase==='failed'){
+     const operation=await this.byte.creationStatus(mirror.input.requestId);
+     // A rejected 429 was not submitted successfully; ambiguous pending requests must never be retried.
+     if(operation?.state==='rejected'&&operation.status===429){
+      if(mirror.error!=='Se alcanzó el límite de mercados de este partner.'){mirror.error='Se alcanzó el límite de mercados de este partner.';await this.save();}
+      if(mirror.retryAt&&this.clock()<mirror.retryAt)return;
+      const windowSecs=Math.floor((closesAt(p)-this.clock())/1000)-20;
+      if(p.status!=='ACTIVE'||p.lockedAt||windowSecs<60)return;
+      mirror.input={...mirror.input,windowSecs,requestId:randomUUID()};mirror.retryAt=undefined;await this.save();
+     }else if(operation?.state==='rejected'){return;}
+    }
     if(!created){if(p.status!=='ACTIVE'||p.lockedAt||closesAt(p)-this.clock()<mirror.input.windowSecs*1000+1000)throw new Error('La ventana de Twitch ya no permite crear esta réplica de forma segura.');created=await this.byte.create(mirror.input);}mirror.marketId=created.id;mirror.phase='created';await this.save();
     await this.byte.updateTwitch(created.id,p);
     if(created.closeMs>closesAt(p)){await this.byte.settle(created.id,null,'La creación terminó después de la ventana segura de Twitch.','twitch');mirror.phase='resolved';mirror.error='Mercado anulado porque la creación excedió la ventana de Twitch.';await this.save();return;}
@@ -57,7 +68,7 @@ export class ByteTwitchMirror {
     await this.byte.settle(mirror.marketId,winner,`Resultado verificado de Twitch: https://www.twitch.tv/${p.channel}, predicción ${p.id}, ganador ${p.winningOutcomeId}.`,'twitch');mirror.phase='resolved';
    }
    mirror.error=undefined;if(mirror.phase!=='resolved')mirror.phase='created';
-  }catch(e){mirror.error=(e as Error).message;mirror.phase='failed';}
+  }catch(e){mirror.error=(e as Error).message;mirror.phase='failed';if((e as {status?:number}).status===429)mirror.retryAt=this.clock()+30000;}
   await this.save();
  }
 }
