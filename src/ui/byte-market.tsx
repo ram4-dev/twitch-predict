@@ -2,6 +2,9 @@ import {useEffect,useState} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {ArrowUpRight,Check} from 'lucide-react';
+import {confirmedRefund} from '../byte-refund.js';
+import type {BetReceipt} from '../byte-bet-core.js';
+import {SolRefund} from './components/sol-refund.js';
 import {Resolution} from './components/resolution.js';
 import {Button} from './components/button.js';
 import {Input} from './components/input.js';
@@ -13,7 +16,7 @@ import type {TwitchPreview} from '../twitch-preview.js';
 import {solToLamports,type ByteConfig,type DisplayByteMarket} from '../byte-model.js';
 export const sol=(amount:number|string)=>new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(amount)/1e9);
 export type ByteSelection={amount:string;option:number};
-export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit,extension=false,resolution=false,minimal=false}:{market:DisplayByteMarket;config?:ByteConfig;disabled?:boolean;initial?:ByteSelection;onBet:(selection:ByteSelection)=>void;onEdit?:()=>void;extension?:boolean;resolution?:boolean;minimal?:boolean}){
+export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit,extension=false,resolution=false,minimal=false,wallet,receipts=[]}:{market:DisplayByteMarket;config?:ByteConfig;disabled?:boolean;initial?:ByteSelection;onBet:(selection:ByteSelection)=>void;onEdit?:()=>void;extension?:boolean;resolution?:boolean;minimal?:boolean;wallet?:string;receipts?:BetReceipt[]}){
  const [amount,setAmount]=useState(initial?.amount??'0.01'),[selected,setSelected]=useState(initial?.option),[error,setError]=useState(''),[now,setNow]=useState(Date.now());
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  const unit=m.currency==='sol'?'SOL':'unidades BYTE';
@@ -25,6 +28,10 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
  // Preserve that sporting result without presenting the refund as a win/payout.
  const sourceWinner=m.status==='invalid'&&m.invalidReason==='nobody bet on the outcome'&&m.notes?.twitch?.status==='RESOLVED'?m.notes.resolution?.winner:null;
  const refundedWinner=sourceWinner!=null&&!!m.options[sourceWinner]&&m.pools[sourceWinner]===0?sourceWinner:null;
+ const refund=confirmedRefund(m,wallet,receipts);
+ if(refund)return <section className="points-market byte-betting"><div className="topline">Ronda {new Date(m.openMs).toLocaleString('es-AR')}</div><SolRefund title={m.title} channel={m.notes?.channel??'partner'} refund={refund} winner={refundedWinner!==null?m.options[refundedWinner]:undefined}>
+  <Notice tone="success">Reembolso completado en cadena.</Notice><a className="resolution-chain-link" href={`https://explorer.solana.com/address/${m.chain.market}?cluster=devnet`} target="_blank" rel="noopener noreferrer">Ver mercado en Solana devnet <ArrowUpRight size={14}/></a>
+ </SolRefund></section>;
  if((extension&&m.status!=='open')||(resolution&&['resolved','invalid'].includes(m.status)))return <section className="points-market byte-betting"><div className="topline">Ronda {new Date(m.openMs).toLocaleString('es-AR')}</div><Resolution title={m.title} channel={m.notes?.channel??'partner'} outcomes={m.options.map((title,i)=>({id:String(i),title}))} winnerId={m.winner!==null?String(m.winner):refundedWinner!==null?String(refundedWinner):undefined} canceled={m.status==='invalid'&&refundedWinner===null} accountKnown={false} unavailableMessage="El importe de tu cobro no está disponible.">
   {refundedWinner!==null&&<Notice>Resultado confirmado en Twitch. Mercado SOL anulado: no hubo apuestas a la opción ganadora. {m.chain.settled?'Reembolsos completados en cadena.':'Reembolsos pendientes de Byte.'}</Notice>}
   <Notice tone={m.chain.settled?'success':'info'}>{m.chain.settled?'Pagos o reembolsos completados en cadena.':'Resultado registrado. Esperando que byte complete los pagos.'}</Notice>
@@ -45,7 +52,7 @@ export function ByteBetting({market:m,config,disabled=false,initial,onBet,onEdit
 const roots=new Map<string,{node:HTMLElement;root:Root;generation:number}>();let generation=0;
 export function disposeByteViews(){const current=++generation;queueMicrotask(()=>{for(const [key,v]of roots)if(v.generation<current){v.root.unmount();roots.delete(key);}});}
 type ExtensionOperation={marketId:string;status:string;error?:string;receipt?:{signature:string}};
-function ExtensionMarket({market,config,operation}:{market:DisplayByteMarket;config?:ByteConfig;operation?:ExtensionOperation}){
+function ExtensionMarket({market,config,operation,wallet,receipts}:{market:DisplayByteMarket;config?:ByteConfig;operation?:ExtensionOperation;wallet?:string;receipts?:BetReceipt[]}){
  const [error,setError]=useState(''),[opening,setOpening]=useState(false);
  const open=async(selection:ByteSelection)=>{
   if(opening)return;setOpening(true);setError('');
@@ -56,11 +63,11 @@ function ExtensionMarket({market,config,operation}:{market:DisplayByteMarket;con
   }catch(e){setError((e as Error).message);}finally{setOpening(false);}
  };
  const active=operation?.marketId===market.id&&!['confirmed','failed','expired','cancelled'].includes(operation.status);
- return <>{market.status==='open'&&<><div className="topline"><span>@{market.notes?.channel??'partner'} · Ronda {new Date(market.openMs).toLocaleString('es-AR')}</span><span>Cierre: {new Date(market.closeMs).toLocaleString('es-AR')}</span></div><h1>{market.title}</h1></>}<ByteBetting market={market} config={config} extension disabled={opening||active} onBet={selection=>void open(selection)}/>{error&&<Notice tone="error">{error}</Notice>}{operation?.marketId===market.id&&(operation.status!=='confirmed'||!!operation.error)&&<Notice tone={operation.error?'error':'info'}>{operation.error??({signing:'Confirmá en Phantom…',pending:'Transacción enviada. Esperando confirmación…',confirmed:'Apuesta confirmada en Solana.',failed:'La transacción falló.',expired:'La transacción expiró.',cancelled:'Firma cancelada.'}[operation.status]??operation.status)}{operation.receipt&&<a href={`https://explorer.solana.com/tx/${operation.receipt.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"> Ver transacción</a>}</Notice>}</>;
+ return <>{market.status==='open'&&<><div className="topline"><span>@{market.notes?.channel??'partner'} · Ronda {new Date(market.openMs).toLocaleString('es-AR')}</span><span>Cierre: {new Date(market.closeMs).toLocaleString('es-AR')}</span></div><h1>{market.title}</h1></>}<ByteBetting market={market} config={config} wallet={wallet} receipts={receipts} extension disabled={opening||active} onBet={selection=>void open(selection)}/>{error&&<Notice tone="error">{error}</Notice>}{operation?.marketId===market.id&&(operation.status!=='confirmed'||!!operation.error)&&<Notice tone={operation.error?'error':'info'}>{operation.error??({signing:'Confirmá en Phantom…',pending:'Transacción enviada. Esperando confirmación…',confirmed:'Apuesta confirmada en Solana.',failed:'La transacción falló.',expired:'La transacción expiró.',cancelled:'Firma cancelada.'}[operation.status]??operation.status)}{operation.receipt&&<a href={`https://explorer.solana.com/tx/${operation.receipt.signature}?cluster=devnet`} target="_blank" rel="noopener noreferrer"> Ver transacción</a>}</Notice>}</>;
 }
-export function byteMarketView(market:DisplayByteMarket,config:ByteConfig|undefined,operation?:ExtensionOperation){
+export function byteMarketView(market:DisplayByteMarket,config:ByteConfig|undefined,operation?:ExtensionOperation,wallet?:string,receipts:BetReceipt[]=[]){
  let view=roots.get(market.id);if(!view){const node=document.createElement('article');node.className='prediction';node.dataset.marketId=market.id;view={node,root:createRoot(node),generation};roots.set(market.id,view);enableSpotlight(node);}view.generation=generation;view.node.dataset.predictionId=market.notes?.twitch?.predictionId??'';
- flushSync(()=>view.root.render(<ExtensionMarket market={market} config={config} operation={operation}/>));return view.node;
+ flushSync(()=>view.root.render(<ExtensionMarket market={market} config={config} operation={operation} wallet={wallet} receipts={receipts}/>));return view.node;
 }
 
 // Twitch data stays separate from real markets and never enters the wallet flow.

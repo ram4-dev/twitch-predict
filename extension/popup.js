@@ -110,7 +110,7 @@ function renderByte(){
  const fresh=cacheAllowsBet(byteCache);$('#freshness').hidden=fresh;$('#freshness').textContent=fresh?'':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
  const visible=reconcileBytePredictions(byteMarkets,[...(snapshot?.predictions??[]),...(byteCache.predictions??[])],selectedChannel);
  disposePointsViews();disposeByteViews();
- const rounds=visible.markets.map(m=>({at:m.openMs,card:byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation)}));
+ const rounds=visible.markets.map(m=>({at:m.openMs,card:byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation,account?.wallet,state.byteReceipts??[])}));
  for(const item of visible.predictions){
   if(item.market?.rateLimited){rounds.push({at:Date.parse(item.prediction.createdAt),card:twitchPreviewView(item)});continue;}
   const card=el('article',null,'prediction');card.dataset.predictionId=item.prediction.id;card.append(el('span',`@${selectedChannel} · Twitch · Ronda ${time(item.prediction.createdAt)}`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));rounds.push({at:Date.parse(item.prediction.createdAt),card});
