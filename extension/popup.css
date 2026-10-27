@@ -68,3 +68,5 @@ body .prediction.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23p
 }
 
 @media(min-width:520px){.prediction .plot-resolution.count .resolution-net{font-size:clamp(32px,calc((88cqw - 40px) / var(--figure-length) * 1.6),96px)}}
+
+.round-group-label{font:500 12px/1.4 Inter,system-ui,sans-serif;color:var(--muted-foreground);margin:22px 0 12px}.round-group-label:first-child{margin-top:0}

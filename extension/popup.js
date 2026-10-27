@@ -18,15 +18,22 @@ function connectLive(base){
 window.addEventListener('pagehide',()=>{liveStream?.close();clearTimeout(liveDebounce);});
 let revealedAlert='';
 function revealResolution(){
+ // Only the native action popup can consume its delivery; a popup.html tab
+ // may be open for inspection without showing the user the notification.
+ if(document.hidden||!chrome.extension.getViews({type:'popup'}).includes(window))return;
  const alert=state.resolutionAlerts?.[selectedChannel];if(!alert||alert.delivery==='seen'||alert.id===revealedAlert||Date.now()-alert.at>600000)return;
  const card=[...$('#predictions').children].find(el=>alert.marketId?el.dataset.marketId===alert.marketId:el.dataset.predictionId===alert.predictionId);
  if(!card?.querySelector('.plot-resolution'))return;
  revealedAlert=alert.id;card.scrollIntoView({block:'start',behavior:'instant'});
  void chrome.runtime.sendMessage({type:'RESOLUTION_SEEN',channel:selectedChannel,id:alert.id}).catch(()=>{});
 }
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)revealResolution();});
+window.addEventListener('focus',revealResolution);
 let selectedChannel='',activeChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
 const settledCards=new Map();
+const roundLabels=new Map();
+function roundLabel(key,text){let node=roundLabels.get(key);if(!node){node=el('h2',text,'round-group-label');roundLabels.set(key,node);}return node;}
 const updateChannelSearch=mountChannelSearch($('#channel-search'),async channel=>{selectedChannel=channel;await load();await requestPoll();},(query,signal)=>searchTwitch(query,signal,bridgeUrl()));
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
 function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return isAppOrigin(u.href)?u.origin:defaultBridge;}catch{return defaultBridge;}}
@@ -103,11 +110,14 @@ function renderByte(){
  const fresh=cacheAllowsBet(byteCache);$('#freshness').hidden=fresh;$('#freshness').textContent=fresh?'':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
  const visible=reconcileBytePredictions(byteMarkets,[...(snapshot?.predictions??[]),...(byteCache.predictions??[])],selectedChannel);
  disposePointsViews();disposeByteViews();
- const cards=visible.markets.map(m=>byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation));
+ const rounds=visible.markets.map(m=>({at:m.openMs,card:byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation)}));
  for(const item of visible.predictions){
-  if(item.market?.rateLimited){cards.push(twitchPreviewView(item));continue;}
-  const card=el('article',null,'prediction');card.dataset.predictionId=item.prediction.id;card.append(el('span',`@${selectedChannel} · Twitch · Ronda ${time(item.prediction.createdAt)}`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
+  if(item.market?.rateLimited){rounds.push({at:Date.parse(item.prediction.createdAt),card:twitchPreviewView(item)});continue;}
+  const card=el('article',null,'prediction');card.dataset.predictionId=item.prediction.id;card.append(el('span',`@${selectedChannel} · Twitch · Ronda ${time(item.prediction.createdAt)}`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));rounds.push({at:Date.parse(item.prediction.createdAt),card});
  }
+ rounds.sort((a,b)=>b.at-a.at);
+ const cards=rounds.map(r=>r.card);
+ if(cards.length>1){cards.splice(1,0,roundLabel('history','Rondas anteriores'));cards.unshift(roundLabel('current','Ronda actual'));}
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Elegí una opción para firmar con Phantom.';
  $('#dashboard').href=base;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Conectá Phantom para apostar y seguir tus transacciones desde la extensión.';$('#streamer-console').hidden=true;
 }
