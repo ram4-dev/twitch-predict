@@ -6,7 +6,7 @@ const markets=()=>[market('pm_filter_egg','eggsterr'),market('pm_filter_summit',
 test('expandable search replaces all-channels dropdown and filters without following or wallet login',async({page})=>{
  const mutations:string[]=[];page.on('request',request=>{if(request.method()==='POST')mutations.push(request.url());});
  await page.route('**/api/byte/markets',route=>route.fulfill({json:{markets:markets()}}));await page.goto('/byte');
- const cards=page.locator('.byte-grid>[data-market-id]');await expect(cards).toHaveCount(2);await expect(cards.first().locator('.plot-resolution.liquid')).toBeVisible();await expect(cards.first()).toContainText('El importe de tu cobro no está disponible.');await expect(page.getByRole('combobox',{name:'Filtrar canal'})).toHaveCount(0);await expect(page.getByText('Todos los canales',{exact:true})).toHaveCount(0);
+ const cards=page.locator('.byte-grid>[data-market-id]');await expect(cards).toHaveCount(2);await expect(cards.first().locator('.plot-resolution.count')).toBeVisible();await expect(cards.first()).toContainText('El importe de tu cobro no está disponible.');await expect(page.getByRole('combobox',{name:'Filtrar canal'})).toHaveCount(0);await expect(page.getByText('Todos los canales',{exact:true})).toHaveCount(0);
  const tools=page.locator('.byte-section-head').filter({has:page.getByRole('heading',{name:'Mercados',exact:true})});
  const toggle=tools.getByRole('button',{name:'Buscar canal',exact:true});await toggle.click();const input=page.getByRole('searchbox',{name:'Filtrar canal',exact:true});await expect(input).toBeFocused();
  await input.fill('  @Eggs  ');await input.press('Enter');await expect(cards).toHaveCount(1);await expect(cards).toContainText('Mercado de eggsterr');

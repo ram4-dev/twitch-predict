@@ -16,6 +16,14 @@ function connectLive(base){
  stream.onerror=()=>{if(liveStream===stream){liveReady=false;$('#live-status').textContent='Actualización periódica';}};
 }
 window.addEventListener('pagehide',()=>{liveStream?.close();clearTimeout(liveDebounce);});
+let revealedAlert='';
+function revealResolution(){
+ const alert=state.resolutionAlerts?.[selectedChannel];if(!alert||alert.delivery==='seen'||alert.id===revealedAlert||Date.now()-alert.at>600000)return;
+ const card=[...$('#predictions').children].find(el=>alert.marketId?el.dataset.marketId===alert.marketId:el.dataset.predictionId===alert.predictionId);
+ if(!card?.querySelector('.plot-resolution'))return;
+ revealedAlert=alert.id;card.scrollIntoView({block:'start',behavior:'instant'});
+ void chrome.runtime.sendMessage({type:'RESOLUTION_SEEN',channel:selectedChannel,id:alert.id}).catch(()=>{});
+}
 let selectedChannel='',activeChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
 const settledCards=new Map();
@@ -74,6 +82,7 @@ function reconcileCards(cards){
  const parent=$('#predictions');
  cards.forEach((card,index)=>{if(parent.children[index]!==card)parent.insertBefore(card,parent.children[index]??null);});
  while(parent.children.length>cards.length)parent.lastElementChild.remove();
+ revealResolution();
 }
 function renderByte(){
  if(!byteCache||contextDirty)return;
@@ -126,7 +135,7 @@ async function load(force=false){
   if(loading){again=true;forceAgain ||= force;return;}loading=true;
   const focused=document.activeElement;const restore=focused?.matches('input[aria-label="Puntos a apostar"]')?focused.closest('[data-market-key]')?.dataset.marketKey:null;
   try{
-    state=await chrome.storage.local.get(null);contextDirty=false;const base=bridgeUrl(),scope=await popupScope(base,state.pointsToken);
+    state=await chrome.storage.local.get(null);contextDirty=false;const incoming=state.resolutionAlerts?.[activeChannel];if(incoming&&incoming.delivery!=='seen'&&incoming.id!==revealedAlert&&Date.now()-incoming.at<600000)selectedChannel=activeChannel;const base=bridgeUrl(),scope=await popupScope(base,state.pointsToken);
     const stored=matchingCache(state.popupCache,base,scope);
     if(byteCache?.scope!==scope){byteCache=stored??(byteMode?{version:1,base,scope,markets:[],marketsAt:0,configAt:0}:undefined);lastRefresh=0;byteError='';}
     if(byteCache){byteMode=true;renderByte();if(!force&&Date.now()-lastRefresh<(liveReady?20000:4000))return;}

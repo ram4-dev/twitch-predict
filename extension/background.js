@@ -1,8 +1,10 @@
 import {defaultBridge,isAppOrigin} from './app-config.js';
+import {createResolutionNotifier} from './resolution-notifier.js';
 import {installByteWallet} from './byte-wallet.js';
 import { TWITCH_CLIENT_ID, TWITCH_QUERY } from './twitch.js';
 import { parseTwitchPrediction, isOpen } from './model.js';
 const inflight = new Map();
+const notifyResolution=createResolutionNotifier(chrome);
 const channelKey = channel => `channel:${channel.toLowerCase()}`;
 async function saveSnapshot(channel, snapshot) { await chrome.storage.local.set({ [channelKey(channel)]: snapshot }); }
 async function mirrorPrediction(prediction, previous, config) {
@@ -34,9 +36,11 @@ async function poll(channel, tabId) {
       const response=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});
       const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo consultar byte');
       const byteMarkets=result.markets.filter(m=>m.notes?.channel===channel);
-      await saveSnapshot(channel,{channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken||stored.pointsToken?null:'Vinculá la extensión al panel para replicar las predicciones.',predictions:observed?.predictions??[],byteMarkets,mode:'byte'});
+      snapshot={channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken||stored.pointsToken?null:'Vinculá la extensión al panel para replicar las predicciones.',predictions:(observed?.predictions??result.predictions??[]).filter(item=>item.prediction.channel===channel),byteMarkets,mode:'byte'};
+      await saveSnapshot(channel,snapshot);
       await chrome.storage.local.set({lastPoll:{channel,at:new Date().toISOString(),count:byteMarkets.length},lastError:null});
       if(Number.isInteger(tabId))try{await chrome.action.setBadgeText({tabId,text:byteMarkets.filter(m=>m.bettable).length?String(byteMarkets.filter(m=>m.bettable).length):''});}catch{/* The tab may have closed. */}
+      await notifyResolution(channel,previous,snapshot).catch(()=>{});
       return;
     }
     const response = await fetch('https://gql.twitch.tv/gql', {
@@ -61,6 +65,7 @@ async function poll(channel, tabId) {
     }
     await Promise.all(predictions.map(async item => { item.market = await mirrorPrediction(item.prediction, item.market, stored); }));
     await saveSnapshot(channel, snapshot);
+    await notifyResolution(channel,previous,snapshot).catch(()=>{});
   } catch (e) {
     await saveSnapshot(channel, { ...(previous ?? { channel, predictions: [] }), sourceError: e.message, errorAt: new Date().toISOString() });
     await chrome.storage.local.set({ lastError: e.message });
@@ -149,3 +154,8 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
 });
 
 installByteWallet(appUrl);
+
+chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
+ if(message.type!=='RESOLUTION_SEEN'||typeof message.channel!=='string'||typeof message.id!=='string')return;
+ void (async()=>{const stored=await chrome.storage.local.get('resolutionAlerts'),alerts=stored.resolutionAlerts??{};if(alerts[message.channel]?.id===message.id)await chrome.storage.local.set({resolutionAlerts:{...alerts,[message.channel]:{...alerts[message.channel],delivery:'seen'}}});reply({ok:true});})().catch(()=>reply({ok:false}));return true;
+});
