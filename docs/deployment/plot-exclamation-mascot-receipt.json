@@ -1,0 +1,52 @@
+{
+  "task": "Plot exclamation mascot and extension branding",
+  "source": {
+    "repository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "branch": "branding/plot-mascot",
+    "base": "origin/main",
+    "commit": "53f2300"
+  },
+  "workspace": {
+    "branch": "feat-plot-exclamation-mascot",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-plot-exclamation-mascot",
+    "cleanup": "kept for review and resumption"
+  },
+  "generation": {
+    "mode": "built-in imagegen",
+    "references": "four user-provided JPG attachments on 2026-10-27",
+    "prompts": {
+      "mascots": "New full-body glossy amber-orange exclamation punctuation character, separate circular dot body, expressive eyes, black rubber-hose limbs, cream gloves, black/orange sneakers. Fine cracked resin texture. Transparent background. No words, platform logos or chameleon. Waiting with crossed arms, watching with a hand shading the eyes, celebrating with raised fists.",
+      "icon": "Only a large centered glossy amber-orange exclamation from the provided Plot logo, simplified for 16px legibility, on a near-black square. No face or words."
+    }
+  },
+  "assets": {
+    "logo": "public/brand/plot-logo.jpg",
+    "mascots": [
+      "public/brand/mascot-waiting.png",
+      "public/brand/mascot-watching.png",
+      "public/brand/mascot-celebrating.png"
+    ],
+    "icons": [
+      "public/brand/plot-icon-16.png",
+      "public/brand/plot-icon-32.png",
+      "public/brand/plot-icon-48.png"
+    ],
+    "logo128": "public/brand/plot-logo-128.png"
+  },
+  "extensionVersion": "0.16.0",
+  "verification": {
+    "check": "typecheck, lint, 58 unit tests passed; 7 SQL tests skipped; web build passed",
+    "web": "Full default E2E: 47 passed, 9 skipped and 1 failure caused by stale exact logo label plot instead of plot!. Updated that expectation; reran the entire 2-test Dia E2E file successfully. Separate Byte-mode MV3 search E2E passed; 8 design-system E2E passed.",
+    "mobile": "typecheck, lint, release APK build passed; emulator-5570 validated invalid Twitch URL rejection and real HTTPS API empty state; mascot screenshot reviewed",
+    "alpha": "All three mascot assets are 512x512 PNG with alpha spanning 0..255",
+    "excluded": "9 default E2E cases require Solana localnet, HTTPS cloud or separately selected Byte fixtures; 7 SQL unit cases were skipped without PostgreSQL. No financial signing was performed during the Android UI check.",
+    "artifactSha256": "a821055af980602419221245ec4707a7738a9b3d5113c7785c0673f81486cf82 (local and published APK match)"
+  },
+  "scope": "Active extension, web/onboarding/catalog and Android mascot. Original user logo for extension detail and source branding; simplified exclamation for toolbar.",
+  "deployment": {
+    "url": "https://plot-devnet.vercel.app",
+    "extension": "0.16.0 installed and reloaded in Chrome; empty state visually reviewed",
+    "android": "New release APK available at /downloads/plot-android.apk",
+    "environmentCleanup": "Removed generated Vercel .env.local; shut down only the plot emulator-5570 started for this task"
+  }
+}

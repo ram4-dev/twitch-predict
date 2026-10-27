@@ -9,21 +9,21 @@ test('catalog uses the shared market, validates input, supports dialog keyboard 
  await page.getByRole('button',{name:'Ver detalle',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.getByRole('button',{name:'Ver detalle',exact:true})).toBeFocused();
  await page.getByLabel('Canal de Twitch',{exact:true}).fill('bad channel');await page.getByRole('button',{name:'Probar validación',exact:true}).click();await expect(page.getByLabel('Canal de Twitch',{exact:true})).toHaveAttribute('aria-invalid','true');
  await page.getByLabel('Canal de Twitch',{exact:true}).fill('ramitapai');await page.getByRole('button',{name:'Probar validación',exact:true}).click();await expect(page.getByLabel('Canal de Twitch',{exact:true})).not.toHaveAttribute('aria-invalid','true');
- await page.getByRole('button',{name:'Reacciona',exact:true}).click();await expect(page.getByRole('img',{name:'Camaleón sorprendido',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Reacciona',exact:true}).click();await expect(page.getByRole('img',{name:'Mascota de Plot festejando',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Mercados',exact:true}).click();await expect(page.locator('.points-pool')).toContainText('1.200 pts');await page.getByLabel('Puntos a apostar').fill('250');await page.getByRole('button',{name:'Apostar a Lo baja',exact:true}).click();await expect(page.locator('.points-message')).toContainText('Vista de prueba: 250 pts');
  await page.getByRole('button',{name:'Cerrado',exact:true}).click();await expect(page.locator('.points-bet')).toHaveCount(0);await expect(page.locator('.points-status')).toContainText('Esperando resultado');
  await page.getByRole('button',{name:'Resuelto',exact:true}).click();await expect(page.getByText('Resultado ganador',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Anulado',exact:true}).click();await expect(page.locator('.points-status')).toContainText('Reembolso');
  await page.getByRole('button',{name:'Estados',exact:true}).click();await expect(page.getByText('No se pudo guardar la apuesta.',{exact:false})).toBeVisible();await page.getByRole('button',{name:'Ver ejemplo',exact:true}).click();await expect(page.locator('.market-question')).toBeVisible();expect(mutations).toEqual([]);
 });
-test('catalog families fit narrow viewports and load local fonts and chameleon',async({page})=>{
+test('catalog families fit narrow viewports and load local fonts and mascot',async({page})=>{
  await page.emulateMedia({reducedMotion:'reduce'});
  for(const width of [320,390,768,1440]){
   await page.setViewportSize({width,height:900});await page.goto('/components.html');await page.evaluate(()=>document.fonts.ready);
   for(const family of ['Botones y campos','Mercados','Estados','Identidad']){
    await page.getByRole('button',{name:family,exact:true}).click();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   }
-  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('.plot-chameleon')!).backgroundImage)).toContain('chameleon-poses.png');
+  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('.plot-mascot')!).backgroundImage)).toContain('mascot-watching.png');
   await page.screenshot({path:`test-results/plot-identity-${width}.png`,fullPage:true});
  }
 });
