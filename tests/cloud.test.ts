@@ -80,14 +80,16 @@ test('durable OAuth consumes callbacks across instances before network I/O and l
 test('authenticated viewers enqueue channels outside the seed list once, without operator privileges',options,()=>fixture(async docs=>{
  const points=new Points('',docs);await points.load();const login=await points.walletLogin('11111111111111111111111111111111');
  const env={AUTH_ORIGIN:'https://plot.example',DATABASE_URL:database,PLOT_NAMESPACE:docs.namespace,PLOT_CHANNELS:'seed_only'};
+ const originalFetch=globalThis.fetch;globalThis.fetch=async(input,init)=>String(input)==='https://gql.twitch.tv/gql'?Response.json({data:{user:JSON.parse(String(init?.body)).variables.channel==='missing_streamer'?null:{id:'123'},channel:{activePredictionEvents:[]}}}):originalFetch(input,init);
  const server=cloudApp(docs,env).listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
  const watch=(channel:string,token=login.token)=>fetch(base+'/api/byte/twitch/watch',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({channel})});
  try{
   assert.equal((await watch('new_streamer','invalid-session')).status,400);
   assert.equal((await watch('https://evil.example')).status,400);
+  assert.equal((await watch('missing_streamer')).status,400);
   const results=await Promise.all([watch('NEW_STREAMER'),watch('new_streamer')]);
   for(const response of results){assert.equal(response.status,200);assert.equal((await response.json()).channel,'new_streamer');}
   const state=await docs.read('byte-twitch',()=>({channels:[] as string[]}));assert.deepEqual(state.channels,['new_streamer']);
   assert.equal((await fetch(base+'/api/byte/markets',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${login.token}`},body:'{}'})).status,403);
- }finally{await new Promise<void>(r=>server.close(()=>r()));}
+ }finally{globalThis.fetch=originalFetch;await new Promise<void>(r=>server.close(()=>r()));}
 }));
