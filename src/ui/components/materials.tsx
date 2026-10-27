@@ -62,12 +62,12 @@ export function HalftonePlot({replayKey=0,paused=false,label='plot en puntos, co
    ink=getComputedStyle(el).color;
    const mask=document.createElement('canvas');mask.width=Math.ceil(width);mask.height=Math.ceil(height);const c=mask.getContext('2d')!;
    let font=height*.92;c.font=`800 ${font}px Fraunces`;
-   const initial=c.measureText('pl').width+font*.5+c.measureText('t').width;
+   const initial=c.measureText('pl').width+font*.5+c.measureText('t').width+font*.25;
    font*=Math.min(1,width*.82/initial);c.font=`800 ${font}px Fraunces`;
    const metrics=c.measureText('plot');
-   const pl=c.measureText('pl').width,o=font*.5,t=c.measureText('t').width,x=(width-pl-o-t)/2,baseline=(height+metrics.actualBoundingBoxAscent-metrics.actualBoundingBoxDescent)/2;
+   const pl=c.measureText('pl').width,o=font*.5,t=c.measureText('t').width,x=(width-pl-o-t-font*.25)/2,baseline=(height+metrics.actualBoundingBoxAscent-metrics.actualBoundingBoxDescent)/2;
    c.fillText('pl',x,baseline);c.lineWidth=font*.09;c.beginPath();c.arc(x+pl+o*.5,baseline-o*.45,o*.37,.12,Math.PI*1.88);c.stroke();c.fillText('t',x+pl+o,baseline);
-   dotX=x+pl+o*.88;dotY=baseline-o*.62;dotRadius=Math.max(2.4,font*.046);
+   dotRadius=Math.max(2.4,font*.09);dotX=x+pl+o+t+font*.12;dotY=baseline-dotRadius*1.5;
    const data=c.getImageData(0,0,mask.width,mask.height).data,step=Math.max(2.6,width/250);dots=[];
    for(let y=1;y<height;y+=step)for(let x=1;x<width;x+=step)if(data[(Math.floor(y)*mask.width+Math.floor(x))*4+3]>130){const i=dots.length,seed=Math.sin(i*127.1+replayKey*7.7);dots.push({x:reduced?x:x+seed*width*.38,y:reduced?y:y+Math.cos(i*91.7)*height*.6,tx:x,ty:y,vx:0,vy:0});}
    el.dataset.animationState=reduced?'settled':'assembling';el.dataset.particles=String(dots.length);last=0;draw(performance.now());
