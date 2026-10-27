@@ -66,8 +66,9 @@ test('MV3 SOL resolution uses animated glass and does not invent a wallet payout
    return route.fulfill({json:path==='/api/health'?{marketMode:'byte'}:path==='/api/byte/markets'?{markets:[market]}:path==='/api/byte/config'?{enabled:true}:path==='/api/auth/extension/start'?{url:'http://twitch-predict.localhost:1356/onboarding',flowId:'fixture'}:{}});
   });
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
+  await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({byteOperation:{marketId:'pm_liquid',status:'confirmed',receipt:{signature:'test-signature'}}});});
   const page=await context.newPage();await page.goto(`chrome-extension://${id}/popup.html`);
-  const card=page.locator('.plot-resolution.liquid');await expect(card).toBeVisible();await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.winner')).toContainText('Gana');await expect(card.locator('.loser')).toContainText('No gana');await expect(card).toContainText('El importe de tu cobro no está disponible.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
+  const card=page.locator('.plot-resolution.liquid');await expect(card).toBeVisible();await expect(page.getByText('Apuesta confirmada en Solana.',{exact:false})).toHaveCount(0);await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.winner')).toContainText('Gana');await expect(card.locator('.loser')).toContainText('No gana');await expect(card).toContainText('El importe de tu cobro no está disponible.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
   await expect(card).toContainText('Esperando que byte complete los pagos.');
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('liquid-reflection');
   market.chain.settled=true;await page.reload();await expect(card).toContainText('Pagos o reembolsos completados en cadena.');await expect(card.locator('.resolution-net')).toHaveCount(0);

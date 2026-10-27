@@ -7,7 +7,7 @@ import './surfaces.js';
 import {byteMarketView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
-let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
+let selectedChannel='',activeChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
 const polling=new Set();
 const settledCards=new Map();
 const updateChannelSearch=mountChannelSearch($('#channel-search'),async channel=>{selectedChannel=channel;await load();await requestPoll();},(query,signal)=>searchTwitch(query,signal,bridgeUrl()));
@@ -71,7 +71,7 @@ function renderByte(){
  const {markets:byteMarkets,config,base}=byteCache;
  const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...byteMarkets.map(m=>m.notes?.channel).filter(Boolean)])].sort();
  if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
- updateChannelSearch(selectedChannel);
+ updateChannelSearch(selectedChannel,activeChannel);
  account=byteCache.account;
  $('#wallet').hidden=!account?.wallet;$('#login').hidden=!!account?.wallet;
  $('#points-error').hidden=!byteError;$('#points-error').textContent=byteError;
@@ -131,7 +131,7 @@ async function load(force=false){
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}
     const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
-    updateChannelSearch(selectedChannel);snapshot=state[`channel:${selectedChannel}`];
+    updateChannelSearch(selectedChannel,activeChannel);snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
     $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
@@ -153,5 +153,5 @@ chrome.storage.onChanged.addListener((changes,area)=>{
  if(changes.pointsToken||changes.bridgeUrl){contextDirty=true;$('#wallet').hidden=true;$('#own-balance').textContent='—';$('#history').replaceChildren();document.querySelectorAll('.points-bet').forEach(button=>{button.disabled=true;});}
  if(Object.keys(changes).some(key=>key!=='popupCache'))void load();
 });
-try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
+try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=activeChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
 setInterval(tick,1000);await load();void requestPoll();setInterval(()=>{void load();void requestPoll();},5000);
