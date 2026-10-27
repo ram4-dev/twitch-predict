@@ -22,8 +22,8 @@ test('compact live web header uses the balloon logo without horizontal overflow'
  await page.screenshot({path:'test-results/plot-balloon-compact.png'});
 });
 
-test('latex background follows the pointer over the entire viewport and rests under reduced motion',async({page})=>{
- await page.goto('/');const field=page.locator('body > .popup-atmosphere .plot-latex-field'),canvas=field.locator('canvas');await expect(canvas).toBeVisible();
+test('exclamation balloon background follows the pointer over the entire viewport and rests under reduced motion',async({page})=>{
+ await page.goto('/');const field=page.locator('body > .popup-atmosphere .plot-latex-field'),canvas=field.locator('canvas');await expect(canvas).toBeVisible();await expect(field).toHaveAttribute('data-ready','true');await expect(field).toHaveAttribute('data-pattern','exclamation-balloons');expect(Number(await field.getAttribute('data-balloons'))).toBeGreaterThanOrEqual(12);
  await expect(page.locator('#plot-scene .plot-dither-field')).toHaveCount(0);
  const initial=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());await page.mouse.move(1100,600);await expect(field).toHaveAttribute('data-motion','following');await expect(field).toHaveAttribute('data-motion','resting');expect(await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL())).not.toBe(initial);
  expect(await field.evaluate(el=>getComputedStyle(el).pointerEvents)).toBe('none');
