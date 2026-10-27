@@ -86,6 +86,8 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  app.post('/api/byte/twitch/watch',route(async(req,res)=>{
   const i=z.object({channel:z.string().regex(/^[a-zA-Z0-9_]{1,40}$/).transform(v=>v.toLowerCase())}).parse(req.body);
   context(res).points.me(bearer(req));
+  // Do not enqueue nonexistent Twitch accounts: a bad channel otherwise poisons every worker cycle.
+  if(!context(res).mirror.channels().includes(i.channel))await new TwitchSource(context(res).points).active(i.channel);
   await documents.update('byte-twitch',()=>({version:1,channels:[] as string[],mirrors:{}}),s=>{if(!s.channels.includes(i.channel))s.channels.push(i.channel);});
   res.json({channel:i.channel,predictions:context(res).mirror.snapshot(i.channel)});
  }));
