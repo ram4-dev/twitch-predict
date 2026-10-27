@@ -64,14 +64,20 @@ export function TwitchMarketPreview({item,extension=false}:{item:TwitchPreview;e
  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[]);
  const closed=p.status!=='ACTIVE'||!!p.lockedAt||now>=closesAt(p),remaining=Math.max(0,Math.ceil((closesAt(p)-now)/1000));
  const hasPoints=p.outcomes.every(o=>o.totalPoints!=null),total=p.outcomes.reduce((sum,o)=>sum+(o.totalPoints??0),0),number=(n:number)=>new Intl.NumberFormat('es-AR').format(n);
+ const winner=p.outcomes.find(o=>o.id===p.winningOutcomeId);
+ if(p.status==='CANCELED'||(p.status==='RESOLVED'&&winner))return <section className="points-market byte-betting byte-preview" aria-label="Resultado de Twitch sin mercado en Solana">
+  <Resolution title={p.title} channel={p.channel} outcomes={p.outcomes} winnerId={winner?.id} canceled={p.status==='CANCELED'}>
+   <Notice>{p.status==='CANCELED'?'Twitch canceló esta ronda.':'Resultado confirmado en Twitch.'} Esta ronda no tuvo mercado ni apuestas en SOL.</Notice>
+  </Resolution>
+ </section>;
  return <section className="points-market byte-betting byte-preview" aria-label="Predicción de Twitch sin mercado en Solana">
   <div className="topline market-heading"><span>@{p.channel} · Twitch</span><span>{closed?'Predicción cerrada':`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`}</span></div>
   <Heading className="market-question">{p.title}</Heading>
-  <div className="points-market-head"><span className="points-status"><span className="status-mark"/>{p.status==='RESOLVED'?'Resultado de Twitch':p.status==='CANCELED'?'Cancelada en Twitch':closed?'Esperando resultado de Twitch':'Esperando mercado'}</span><Badge variant="secondary">Vista previa · Twitch</Badge></div>
+  <div className="points-market-head"><span className="points-status"><span className="status-mark"/>{closed?'Esperando resultado de Twitch':'Esperando mercado'}</span><Badge variant="secondary">Vista previa · Twitch</Badge></div>
   <div className="pool-summary"><div className="points-pool"><span>Puntos del canal en Twitch</span><strong>{hasPoints?number(total):'—'} <small>puntos</small></strong></div></div>
   <div className="pool-split" role="img" aria-label="Distribución de puntos de Twitch">{p.outcomes.map((o,i)=><span key={o.id} className={i%2===0?'share-primary':'share-secondary'} style={{width:`${hasPoints&&total?(o.totalPoints??0)/total*100:0}%`}}/>)}</div>
   <div className="points-options">{p.outcomes.map((o,i)=><div key={o.id} className={`points-option ${i%2===0?'side-first':'side-second'}`}><div className="option-heading"><strong>{o.title}</strong><span>{hasPoints&&total?`${Math.round((o.totalPoints??0)/total*100)}%`:'—'}</span></div><p>{o.totalPoints==null?'Puntos no disponibles':`${number(o.totalPoints)} puntos de Twitch`}</p>{p.winningOutcomeId===o.id&&<span className="points-winner"><Check size={15}/>Resultado ganador</span>}<Button className="points-bet" tone={i%2===0?'positive':'negative'} disabled>Apostar a {o.title}<ArrowUpRight size={15}/></Button></div>)}</div>
-  <Notice>{closed?(p.status==='RESOLVED'?'Resultado confirmado en Twitch. Esta ronda no tuvo mercado en Solana.':p.status==='CANCELED'?'Twitch canceló esta ronda. No tuvo mercado en Solana.':'Apuestas cerradas. Esperando que Twitch confirme el resultado; esta ronda no tuvo mercado en Solana.'):'Byte alcanzó su límite. Mostramos la predicción y reintentamos crear el mercado automáticamente. Las apuestas en SOL estarán disponibles cuando exista el mercado en Solana.'}</Notice>
+  <Notice>{closed?'Apuestas cerradas. Esperando que Twitch confirme el resultado; esta ronda no tuvo mercado en Solana.':'Byte alcanzó su límite. Mostramos la predicción y reintentamos crear el mercado automáticamente. Las apuestas en SOL estarán disponibles cuando exista el mercado en Solana.'}</Notice>
  </section>;
 }
 export function twitchPreviewView(item:TwitchPreview){

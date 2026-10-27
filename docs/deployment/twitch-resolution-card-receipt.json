@@ -1,0 +1,38 @@
+{
+  "task": "Use the existing resolution card for completed Twitch-only previews",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "baseCommit": "15888a6",
+    "branch": "fix-twitch-preview-resolution-card",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-twitch-preview-resolution-card",
+    "cleanup": "retained for review and resumption"
+  },
+  "evidence": {
+    "channel": "gorgc",
+    "predictionId": "cbfb7a63-f82d-4e3f-a2ce-28a178dac252",
+    "title": "Astra vs BB",
+    "verifiedStatus": "RESOLVED",
+    "verifiedWinnerId": "7b7dc5f9-dba8-4333-87a0-a25c946f4369",
+    "verifiedWinner": "Astra",
+    "verification": "Public Plot API and direct Twitch predictionEvent query agree. The installed popup still displayed disabled bet buttons in the resolved preview."
+  },
+  "change": [
+    "Render the shared liquid Resolution component when the source has a valid winning outcome or is canceled.",
+    "Show winning and losing outcomes by their stable Twitch IDs, including reordered source outcomes.",
+    "Remove the stake controls, pools and bet buttons in terminal previews; use the existing neutral cancellation variant.",
+    "Keep the source-only viewer as a spectator, without invented wallet gains, losses, payouts, claims or chain links.",
+    "Only show the final winner card once the winning ID belongs to a source outcome."
+  ],
+  "verification": {
+    "check": "Typecheck, lint, 60 tests and web build passed; 7 SQL cases skipped.",
+    "e2e": "Real Byte mirror and both existing popup resolution E2E passed. The final preview-file run passed all three cases: recovery to a real market, verified winner/loser transition and cancellation. Tests assert no terminal betting controls, no invented SOL payout or chain link, no financial writes, and persistence after reload. Tests filter by channel to isolate retained earlier rounds.",
+    "browser": "T3 snapshot failed twice with Preview automation snapshot timed out after 15000ms.; native Chrome used for installed popup inspection."
+  },
+  "deployment": {
+    "web": "https://plot-devnet.vercel.app",
+    "extensionVersion": "0.17.2",
+    "backend": "No backend changes or Railway deployment required.",
+    "android": "Native code unchanged; existing APK preserved."
+  }
+}
