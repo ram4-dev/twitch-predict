@@ -10,7 +10,8 @@ test('expandable search replaces all-channels dropdown and filters without follo
  const tools=page.locator('.byte-section-head').filter({has:page.getByRole('heading',{name:'Mercados',exact:true})});
  const toggle=tools.getByRole('button',{name:'Buscar canal',exact:true});await toggle.click();const input=page.getByRole('searchbox',{name:'Filtrar canal',exact:true});await expect(input).toBeFocused();
  await input.fill('  @Eggs  ');await input.press('Enter');await expect(cards).toHaveCount(1);await expect(cards).toContainText('Mercado de eggsterr');
- const close=await page.getByRole('button',{name:'Cerrar búsqueda',exact:true}).boundingBox(),field=await input.boundingBox();expect(field!.x+field!.width).toBeLessThanOrEqual(close!.x);
+ // Wait for the actual opening geometry rather than sampling midway through the width animation.
+ await expect.poll(async()=>{const close=await page.getByRole('button',{name:'Cerrar búsqueda',exact:true}).boundingBox(),field=await input.boundingBox();return !!field&&!!close&&field.x+field.width<=close.x;}).toBe(true);
  await page.getByRole('heading',{level:1}).click();await expect(input).toHaveValue('  @Eggs  ');
  await input.focus();await input.press('Escape');await expect(input).toHaveCount(0);await expect(toggle).toBeFocused();await expect(cards).toHaveCount(2);
  await toggle.click();await input.fill('https://www.twitch.tv/summit1g');await page.getByRole('button',{name:'Filtrar mercados',exact:true}).click();await expect(cards).toHaveCount(1);await expect(cards).toContainText('Mercado de summit1g');

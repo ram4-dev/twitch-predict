@@ -18,6 +18,14 @@
     {
       "source": "/byte",
       "destination": "/index.html"
+    },
+    {
+      "source": "/landing",
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/waitlist",
+      "destination": "https://api-staging-c32d.up.railway.app/api/waitlist"
     }
   ],
   "headers": [
@@ -48,6 +56,24 @@
         {
           "key": "Cache-Control",
           "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/landing",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        }
+      ]
+    },
+    {
+      "source": "/landing.html",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
         }
       ]
     }

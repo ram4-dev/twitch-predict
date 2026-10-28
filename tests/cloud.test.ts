@@ -93,3 +93,23 @@ test('authenticated viewers enqueue channels outside the seed list once, without
   assert.equal((await fetch(base+'/api/byte/markets',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${login.token}`},body:'{}'})).status,403);
  }finally{globalThis.fetch=originalFetch;await new Promise<void>(r=>server.close(()=>r()));}
 }));
+
+test('cloud waitlist stores public signups durably, deduplicates concurrent requests and supports native forms',options,()=>fixture(async docs=>{
+ const env={AUTH_ORIGIN:'https://plot.example',DATABASE_URL:database,PLOT_NAMESPACE:docs.namespace};
+ const app=cloudApp(docs,env),server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+ const signup=(email:string)=>fetch(base+'/api/waitlist',{method:'POST',headers:{'content-type':'application/json',origin:env.AUTH_ORIGIN},body:JSON.stringify({email})});
+ try{
+  const responses=await Promise.all([signup('viewer@example.com'),signup('VIEWER@example.com')]);
+  for(const response of responses){assert.equal(response.status,200);assert.deepEqual(await response.json(),{ok:true});}
+  const restored=new Documents(database!,docs.namespace);
+  try{const entries=await restored.read('waitlist',()=>[] as {email:string}[]);assert.equal(entries.length,1);assert.equal(entries[0].email,'viewer@example.com');}finally{await restored.close();}
+  assert.equal((await signup('invalid')).status,400);
+  assert.equal((await fetch(base+'/api/waitlist')).status,404);
+  assert.equal((await fetch(base+'/api/waitlist',{method:'POST',headers:{'content-type':'application/json',origin:'https://foreign.example'},body:JSON.stringify({email:'foreign@example.com'})})).status,403);
+  const native=await fetch(base+'/api/waitlist',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded',origin:env.AUTH_ORIGIN},body:new URLSearchParams({email:'native@example.com'}),redirect:'manual'});
+  assert.equal(native.status,303);assert.equal(native.headers.get('location'),'https://plot.example/waitlist-success.html');
+  assert.equal((await docs.read('waitlist',()=>[])).length,2);
+  await docs.pool.query("INSERT INTO plot_private.request_limits(namespace,name,window_start,requests) VALUES($1,'waitlist',date_trunc('minute',now()),120) ON CONFLICT(namespace,name) DO UPDATE SET window_start=excluded.window_start,requests=excluded.requests",[docs.namespace]);
+  assert.equal((await signup('limited@example.com')).status,429);
+ }finally{app.locals.liveMarkets.close();await new Promise<void>(r=>server.close(()=>r()));}
+}));

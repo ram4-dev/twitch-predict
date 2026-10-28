@@ -1,4 +1,5 @@
 import {LiveMarkets} from './live.js';
+import {Waitlist} from '../waitlist.js';
 import {TwitchChannelSearch} from '../twitch-search.js';
 import express from 'express';
 import {z} from 'zod';
@@ -31,6 +32,20 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{
   try{await fn(req,res);}catch(error){res.status('code' in Object(error)?503:400).json({error:error instanceof z.ZodError?'Datos inválidos':'code' in Object(error)?'No se pudo completar la operación':(error as Error).message});}
  };
+ const waitlist=new Waitlist('',documents);
+ app.post('/api/waitlist',express.urlencoded({extended:false,limit:'2kb'}),async(req,res)=>{
+  const native=req.is('application/x-www-form-urlencoded');
+  try{
+   if(!await documents.allowRequest('waitlist',120)){res.status(429).json({error:'Demasiadas inscripciones. Intentá de nuevo en un minuto.'});return;}
+   await waitlist.join(req.body?.email);
+   if(native){res.redirect(303,`${config.origin}/waitlist-success.html`);return;}
+   res.json({ok:true});
+  }catch(error){
+   const status=error instanceof z.ZodError?400:503;
+   if(native){res.redirect(303,`${config.origin}/waitlist-error.html`);return;}
+   res.status(status).json({error:status===400?'Ingresá un email válido.':'No pudimos guardar tu email. Intentá de nuevo.'});
+  }
+ });
  app.get('/live',(_req,res)=>res.json({ok:true}));
  app.get('/api/health',route(async(_req,res)=>{await documents.pool.query('SELECT 1');const heartbeat=await documents.heartbeat(),source=await documents.read('worker-status',()=>({checkedAt:0,sourceError:null as string|null}));res.json({ok:true,service:'plot-mobile',marketMode:'byte',network:'devnet',protocol:'byte partner markets',features:['wallet-bet','automatic-payout'],worker:heartbeat?.active?'active':'idle',sourceError:source.sourceError??(source.checkedAt&&Date.now()-source.checkedAt>30000?'La verificación de Twitch necesita actualizarse.':null),sourceCheckedAt:source.checkedAt||null});}));
  // Every request gets a current read snapshot; all mutations lock/reload the authoritative SQL row.
