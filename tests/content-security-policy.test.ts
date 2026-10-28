@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {contentSecurityPolicy} from '../src/content-security-policy.js';
+import {contentSecurityPolicy,contentSecurityPolicyForPath,pitchContentSecurityPolicy} from '../src/content-security-policy.js';
 test('CSP permits exactly the installed Paper Shaders stylesheet and preserves strict script sources',async()=>{
  const source=await readFile(new URL('../node_modules/@paper-design/shaders/dist/shader-mount.js',import.meta.url),'utf8');
  const css=source.match(/const defaultStyle = `([\s\S]*?)`;/)?.[1];assert.ok(css,'Review the dependency stylesheet if its injection changes');
@@ -10,4 +10,23 @@ test('CSP permits exactly the installed Paper Shaders stylesheet and preserves s
  const styles=contentSecurityPolicy.split(';').find(v=>v.trim().startsWith('style-src'))?.trim();
  assert.equal(styles,`style-src 'self' 'sha256-${hash}'`);
  assert.ok(contentSecurityPolicy.includes("script-src 'self';"));assert.ok(!contentSecurityPolicy.includes('unsafe-inline'));assert.ok(!contentSecurityPolicy.includes('unsafe-eval'));
+});
+test('pitch deck CSP allowlists its inline script and stays off every other route',async()=>{
+ const html=await readFile(new URL('../public/pitch/index.html',import.meta.url),'utf8');
+ const start=html.indexOf('<script>'),end=html.indexOf('</script>',start);
+ assert.ok(start>=0&&end>start);assert.equal(html.indexOf('<script>',end),-1);
+ const scriptHash=createHash('sha256').update(html.slice(start+'<script>'.length,end)).digest('base64');
+ assert.ok(pitchContentSecurityPolicy.includes(`'sha256-${scriptHash}'`));
+ assert.ok(pitchContentSecurityPolicy.includes("style-src 'self' 'unsafe-inline'"));
+ assert.ok(pitchContentSecurityPolicy.includes('font-src \'self\' data:'));
+ assert.ok(pitchContentSecurityPolicy.includes('img-src \'self\' data:'));
+ assert.ok(!pitchContentSecurityPolicy.includes('unsafe-eval'));
+ for(const path of ['/','/byte','/onboarding','/onboarding.html','/components.html','/api/health','/downloads/plot-extension.zip','/pitchdeck'])assert.equal(contentSecurityPolicyForPath(path),contentSecurityPolicy);
+ for(const path of ['/pitch','/pitch/','/pitch/index.html'])assert.equal(contentSecurityPolicyForPath(path),pitchContentSecurityPolicy);
+ const vercel=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));
+ const policy=(source:string)=>vercel.headers.find((rule:{source:string})=>rule.source===source)?.headers.find((header:{key:string})=>header.key==='Content-Security-Policy')?.value;
+ assert.equal(vercel.headers.find((rule:{source:string})=>rule.source==='/(.*)').headers.some((header:{key:string})=>header.key==='Content-Security-Policy'),false);
+ assert.equal(policy('/((?!pitch(?:/|$)).*)'),contentSecurityPolicy);
+ assert.equal(policy('/pitch'),pitchContentSecurityPolicy);
+ assert.equal(policy('/pitch/(.*)'),pitchContentSecurityPolicy);
 });
