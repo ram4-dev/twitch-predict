@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import {Auth} from './auth.js';
+import {Waitlist} from './waitlist.js';
 import {TwitchAuth} from './twitch-auth.js';
 import { Points } from './points.js';
 import { TwitchSource } from './twitch-source.js';
@@ -24,6 +25,7 @@ const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
 const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
 const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined);await byte.load();
 const byteMirror=new ByteTwitchMirror(directory,byte,source);await byteMirror.load();
+const waitlist=new Waitlist(directory);await waitlist.load();
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
   if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
@@ -37,6 +39,19 @@ app.use((req,res,next)=>{
 });
 app.use(express.json({limit:'16kb'}));
 const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
+// Public signup collects only an email and never exposes the stored list.
+app.post(['/api/waitlist','/waitlist'],express.urlencoded({extended:false,limit:'2kb'}),async(req,res)=>{
+  const native=req.path==='/waitlist';
+  try{
+    await waitlist.join(req.body?.email);
+    if(native){res.redirect(303,'/waitlist-success.html');return;}
+    res.status(200).json({ok:true});
+  }catch(error){
+    const status=error instanceof z.ZodError?400:503;
+    if(native){res.status(status).sendFile('waitlist-error.html',{root:`${root}/public`});return;}
+    res.status(status).json({error:status===400?'Ingresá un email válido.':'No pudimos guardar tu email. Intentá de nuevo.'});
+  }
+});
 const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
 app.get('/api/health',(_req,res)=>res.json({ok:true,marketMode:process.env.MARKET_MODE==='byte'?'byte':'offchain',network:process.env.MARKET_MODE==='byte'?'devnet':'offchain',protocol:process.env.MARKET_MODE==='byte'?'byte partner markets':'Puntos internos',features:process.env.MARKET_MODE==='byte'?['wallet-bet','resolve','automatic-payout']:['bet','resolve','claim'],sourceError:source.lastError}));
 app.get('/api/markets',(_req,res)=>res.json(points.markets()));
@@ -134,6 +149,8 @@ app.get(['/', '/byte'],(req,res,next)=>{
   if(process.env.MARKET_MODE==='byte'&&origin?.startsWith('https://')&&appOrigin(req)!==origin){res.redirect(`${origin}${req.originalUrl}`);return;}
   next();
 });
+// Native form POSTs need the same-origin referrer policy to retain their Origin.
+app.get(['/landing','/landing.html'],(_req,res)=>{res.set('Referrer-Policy','same-origin');res.sendFile('landing.html',{root:`${root}/public`});});
 app.get('/byte',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
 if(process.env.MARKET_MODE==='byte')app.get('/',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
 app.use(express.static(`${root}/public`));
