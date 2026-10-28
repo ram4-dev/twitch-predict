@@ -30,7 +30,7 @@ test('catalog families fit narrow viewports and load local fonts and mascot',asy
 
 test('first run renders the shared empty state and its slotted follow link',async({page})=>{
  await page.route('**/api/markets',route=>route.fulfill({json:[]}));
- await page.goto('/');await expect(page.getByRole('heading',{name:'La próxima está por venir',exact:true})).toBeVisible();
+ await page.goto('/app');await expect(page.getByRole('heading',{name:'La próxima está por venir',exact:true})).toBeVisible();
  await page.getByRole('link',{name:'Seguir un canal',exact:true}).click();await expect(page.getByRole('heading',{name:'Streamers que seguís',exact:true})).toBeVisible();
  await expect(page.locator('#notice')).not.toContainText('Slot failed');
 });

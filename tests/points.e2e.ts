@@ -10,10 +10,10 @@ async function operator(page:Page,path:string,body:unknown){return page.evaluate
 async function ownRequest(page:Page,path:string,body:unknown){return page.evaluate(async({path,body})=>{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')}`},body:JSON.stringify(body)});return {status:r.status,data:await r.json()};},{path,body});}
 test.skip(process.env.MARKET_MODE==='solana','Offchain flow');
 test('consumer UI: two separate accounts bet, winner claims, loser cannot claim; refund and reload retain points',async({page,browser})=>{
-  await signIn(page);await page.goto('/');await expect(page.locator('#own-balance')).toHaveText('10.000');
+  await signIn(page);await page.goto('/app');await expect(page.locator('#own-balance')).toHaveText('10.000');
   const market=await operator(page,'/api/demo',{});await page.reload();const card=page.locator(`[data-key="${market.key}"]`);
   await card.getByLabel('Puntos a apostar').fill('300');await card.getByRole('button',{name:'Apostar a Gana',exact:true}).click();await expect(page.locator('#own-balance')).toHaveText('9.700');
-  const second=await browser.newContext();const other=await second.newPage();await phantomProvider(other);await other.goto(`${base}/onboarding`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL('**/#markets');await other.goto(base);await expect(other.locator('#own-balance')).toHaveText('10.000');const otherCard=other.locator(`[data-key="${market.key}"]`);
+  const second=await browser.newContext();const other=await second.newPage();await phantomProvider(other);await other.goto(`${base}/onboarding`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL('**/app#markets');await other.goto(`${base}/app`);await expect(other.locator('#own-balance')).toHaveText('10.000');const otherCard=other.locator(`[data-key="${market.key}"]`);
   await otherCard.getByLabel('Puntos a apostar').fill('700');await otherCard.getByRole('button',{name:'Apostar a Pierde',exact:true}).click();await expect(other.locator('#own-balance')).toHaveText('9.300');
   await page.reload();await expect(card.locator('.points-pool')).toContainText('1.000 pts');
   await card.getByText('Resolver este ejemplo').click();await card.getByRole('button',{name:'Dar ganador: Gana',exact:true}).click();
@@ -35,19 +35,19 @@ test('MV3 detects a prediction, automatically creates one mirror, bets own point
     await context.route('https://gql.twitch.tv/gql',route=>route.fulfill({json:{data:{channel:{activePredictionEvents:prediction.status==='ACTIVE'?[prediction]:[]}}}}));
     await context.route(`https://www.twitch.tv/${prediction.channel}`,route=>route.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch fixture</title>'}));
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
-    const dashboard=await context.newPage();await dashboard.goto(base);
+    const dashboard=await context.newPage();await dashboard.goto(`${base}/app`);
     await phantomProvider(context);
     await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url(),{timeout:15000}).toBeTruthy();
     // This install tab may have been created while exposeBinding was being registered.
     // Continue the same real auth flow in a new document created after fixture installation.
     const installedTab=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;
     const onboarding=await context.newPage();await onboarding.goto(installedTab.url());await installedTab.close();
-    await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL('**/#markets');
+    await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL('**/app#markets');
     const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${prediction.channel}`);
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:prediction.title})).toBeVisible();await expect(popup.locator('.points-pool')).toContainText('0 pts');await expect(popup.locator('#own-balance')).toHaveText('10.000');
     await popup.getByLabel('Puntos a apostar').fill('250');await popup.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(popup.getByRole('button',{name:'Actualizar predicción',exact:true})).toBeEnabled();await expect(popup.getByLabel('Puntos a apostar')).toHaveValue('250');await popup.getByRole('button',{name:'Apostar a Azul',exact:true}).click();await expect(popup.locator('#own-balance')).toHaveText('9.750');await expect(popup.locator('.points-pool')).toContainText('250 pts');
     await popup.screenshot({path:'test-results/offchain-extension.png',fullPage:true});
-    const [userConsole]=await Promise.all([context.waitForEvent('page'),popup.getByRole('link',{name:'Mis apuestas ↗',exact:true}).click()]);await userConsole.waitForURL('**/#history');await expect(userConsole.locator('h1')).toHaveText('Mis apuestas');await expect(userConsole.locator('#own-balance')).toHaveText('9.750');await userConsole.close();
+    const [userConsole]=await Promise.all([context.waitForEvent('page'),popup.getByRole('link',{name:'Mis apuestas ↗',exact:true}).click()]);await userConsole.waitForURL('**/app#history');await expect(userConsole.locator('h1')).toHaveText('Mis apuestas');await expect(userConsole.locator('#own-balance')).toHaveText('9.750');await userConsole.close();
     await popup.close();await twitch.close();
     prediction.status='RESOLVED';prediction.winningOutcome={id:'blue'};await writeFile(fixture,JSON.stringify([prediction]));
     await expect.poll(async()=>{const r=await dashboard.request.get(`${base}/api/markets`);return (await r.json()).find((m:{prediction:{id:string}})=>m.prediction.id===prediction.id)?.phase;},{timeout:20000}).toBe('resolved');
@@ -72,7 +72,7 @@ test('following a channel creates a fresh mirror automatically and skips an expi
   const expired={...source,id:randomUUID(),createdAt:new Date(Date.now()-3600_000).toISOString()};
   await writeFile(fixture,JSON.stringify([expired,source]));
   try {
-    await page.goto('/#channels');await page.getByLabel('Canal de Twitch',{exact:true}).fill(source.channel);await page.getByRole('button',{name:'Agregar streamer',exact:true}).click();
+    await page.goto('/app#channels');await page.getByLabel('Canal de Twitch',{exact:true}).fill(source.channel);await page.getByRole('button',{name:'Agregar streamer',exact:true}).click();
     await page.getByRole('link',{name:'Mercados',exact:true}).click();const card=page.locator(`[data-key="offchain:${source.channel}:${source.id}"]`);await expect(card).toBeVisible();await expect(card.locator('.points-pool')).toContainText('0 pts');
     const response=await page.request.get('/api/markets');const markets=await response.json();expect(markets.some((m:{prediction:{id:string}})=>m.prediction.id===expired.id)).toBe(false);
     const mirrored=await operator(page,'/api/predictions',{...source,title:'Untrusted title'});expect(mirrored.prediction.title).toBe(source.title);expect(mirrored.totalPoints).toBe(0);

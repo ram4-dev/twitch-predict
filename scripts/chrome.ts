@@ -22,7 +22,7 @@ if(legacy){
 const allowed=[extension];
 try{const path=resolve(profile,'Default/Extensions/bfnaelmomeimhlpmgjnjophhpkkoljpa');const versions=await readdir(path);if(versions.length)allowed.push(resolve(path,versions.sort().at(-1)!));}catch{/* Onboarding includes the official Phantom installation link. */}
 const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,viewport:null,args:[`--disable-extensions-except=${allowed.join(',')}`,`--load-extension=${allowed.join(',')}`]});
-const worker=await workerFor(context,extensionId);const dashboard=context.pages()[0]??await context.newPage();await dashboard.goto(base);
+const worker=await workerFor(context,extensionId);const dashboard=context.pages()[0]??await context.newPage();await dashboard.goto(`${base}/app`);
 const authenticated=await worker.evaluate(async url=>{const s=await(globalThis as unknown as {chrome:{storage:{local:{get(keys:string[]):Promise<{pointsToken?:string}>}}}}).chrome.storage.local.get(['pointsToken']);if(!s.pointsToken)return false;const r=await fetch(`${url}/api/points/me`,{headers:{Authorization:`Bearer ${s.pointsToken}`}});return r.ok&&!!(await r.json()).wallet;},base);
 if(!authenticated){const result=await dashboard.evaluate(async id=>(globalThis as unknown as {chrome:{runtime:{sendMessage(id:string,message:unknown):Promise<{ok?:boolean;error?:string}>}}}).chrome.runtime.sendMessage(id,{type:'CONNECT_PHANTOM'}),extensionId);if(!result?.ok)throw new Error(result?.error??'Could not open Phantom onboarding');}
 else await dashboard.bringToFront();

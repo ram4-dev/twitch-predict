@@ -13,7 +13,7 @@ test('MV3 searches a new streamer by Twitch URL, mirrors once, and preserves key
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
-  const panel=await context.newPage();await panel.goto(base);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+  const panel=await context.newPage();await panel.goto(`${base}/app`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);
   await expect(popup.getByRole('combobox',{name:'Canal de Twitch'})).toHaveCount(0);await expect(popup.locator('#live-status')).toHaveText('Conexión en vivo');
   await popup.getByRole('button',{name:'Buscar canal',exact:true}).click();const input=popup.getByRole('searchbox',{name:'Canal de Twitch',exact:true});await expect(input).toBeFocused();

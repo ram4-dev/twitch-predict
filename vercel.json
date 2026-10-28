@@ -17,7 +17,7 @@
     },
     {
       "source": "/byte",
-      "destination": "/index.html"
+      "destination": "/app.html"
     },
     {
       "source": "/landing",
@@ -26,6 +26,10 @@
     {
       "source": "/waitlist",
       "destination": "https://api-staging-c32d.up.railway.app/api/waitlist"
+    },
+    {
+      "source": "/app",
+      "destination": "/app.html"
     }
   ],
   "headers": [
@@ -93,6 +97,24 @@
     },
     {
       "source": "/landing.html",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
       "headers": [
         {
           "key": "Referrer-Policy",

@@ -10,7 +10,7 @@ async function startOAuth(page:Page){const result=await page.evaluate(async()=>{
 test.skip(process.env.MARKET_MODE==='solana','Offchain Twitch linking');
 test('Phantom wallet connects verified Twitch channel through OAuth and can disconnect without losing balance or history',async({page})=>{
   const user=await identity();await signIn(page);const before=await me(page);await provider(page,user.login);await page.getByRole('link',{name:'Streamer',exact:true}).click();await startOAuth(page);
-  await expect(page.getByRole('heading',{name:'Conectar Twitch',exact:true})).toBeVisible();await page.getByRole('link',{name:'Autorizar canal',exact:true}).click();await expect(page).toHaveURL(/\/#streamer$/);await expect.poll(async()=>(await me(page)).twitch?.id).toBe(user.id);
+  await expect(page.getByRole('heading',{name:'Conectar Twitch',exact:true})).toBeVisible();await page.getByRole('link',{name:'Autorizar canal',exact:true}).click();await expect(page).toHaveURL(/\/app#streamer$/);await expect.poll(async()=>(await me(page)).twitch?.id).toBe(user.id);
   const linked=await me(page);expect(linked.id).toBe(before.id);expect(linked.wallet).toBe(before.wallet);expect(linked.balance).toBe(before.balance);expect(linked.twitch.id).toBe(user.id);expect(linked.streamerChannels).toContain(user.login);expect(new URL(page.url()).search).toBe('');
   await page.reload();await expect.poll(async()=>(await me(page)).twitch?.id).toBe(user.id);
   const disconnected=await page.evaluate(async()=>{const r=await fetch('/api/twitch/disconnect',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')}`},body:'{}'});return r.ok;});expect(disconnected).toBe(true);const after=await me(page);expect(after.twitch).toBeNull();expect(after.balance).toBe(before.balance);expect(after.bets).toEqual(before.bets);
@@ -24,7 +24,7 @@ test('cancel, forged callback and switching wallets during OAuth cannot grant st
 test('streamer account block stays absent across navigation and refresh',async({page})=>{
   await signIn(page);
   for(const hash of ['markets','streamer','channels','connect']){
-    await page.goto(`/#${hash}`);
+    await page.goto(`/app#${hash}`);
     await expect(page.locator('#page-title')).toHaveText(hash==='markets'?'Predicciones de la comunidad':hash==='streamer'?'Consola del streamer':'Canales y extensión');
     await expect(page.locator('#account-name')).not.toHaveText('Conectando…');
     await expect(page.locator('#twitch-connection,.twitch-connect')).toHaveCount(0);

@@ -5,7 +5,7 @@ test('landing uses current balloon artwork and previews a prediction locally',as
   const errors:string[]=[];const writes:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
   page.on('request',request=>{if(request.method()==='POST')writes.push(request.url());});
-  await page.goto('/landing');
+  await page.goto('/');
   await expect(page.getByRole('heading',{level:1})).toHaveText('El stream juega.Vos elegís.');
   await expect(page.locator('.plot-balloon-wordmark')).toHaveAttribute('data-renderer','balloon');
   await expect(page.locator('.plot-latex-field')).toHaveAttribute('data-ready','true');
@@ -36,7 +36,7 @@ test('landing uses current balloon artwork and previews a prediction locally',as
   await expect(page.getByRole('link',{name:'Abrir app'})).toHaveCount(0);
 });
 test('waitlist saves a real email, accepts duplicates and reports failures without claiming success',async({page})=>{
-  await page.goto('/landing');
+  await page.goto('/');
   const form=page.getByRole('form',{name:'Lista de espera'}),email=`viewer-${randomUUID()}@example.com`;
   const input=form.getByRole('textbox',{name:'Sumate a la waitlist'});
   await input.fill('not-an-email');await form.getByRole('button',{name:'Anotarme en la waitlist'}).click();
@@ -57,10 +57,21 @@ test('waitlist saves a real email, accepts duplicates and reports failures witho
 test('waitlist registration also works without JavaScript',async({browser,baseURL})=>{
   const context=await browser.newContext({javaScriptEnabled:false});
   try{
-    const page=await context.newPage();await page.goto(`${baseURL}/landing`);
+    const page=await context.newPage();await page.goto(`${baseURL}/`);
     await expect(page.locator('.landing-fallback')).toBeVisible();
     await page.getByRole('textbox',{name:'Sumate a la waitlist'}).fill(`native-${randomUUID()}@example.com`);
     await page.locator('.landing-fallback button').click();
     await expect(page).toHaveURL(/\/waitlist-success\.html$/);await expect(page.getByRole('heading',{name:'Ya estás en la lista'})).toBeVisible();
   }finally{await context.close();}
+});
+
+
+test('root is the landing, app has its own route and existing section links keep working',async({page})=>{
+  await page.goto('/');await expect(page.getByRole('form',{name:'Lista de espera'})).toBeVisible();
+  await expect(page.locator('#markets')).toHaveCount(0);
+  await page.goto('/landing');await expect(page.getByRole('form',{name:'Lista de espera'})).toBeVisible();
+  await page.goto('/app');await expect(page.locator('#markets')).toBeAttached();await expect(page.locator('#waitlist')).toHaveCount(0);
+  await page.goto('/#history');await expect(page).toHaveURL(/\/app#history$/);await expect(page.getByRole('heading',{level:1})).toHaveText('Mis apuestas');
+  await page.goto('/?channel=eggsterr');await expect(page).toHaveURL(/\/app\?channel=eggsterr$/);
+  await page.goto('/#waitlist');await expect(page).toHaveURL(/\/#waitlist$/);await expect(page.getByRole('form',{name:'Lista de espera'})).toBeVisible();
 });
