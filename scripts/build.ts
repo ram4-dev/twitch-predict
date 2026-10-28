@@ -51,6 +51,7 @@ if(cloudOrigin){
  await writeFile('dist/extension/manifest.json',JSON.stringify(manifest,null,2));
 }
 await cp('public','dist/web',{recursive:true});
-await cp('public/byte.html','dist/web/index.html');
+await cp('public/byte.html','dist/web/app.html');
+await cp('public/landing.html','dist/web/index.html');
 await mkdir('dist/web/downloads',{recursive:true});
 execFileSync('zip',['-qr','../web/downloads/plot-extension.zip','.'],{cwd:'dist/extension'});

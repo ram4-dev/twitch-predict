@@ -21,7 +21,7 @@ function Onboarding(){
       if(!response?.ok)throw new Error(response?.error||'No se pudo vincular la extensión. Reintentá la conexión.');
       localStorage.setItem('linkedExtensionId',result.handoff.extensionId);
     }
-    setPhase('done');if(new URLSearchParams(location.search).has('extension')){window.close();return;}location.replace('/#markets');
+    setPhase('done');if(new URLSearchParams(location.search).has('extension')){window.close();return;}location.replace('/app#markets');
   };
   const connect=async()=>{
     setError('');

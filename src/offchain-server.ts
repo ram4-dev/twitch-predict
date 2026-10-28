@@ -91,9 +91,9 @@ app.get('/auth/twitch/callback',async(req,res)=>{
   try{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
-    res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
+    res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/app?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
   }catch{
-    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';res.redirect(onboarding?`/onboarding?streamer=1&twitch_error=${error}`:`/?twitch_error=${error}#streamer`);
+    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';res.redirect(onboarding?`/onboarding?streamer=1&twitch_error=${error}`:`/app?twitch_error=${error}#streamer`);
   }
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{
@@ -162,15 +162,15 @@ app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
 app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}/onboarding`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
 // Named .localhost hosts need HTTPS for Phantom's injected provider.
-app.get(['/', '/byte'],(req,res,next)=>{
+app.get(['/app', '/app.html', '/byte'],(req,res,next)=>{
   const origin=process.env.AUTH_ORIGIN;
   if(process.env.MARKET_MODE==='byte'&&origin?.startsWith('https://')&&appOrigin(req)!==origin){res.redirect(`${origin}${req.originalUrl}`);return;}
   next();
 });
 // Native form POSTs need the same-origin referrer policy to retain their Origin.
-app.get(['/landing','/landing.html'],(_req,res)=>{res.set('Referrer-Policy','same-origin');res.sendFile('landing.html',{root:`${root}/public`});});
+app.get(['/','/landing','/landing.html'],(_req,res)=>{res.set('Referrer-Policy','same-origin');res.sendFile('landing.html',{root:`${root}/public`});});
 app.get('/byte',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
-if(process.env.MARKET_MODE==='byte')app.get('/',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
+app.get(['/app','/app.html'],(_req,res)=>res.sendFile(process.env.MARKET_MODE==='byte'?'byte.html':'index.html',{root:`${root}/public`}));
 app.use(express.static(`${root}/public`));
 app.use('/extension',express.static(`${root}/extension`));
 const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{

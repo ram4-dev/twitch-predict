@@ -45,7 +45,7 @@ function PredictionPreview(){
 }
 function Landing(){return <div className="landing">
   {createPortal(<div className="landing-atmosphere" aria-hidden="true"><LatexAtmosphere/></div>,document.body)}
-  <header className="landing-header"><a href="/landing" aria-label="plot, inicio"><LandingBrand/></a><nav aria-label="Navegación"><a href="#como-funciona">Cómo funciona</a><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></nav></header>
+  <header className="landing-header"><a href="/" aria-label="plot, inicio"><LandingBrand/></a><nav aria-label="Navegación"><a href="#como-funciona">Cómo funciona</a><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></nav></header>
   <main id="contenido">
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="hero-copy"><h1 id="landing-title">El stream juega.<br/>Vos elegís.</h1><p>Predicciones de Twitch con un pozo propio. Elegí tu lado y seguí la jugada con tu comunidad.</p><WaitlistForm/></div>
@@ -55,4 +55,7 @@ function Landing(){return <div className="landing">
   </main>
   <footer className="landing-footer"><LandingBrand/><p>La próxima jugada está por empezar.</p><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></footer>
 </div>;}
-createRoot(document.getElementById('landing-root')!).render(<Landing/>);
+// Keep bookmarks and older extension links pointing at app sections working.
+const legacyAppLink=location.pathname==='/'&&(['#markets','#history','#streamer','#channels'].includes(location.hash)||['twitch_ticket','twitch_error','channel','market','view'].some(key=>new URLSearchParams(location.search).has(key)));
+if(legacyAppLink)location.replace(`/app${location.search}${location.hash}`);
+else createRoot(document.getElementById('landing-root')!).render(<Landing/>);

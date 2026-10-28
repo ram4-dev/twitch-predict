@@ -20,7 +20,7 @@ test('public HTTPS → signed wallet login → MV3 scoped session; no bridge or 
   const onboarding=context.pages().find(p=>p.url().startsWith(`${origin}/onboarding`))!;
   if(!await onboarding.evaluate(()=>!!(window as unknown as {phantom?:{solana?:unknown}}).phantom?.solana))await onboarding.reload();await expect.poll(async()=>worker.evaluate(async()=>{const s=await (globalThis as unknown as {chrome:{storage:{local:{get(keys:string[]):Promise<{pointsToken?:string;bridgeToken?:string;walletAddress?:string}>}}}}).chrome.storage.local.get(['pointsToken','bridgeToken','walletAddress']);return {linked:!!s.pointsToken,bridge:!!s.bridgeToken,wallet:s.walletAddress};}),{timeout:30000}).toEqual({linked:true,bridge:false,wallet:wallet.address});
   const popup=await context.newPage();await popup.goto(`chrome-extension://${new URL(worker.url()).host}/popup.html`);
-  const web=await context.newPage();await web.goto(`${origin}/onboarding`);await web.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await web.waitForURL(`${origin}/#markets`);
+  const web=await context.newPage();await web.goto(`${origin}/onboarding`);await web.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await web.waitForURL(`${origin}/app#markets`);
   const state=await web.evaluate(async()=>{const r=await fetch('/api/points/me',{headers:{authorization:`Bearer ${localStorage.getItem('pointsToken')}`}});return r.json();});expect(state.wallet).toBe(wallet.address);await expect(web.getByRole('button',{name:'Operador',exact:true})).toHaveCount(0);
   await web.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(web.getByText(/Extensión vinculada\./)).toBeVisible();
   expect((await request.get(`${origin}/api/pair`)).status()).toBe(404);

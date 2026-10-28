@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('supplied artwork animates on hover, settles at rest and falls back safely',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/');const logo=page.locator('#plot-scene .plot-balloon-wordmark'),canvas=logo.locator('canvas');
+ await page.goto('/app');const logo=page.locator('#plot-scene .plot-balloon-wordmark'),canvas=logo.locator('canvas');
  await expect(logo).toHaveAttribute('data-renderer','balloon');await expect(canvas).toHaveAttribute('data-motion','resting');
  const image=await logo.locator('img').evaluate(el=>({width:(el as HTMLImageElement).naturalWidth,src:(el as HTMLImageElement).getAttribute('src')}));expect(image).toEqual({width:1792,src:'/brand/plot-wordmark.jpg'});
  await logo.hover();await expect(canvas).toHaveAttribute('data-motion','reacting');
@@ -23,7 +23,7 @@ test('compact live web header uses the balloon logo without horizontal overflow'
 });
 
 test('exclamation balloon background follows the pointer over the entire viewport and rests under reduced motion',async({page})=>{
- await page.goto('/');const field=page.locator('body > .popup-atmosphere .plot-latex-field'),canvas=field.locator('canvas');await expect(canvas).toBeVisible();await expect(field).toHaveAttribute('data-ready','true');await expect(field).toHaveAttribute('data-pattern','exclamation-balloons');expect(Number(await field.getAttribute('data-balloons'))).toBeGreaterThanOrEqual(12);
+ await page.goto('/app');const field=page.locator('body > .popup-atmosphere .plot-latex-field'),canvas=field.locator('canvas');await expect(canvas).toBeVisible();await expect(field).toHaveAttribute('data-ready','true');await expect(field).toHaveAttribute('data-pattern','exclamation-balloons');expect(Number(await field.getAttribute('data-balloons'))).toBeGreaterThanOrEqual(12);
  await expect(page.locator('#plot-scene .plot-dither-field')).toHaveCount(0);
  const initial=await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL());await page.mouse.move(1100,600);await expect(field).toHaveAttribute('data-motion','following');await expect(field).toHaveAttribute('data-motion','resting');expect(await canvas.evaluate(el=>(el as HTMLCanvasElement).toDataURL())).not.toBe(initial);
  expect(await field.evaluate(el=>getComputedStyle(el).pointerEvents)).toBe('none');

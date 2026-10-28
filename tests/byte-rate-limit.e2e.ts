@@ -16,7 +16,7 @@ test('429 renders a Twitch preview in web and MV3, then replaces it with one rea
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
-  const panel=await context.newPage();await panel.goto(`${base}/?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+  const panel=await context.newPage();await panel.goto(`${base}/app?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   await context.route(`https://www.twitch.tv/${channel}`,r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch preview fixture</title>'}));const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${channel}`);
   const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);
   for(const page of [popup,panel]){
@@ -45,7 +45,7 @@ test('429 preview follows a verified Twitch lock and winner without creating or 
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
-  const panel=await context.newPage();await panel.goto(`${base}/?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+  const panel=await context.newPage();await panel.goto(`${base}/app?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   await context.route(`https://www.twitch.tv/${channel}`,r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch lifecycle fixture</title>'}));const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${channel}`);
   const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.locator('.byte-preview')).toContainText(native.title,{timeout:20000});await panel.getByRole('button',{name:'Actualizar mercados',exact:true}).click();await expect(panel.locator('.byte-preview')).toBeVisible();
   await writeFile(twitchFile,JSON.stringify([{...native,status:'LOCKED',lockedAt:new Date().toISOString()}]));
@@ -70,7 +70,7 @@ test('canceled Twitch preview switches to the existing neutral resolution card',
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
-  const panel=await context.newPage();await panel.goto(`${base}/?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+  const panel=await context.newPage();await panel.goto(`${base}/app?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   await context.route(`https://www.twitch.tv/${channel}`,r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Twitch lifecycle fixture</title>'}));const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${channel}`);
   const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.locator('.byte-preview')).toContainText(native.title,{timeout:20000});await panel.getByRole('button',{name:'Actualizar mercados',exact:true}).click();await expect(panel.locator('.byte-preview')).toBeVisible();
   await writeFile(twitchFile,JSON.stringify([{...native,status:'LOCKED',lockedAt:new Date().toISOString()}]));

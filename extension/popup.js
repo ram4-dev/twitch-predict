@@ -119,7 +119,7 @@ function renderByte(){
  const cards=rounds.map(r=>r.card);
  if(cards.length>1){cards.splice(1,0,roundLabel('history','Rondas anteriores'));cards.unshift(roundLabel('current','Ronda actual'));}
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Elegí una opción para firmar con Phantom.';
- $('#dashboard').href=base;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Conectá Phantom para apostar y seguir tus transacciones desde la extensión.';$('#streamer-console').hidden=true;
+ $('#dashboard').href=`${base}/app`;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Conectá Phantom para apostar y seguir tus transacciones desde la extensión.';$('#streamer-console').hidden=true;
 }
 async function refreshByte(base,scope){
  lastRefresh=Date.now();byteError='';
@@ -163,7 +163,7 @@ async function load(force=false){
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
     updateChannelSearch(selectedChannel,activeChannel);snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
-    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
+    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=`${base}/app`;$('#user-console').href=`${base}/app#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/app#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){const force=forceAgain;again=false;forceAgain=false;void load(force);}}
 }

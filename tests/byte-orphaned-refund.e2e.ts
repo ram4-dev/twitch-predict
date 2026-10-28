@@ -14,7 +14,7 @@ test('a confirmed orphaned lock voids Byte once and displays a refund without pr
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
-  const panel=await context.newPage();await panel.goto(base);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
+  const panel=await context.newPage();await panel.goto(`${base}/app`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   await context.route(`https://www.twitch.tv/${channel}`,r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Orphan fixture</title>'}));const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${channel}`);
   const popup=await context.newPage();await popup.setViewportSize({width:700,height:600});await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:native.title,exact:true})).toBeVisible({timeout:20000});
   const state=JSON.parse(await readFile(byteFile,'utf8'));Object.assign(state.markets[0],{closeMs:Date.now()-1000,bettable:false,resolvable:true,pools:[20000000,10000000],total:30000000,bettors:2});await writeFile(byteFile+'.update',JSON.stringify(state));await rename(byteFile+'.update',byteFile);
