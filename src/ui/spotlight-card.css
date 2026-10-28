@@ -1,0 +1,84 @@
+/* Spotlight Card / EaseMize: translucent face, colored border light and white hotspot.
+   Automatic height preserves every outcome, stake field and settlement message. */
+.plot-glow-card,
+.plot-glow-card.plot-spotlight {
+  --glow-color: 255 112 73;
+  --glow-x: 50%;
+  --glow-y: 30%;
+  position: relative;
+  isolation: isolate;
+  border: 1px solid rgb(255 255 255 / .18);
+  border-radius: 20px;
+  background: rgb(24 24 24 / .78);
+  backdrop-filter: blur(5px); /* taste-skill-ignore: translucent card explicitly selected by user. */
+}
+.plot-glow-card::before,
+.plot-glow-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+.plot-glow-card::before {
+  z-index: 1;
+  padding: 1px;
+  background: radial-gradient(220px circle at var(--glow-x) var(--glow-y), /* taste-skill-ignore: requested cursor spotlight. */
+    rgb(255 255 255 / .95), rgb(var(--glow-color) / .8) 28%, transparent 75%);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); /* taste-skill-ignore: border mask, no decorative fill. */
+  mask-composite: exclude;
+}
+.plot-glow-card::after,
+.plot-glow-card.plot-spotlight::after {
+  z-index: -1;
+  background: radial-gradient(320px circle at var(--glow-x) var(--glow-y), /* taste-skill-ignore: requested cursor spotlight. */
+    rgb(var(--glow-color) / .13), transparent 75%);
+}
+@media (hover: hover) and (pointer: fine) {
+  .plot-glow-card[data-glow-active=true]::before,
+  .plot-glow-card[data-glow-active=true]::after { opacity: 1; }
+}
+.plot-glow-card:has(:focus-visible)::before,
+.plot-glow-card:has(:focus-visible)::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .plot-glow-card::before,
+  .plot-glow-card::after { transition: none; }
+  .plot-glow-card[data-glow-active=true]::before,
+  .plot-glow-card[data-glow-active=true]::after { opacity: 0; }
+  .plot-glow-card:has(:focus-visible)::before { opacity: 1; }
+}
+@media (forced-colors: active) {
+  .plot-glow-card::before,
+  .plot-glow-card::after { display: none; }
+  .plot-glow-card { border-color: CanvasText; }
+}
+
+/* The broad spotlight belongs to the space behind the market list. */
+.plot-glow-stage {
+  position: relative;
+  isolation: isolate;
+  --glow-x: 50%;
+  --glow-y: 160px;
+}
+.plot-glow-stage::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  z-index: -1;
+  border-radius: 32px;
+  filter: blur(24px);
+  pointer-events: none;
+  background: radial-gradient(640px circle at var(--glow-x) var(--glow-y), /* taste-skill-ignore: user requested spotlight behind cards. */
+    rgb(255 112 73 / .32), rgb(255 112 73 / .08) 55%, transparent 85%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .plot-glow-stage::before {
+    background: radial-gradient(640px circle at 50% 160px, /* taste-skill-ignore: static background with reduced motion. */
+      rgb(255 112 73 / .2), transparent 85%);
+  }
+}
+@media (forced-colors: active) {
+  .plot-glow-stage::before { display: none; }
+}

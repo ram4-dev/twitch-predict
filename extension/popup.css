@@ -3,9 +3,70 @@
 #connect-phantom{display:block;width:100%;background:#fff;color:#000;margin-top:16px;height:38px}#auth-message{font-size:12px}.setup{margin-top:0;margin-bottom:18px}
 
 /* Same Dia surface as the web dashboard, within Chrome's 700px action popup. */
-body{background:var(--background);color:var(--foreground)}header{border-color:var(--border);padding:14px 22px}header>.plot-logo{font-size:36px}.connection{background:var(--secondary);color:var(--foreground)}main{padding:18px 22px}.prediction{padding:22px;border-radius:20px;margin-bottom:18px}.prediction h1{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:28px;line-height:1.15;letter-spacing:-.025em;margin:18px 0 24px}.prediction>.points-market{padding:0}.topline,.countdown,.freshness{color:var(--muted-foreground)}select{background:var(--paper);border-color:var(--input);color:var(--foreground);min-height:44px;border-radius:10px}.channel-row>div{gap:12px}.channel-row button{min-width:44px;padding:10px}.market,.empty,.setup,.source-reference .outcome{background:var(--paper);border:1px solid var(--border)}.empty>.plot-chameleon{width:96px;margin-bottom:12px}.empty h2{font:700 26px/1.15 Fraunces,Georgia,serif}.empty p,.setup p,.market p{color:var(--muted-foreground)}#connect-phantom{min-height:44px;background:var(--primary);color:var(--primary-foreground);border:1px solid #888}.warning{background:#2d251c;color:var(--warning-ink)}.points-error,.market .market-error{color:var(--destructive)}footer{border-color:var(--border);color:var(--muted-foreground)}footer a{color:var(--foreground)}.source-reference{margin-bottom:0;color:var(--muted-foreground)}.source-reference .outcome{background:var(--muted-surface)}.source-reference .outcome p,.percentage,dd,dt{color:var(--muted-foreground)}.history-row{border-color:var(--border)}
+body{background:var(--background);color:var(--foreground)}header{border-color:var(--border);padding:14px 22px}header>.plot-logo{font-size:36px}.connection{background:var(--secondary);color:var(--foreground)}main{padding:18px 22px}.prediction{padding:22px;border-radius:20px;margin-bottom:18px}.prediction h1{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:28px;line-height:1.15;letter-spacing:-.025em;margin:18px 0 24px}.prediction>.points-market{padding:0}.topline,.countdown,.freshness{color:var(--muted-foreground)}select{background:var(--paper);border-color:var(--input);color:var(--foreground);min-height:44px;border-radius:10px}.channel-row>div{gap:12px}.channel-row button{min-width:44px;padding:10px}.market,.empty,.setup,.source-reference .outcome{background:var(--paper);border:1px solid var(--border)}.empty>.plot-mascot{width:96px;margin-bottom:12px}.empty h2{font:700 26px/1.15 Fraunces,Georgia,serif}.empty p,.setup p,.market p{color:var(--muted-foreground)}#connect-phantom{min-height:44px;background:var(--primary);color:var(--primary-foreground);border:1px solid #888}.warning{background:#2d251c;color:var(--warning-ink)}.points-error,.market .market-error{color:var(--destructive)}footer{border-color:var(--border);color:var(--muted-foreground)}footer a{color:var(--foreground)}.source-reference{margin-bottom:0;color:var(--muted-foreground)}.source-reference .outcome{background:var(--muted-surface)}.source-reference .outcome p,.percentage,dd,dt{color:var(--muted-foreground)}.history-row{border-color:var(--border)}
 
-header .plot-scene.compact{height:56px;width:200px;max-width:200px;overflow:visible;background:transparent}header .compact>.plot-halftone{width:148px;margin:0}header .compact .scene-pause{right:0;bottom:10px}header .scene-atmosphere{border-radius:12px;overflow:hidden}.channel-row{display:flex;align-items:center;gap:14px}.channel-row label{flex-shrink:0}.channel-row>div{flex:1;min-width:0;margin-top:0}.freshness{margin:8px 0 12px}.prediction{padding:18px}.prediction h1{font-size:26px;margin:12px 0 18px}.prediction .pool-summary{margin:14px 0 12px}.prediction .points-pool strong{font-size:26px}.prediction .points-option{padding:12px}.prediction .points-option p{margin:8px 0}.prediction .stake-row{margin-top:12px;margin-bottom:12px}
+header .plot-scene.compact{height:76px;width:210px;max-width:210px;overflow:visible;background:transparent}header .compact>.plot-halftone{width:210px;margin:0}header .compact .scene-pause{right:0;bottom:10px}header .scene-atmosphere{border-radius:12px;overflow:hidden}.channel-row{display:flex;align-items:center;gap:14px}.channel-row label{flex-shrink:0}.channel-row>div{flex:1;min-width:0;margin-top:0}.freshness{margin:8px 0 12px}.prediction{padding:18px}.prediction h1{font-size:26px;margin:12px 0 18px}.prediction .pool-summary{margin:14px 0 12px}.prediction .points-pool strong{font-size:26px}.prediction .points-option{padding:12px}.prediction .points-option p{margin:8px 0}.prediction .stake-row{margin-top:12px;margin-bottom:12px}
 .prediction .points-pool{display:flex;align-items:baseline;gap:8px}.prediction .points-pool>span{margin:0;font-size:12px}.prediction .points-stake{display:flex;align-items:center;gap:10px}.prediction .stake-row{align-items:center}
 main{padding-top:14px}.prediction h1{margin:10px 0 12px}.prediction .points-option p{margin:6px 0}
-header .plot-scene.compact>.plot-halftone{width:148px;max-width:calc(100% - 44px);margin:0}
+header .plot-scene.compact>.plot-halftone{width:210px;max-width:100%;margin:0}
+
+/* Resolution owns its heading; do not nest it inside another painted panel. */
+.prediction:has(.plot-resolution){background:transparent;border:0;padding:0}
+.prediction>.points-market:has(.plot-resolution){padding:0;background:transparent}
+.prediction .plot-resolution .resolution-outcomes{grid-template-columns:1fr 1fr}
+@media(max-width:400px){.prediction .plot-resolution .resolution-outcomes{grid-template-columns:1fr}}
+
+@media(min-width:520px){
+ .prediction .plot-resolution .resolution-content{display:grid;grid-template-columns:1fr 1fr;column-gap:20px;padding:16px 18px}
+ .prediction .plot-resolution .resolution-meta,.prediction .plot-resolution h3,.prediction .plot-resolution .resolution-outcomes,.prediction .plot-resolution .resolution-detail-toggle,.prediction .plot-resolution .resolution-detail,.prediction .plot-resolution .points-claim,.prediction .plot-resolution .points-rule,.prediction .plot-resolution .points-message,.prediction .plot-resolution .resolution-credited{grid-column:1/-1}
+ .prediction .plot-resolution .resolution-content>h3{margin:12px 0}
+ .prediction .plot-resolution .resolution-personal{margin-top:16px}
+ .prediction .plot-resolution .resolution-net{font-size:56px}
+ .prediction .plot-resolution .resolution-receipt{border:0;padding-top:0;margin-top:16px;align-self:end}
+ .prediction .plot-resolution .resolution-detail-toggle{margin-top:10px}
+}
+
+.prediction .byte-betting:has(.plot-resolution){background:transparent;padding:0}.prediction .plot-resolution .plot-notice{grid-column:1/-1;margin-top:16px}
+
+.channel-row .channel-label{flex-shrink:0;color:var(--muted-foreground);font-size:12px}.channel-row>div{align-items:center}.channel-row #channel-search{min-width:0;flex:1}.extension-channel-control{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}.channel-current{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}.extension-channel-control:has([aria-expanded=true]) .channel-current{visibility:hidden}#channel-search .points-error{margin:6px 0 0}.channel-row .expandable-search .search-toggle,.channel-row .expandable-search .search-submit{padding:0}
+
+/* The shared halo follows the pointer across the entire popup viewport. */
+body.plot-glow-stage::before{position:fixed;inset:0;border-radius:0}
+
+/* The light remains visible over opaque card surfaces without blocking controls. */
+body .prediction.plot-glow-card::after,body .empty.plot-glow-card::after{z-index:3;background:radial-gradient(250px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .24),transparent 75%)}
+
+/* The logo's animated texture fills the popup behind the spotlight and content. */
+.popup-atmosphere{position:fixed;inset:0;z-index:-2;opacity:.55;pointer-events:none;overflow:hidden}.popup-atmosphere .plot-dither-field{z-index:0;background:#080808;border-radius:0}
+
+/* Give the market breathing room and keep the stream shortcut beside the channel. */
+#predictions:not(:empty){margin-top:24px;margin-bottom:28px}.channel-identity{display:flex;align-items:center;gap:8px;min-width:0}.channel-current{flex:0 1 auto}.channel-stream-link{display:inline-flex;align-items:center;justify-content:center;flex:none;width:28px;height:28px;color:var(--muted-foreground);border:1px solid #444;border-radius:50%;text-decoration:none}.channel-stream-link:hover{color:#fff;border-color:#888}.extension-channel-control:has([aria-expanded=true]) .channel-stream-link{visibility:hidden}
+
+/* The animated rim sits outside the market card rather than inside its border. */
+body .prediction.plot-glow-card::before{inset:-3px;padding:3px;border-radius:23px}
+
+/* Keep the cursor halo tighter while preserving the reduced-motion fallback. */
+@media (prefers-reduced-motion:no-preference){body.plot-glow-stage::before{filter:blur(18px);background:radial-gradient(420px circle at var(--glow-x) var(--glow-y),rgb(255 112 73 / .32),rgb(255 112 73 / .08) 55%,transparent 85%)}}
+
+.prediction .plot-resolution.count .resolution-content{display:block;padding:20px 24px}
+.prediction .plot-resolution.count .resolution-content>h3{margin:12px 0 8px}
+.prediction .plot-resolution.count .resolution-personal{margin-top:24px}
+.prediction .plot-resolution.count .resolution-net{font-size:clamp(52px,12vw,96px)}
+.prediction .plot-resolution.count .resolution-net:has(.resolution-net-value .resolution-count){flex-wrap:nowrap}
+.prediction .plot-resolution.count .resolution-receipt{margin-top:20px;border-top:1px solid #ffffff20;padding-top:14px}
+.prediction .plot-resolution.count .resolution-detail-toggle{margin-top:14px}
+
+@media(min-width:520px){
+ .prediction .plot-resolution.count .resolution-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(150px,.45fr);gap:0 20px;padding:16px 24px}
+ .prediction .plot-resolution.count .resolution-result{grid-column:1/-1}
+ .prediction .plot-resolution.count .resolution-personal{container-type:inline-size;margin-top:18px}
+ .prediction .plot-resolution.count .resolution-net{font-size:clamp(32px,calc((100cqw - 38px) / var(--figure-length) * 1.6),96px)}
+ .prediction .plot-resolution.count .resolution-receipt{display:grid;align-self:center;gap:8px;border:0;padding:0;margin:18px 0 0}
+ .prediction .plot-resolution.count .resolution-receipt>div{text-align:right}
+ .prediction .plot-resolution.count .resolution-receipt dt{margin:0 0 2px}
+ .prediction .plot-resolution.count .resolution-receipt dd{margin:0}
+}
+
+@media(min-width:520px){.prediction .plot-resolution.count .resolution-net{font-size:clamp(32px,calc((88cqw - 40px) / var(--figure-length) * 1.6),96px)}}
+
+.round-group-label{font:500 12px/1.4 Inter,system-ui,sans-serif;color:var(--muted-foreground);margin:22px 0 12px}.round-group-label:first-child{margin-top:0}

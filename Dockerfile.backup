@@ -1,0 +1,4 @@
+FROM postgres:18
+COPY scripts/postgres-backup.sh /usr/local/bin/plot-backup
+RUN chmod 755 /usr/local/bin/plot-backup
+CMD ["/usr/local/bin/plot-backup"]

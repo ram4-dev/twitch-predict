@@ -14,7 +14,8 @@ globalThis.fetch=async(input,options)=>{
   if(url!=='https://gql.twitch.tv/gql')return original(input,options);
   const fixtures=JSON.parse(await readFile(process.env.TWITCH_FIXTURE_FILE,'utf8'));
   const {query,variables}=JSON.parse(options.body);
+  if(query.includes('searchUsers(')){const names=[...new Set([...fixtures.map(p=>p.channel),'eggsterr','summit1g'])].filter(n=>n.toLowerCase().includes(variables.q.toLowerCase())).slice(0,10);return Response.json({data:{searchUsers:{edges:names.map(login=>({node:{login,displayName:login,stream:login==='eggsterr'?{id:'live'}:null}}))}}});}
   if(fixtures.some(p=>p.channel===variables.channel&&p.sourceError))return new Response(null,{status:503});
   if(query.includes('predictionEvent(')){const prediction=fixtures.find(p=>p.id===variables.id);return Response.json({data:{predictionEvent:prediction?{...prediction,channel:{name:prediction.channel}}:null}});}
-  return Response.json({data:{user:variables.channel==='missing_streamer_fixture'?null:{id:'fixture-user',displayName:variables.channel,stream:variables.channel==='offline_streamer_fixture'?null:{title:'Stream de prueba',viewersCount:1234}},channel:{activePredictionEvents:fixtures.filter(p=>p.channel===variables.channel&&p.status==='ACTIVE')}}});
+  return Response.json({data:{user:variables.channel==='missing_streamer_fixture'?null:{id:'fixture-user',displayName:variables.channel,stream:variables.channel==='offline_streamer_fixture'?null:{title:'Stream de prueba',viewersCount:1234}},channel:{activePredictionEvents:fixtures.filter(p=>p.channel===variables.channel&&['ACTIVE','LOCKED'].includes(p.status)&&!p.inactive)}}});
 };

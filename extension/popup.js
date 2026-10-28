@@ -1,14 +1,42 @@
-import {popupScope,matchingCache,cacheAllowsBet,cachedBalance} from './popup-cache.js';
+import {mountChannelSearch,searchTwitch} from './channel-search.js';
+import {defaultBridge,isAppOrigin} from './app-config.js';
+import {popupScope,matchingCache,cacheAllowsBet,cachedBalance,reconcileBytePredictions} from './popup-cache.js';
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
 import {disposePointsViews,createPointsClient,bettingView,performPointsAction,number} from './points-ui.js';
 import './surfaces.js';
-import {byteMarketView,disposeByteViews} from './byte-ui.js';
+import {byteMarketView,twitchPreviewView,disposeByteViews} from './byte-ui.js';
 const $=s=>document.querySelector(s);
 const el=(tag,value,className)=>{const node=document.createElement(tag);if(value!=null)node.textContent=value;if(className)node.className=className;return node;};
-const defaultBridge='http://twitch-predict.localhost:1356';
-let selectedChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
+let liveStream,liveOrigin='',liveReady=false,lastPollAttempt=0,liveDebounce;
+function connectLive(base){
+ if(liveStream&&liveOrigin===base)return;liveStream?.close();liveReady=false;liveOrigin=base;
+ const stream=new EventSource(`${base}/api/live/markets`);liveStream=stream;$('#live-status').textContent='Actualización periódica';
+ stream.addEventListener('ready',()=>{if(liveStream!==stream)return;liveReady=true;$('#live-status').textContent='Conexión en vivo';void load(true);void requestPoll();});
+ stream.addEventListener('markets',()=>{if(liveStream!==stream)return;clearTimeout(liveDebounce);liveDebounce=setTimeout(()=>void load(true),250);});
+ stream.onerror=()=>{if(liveStream===stream){liveReady=false;$('#live-status').textContent='Actualización periódica';}};
+}
+window.addEventListener('pagehide',()=>{liveStream?.close();clearTimeout(liveDebounce);});
+let revealedAlert='';
+function revealResolution(){
+ // Only the native action popup can consume its delivery; a popup.html tab
+ // may be open for inspection without showing the user the notification.
+ if(document.hidden||!chrome.extension.getViews({type:'popup'}).includes(window))return;
+ const alert=state.resolutionAlerts?.[selectedChannel];if(!alert||alert.delivery==='seen'||alert.id===revealedAlert||Date.now()-alert.at>600000)return;
+ const card=[...$('#predictions').children].find(el=>alert.marketId?el.dataset.marketId===alert.marketId:el.dataset.predictionId===alert.predictionId);
+ if(!card?.querySelector('.plot-resolution'))return;
+ revealedAlert=alert.id;card.scrollIntoView({block:'start',behavior:'instant'});
+ void chrome.runtime.sendMessage({type:'RESOLUTION_SEEN',channel:selectedChannel,id:alert.id}).catch(()=>{});
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)revealResolution();});
+window.addEventListener('focus',revealResolution);
+let selectedChannel='',activeChannel='',state={},snapshot,markets=[],account,client,clientBase,byteMode=false;
+const polling=new Set();
+const settledCards=new Map();
+const roundLabels=new Map();
+function roundLabel(key,text){let node=roundLabels.get(key);if(!node){node=el('h2',text,'round-group-label');roundLabels.set(key,node);}return node;}
+const updateChannelSearch=mountChannelSearch($('#channel-search'),async channel=>{selectedChannel=channel;await load();await requestPoll();},(query,signal)=>searchTwitch(query,signal,bridgeUrl()));
 const forms=new Map();let loading=false,again=false,forceAgain=false,byteCache,lastRefresh=0,byteError='',contextDirty=false;
-function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return ['http:','https:'].includes(u.protocol)&&['twitch-predict.localhost','twitch-predict-byte.localhost'].includes(u.hostname)?u.origin:defaultBridge;}catch{return defaultBridge;}}
+function bridgeUrl(){try{const u=new URL(state.bridgeUrl||defaultBridge);return isAppOrigin(u.href)?u.origin:defaultBridge;}catch{return defaultBridge;}}
 function time(value){return value?new Date(value).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Sin informar';}
 function fact(list,title,value){list.append(el('dt',title),el('dd',value??'Sin informar'));}
 function sourceView(p){
@@ -22,9 +50,16 @@ function sourceView(p){
   const list=el('dl');fact(list,'Predicción de Twitch',p.id);fact(list,'Inicio',time(p.createdAt));fact(list,'Cierre previsto',time(new Date(Date.parse(p.createdAt)+p.predictionWindowSeconds*1000).toISOString()));fact(list,'Estado en Twitch',statusLabel(p.status));details.append(list);return details;
 }
 function predictionCard(p,market,item){
+  if(market&&['resolved','void'].includes(market.phase)){
+    let settled=settledCards.get(market.key);
+    if(!settled){settled=el('article',null,'prediction');settled.dataset.predictionId=p.id;settledCards.set(market.key,settled);}
+    const view=bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load),forms,true);
+    if(settled.firstElementChild!==view)settled.replaceChildren(view,sourceView(p));
+    return settled;
+  }
   const card=el('article',null,'prediction');card.dataset.predictionId=p.id;
   const line=el('div',null,'topline');line.append(el('span',`@${p.channel}`,'status'));const timer=el('span',countdown(p),'countdown');timer.dataset.timer=p.id;line.append(timer);card.append(line,el('h1',p.title));
-  if(market)card.append(bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load),forms));
+  if(market)card.append(bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load),forms,true));
   else{const pending=el('section',null,'market');const labels={unpaired:'Conectá la extensión para crear la copia',offline:'Mercado sin conexión',closed:'La predicción ya está cerrada',failed:'No se pudo crear el mercado'};pending.append(el('strong',labels[item?.market?.state]||'Creando la copia automáticamente…'));if(item?.market?.error)pending.append(el('p',item.market.error,'market-error'));card.append(pending);}
   card.append(sourceView(p));return card;
 }
@@ -33,7 +68,7 @@ function render(){
   const current=snapshot?.predictions??[];const visible=markets.filter(m=>m.prediction.channel===selectedChannel&&(current.some(p=>p.prediction.id===m.prediction.id)||['open','locked'].includes(m.phase)||account?.bets.some(b=>b.marketKey===m.key)));
   const cards=current.map(item=>predictionCard(item.prediction,markets.find(m=>m.prediction.id===item.prediction.id&&m.prediction.channel===selectedChannel),item));
   for(const m of visible)if(!current.some(p=>p.prediction.id===m.prediction.id))cards.push(predictionCard(m.prediction,m));
-  $('#predictions').replaceChildren(...cards);$('#empty').hidden=!!cards.length;
+  reconcileCards(cards);for(const key of settledCards.keys())if(!markets.some(m=>m.key===key))settledCards.delete(key);$('#empty').hidden=!!cards.length;
   $('#empty-copy').textContent=selectedChannel?`No hay apuestas disponibles en @${selectedChannel}. La próxima aparecerá automáticamente.`:'Abrí un canal de Twitch. La próxima apuesta se copiará automáticamente.';
   $('#account-name').textContent=account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Conectá Phantom';$('#own-balance').textContent=account?number(account.balance):'—';
   const history=$('#history');history.replaceChildren();const bets=account?.bets??[];
@@ -54,13 +89,14 @@ function reconcileCards(cards){
  const parent=$('#predictions');
  cards.forEach((card,index)=>{if(parent.children[index]!==card)parent.insertBefore(card,parent.children[index]??null);});
  while(parent.children.length>cards.length)parent.lastElementChild.remove();
+ revealResolution();
 }
 function renderByte(){
  if(!byteCache||contextDirty)return;
  const {markets:byteMarkets,config,base}=byteCache;
  const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...byteMarkets.map(m=>m.notes?.channel).filter(Boolean)])].sort();
  if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
- const channelOptions=channels.join('|');if($('#channel').dataset.options!==channelOptions){$('#channel').replaceChildren(...channels.map(c=>{const option=el('option',`@${c}`);option.value=c;return option;}));$('#channel').dataset.options=channelOptions;}$('#channel').value=selectedChannel;
+ updateChannelSearch(selectedChannel,activeChannel);
  account=byteCache.account;
  $('#wallet').hidden=!account?.wallet;$('#login').hidden=!!account?.wallet;
  $('#points-error').hidden=!byteError;$('#points-error').textContent=byteError;
@@ -71,13 +107,17 @@ function renderByte(){
  const receipts=(state.byteReceipts??[]).filter(r=>r.wallet===account?.wallet);
  if(receipts.length){history.append(el('h2','Tus apuestas en devnet'));for(const r of receipts.slice(0,8)){const row=el('div',null,'history-row'),link=el('a','Ver transacción');link.href=`https://explorer.solana.com/tx/${r.signature}?cluster=devnet`;link.target='_blank';link.rel='noopener noreferrer';row.append(el('strong',r.title),el('span',`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:9}).format(Number(r.amount)/1e9)} SOL · ${{pending:'Pendiente',confirmed:'Confirmada',failed:'Falló',expired:'Expiró'}[r.status]??r.status}`),link);history.append(row);}}
  snapshot=state[`channel:${selectedChannel}`];$('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError??'';$('#connection').textContent='SOL devnet';
- const fresh=cacheAllowsBet(byteCache);$('#freshness').textContent=fresh?'Mercados actualizados · SOL devnet':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
- const visible=byteMarkets.filter(m=>!selectedChannel||m.notes?.channel===selectedChannel);
+ const fresh=cacheAllowsBet(byteCache);$('#freshness').hidden=fresh;$('#freshness').textContent=fresh?'':byteCache.marketsAt?'Mostrando datos guardados · actualizando…':'Consultando mercados de byte…';
+ const visible=reconcileBytePredictions(byteMarkets,[...(snapshot?.predictions??[]),...(byteCache.predictions??[])],selectedChannel);
  disposePointsViews();disposeByteViews();
- const cards=visible.map(m=>byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation));
- for(const item of snapshot?.predictions??[])if(!byteMarkets.some(m=>m.id===item.market?.byteMarketId)){
-  const card=el('article',null,'prediction');card.append(el('span',`@${selectedChannel} · Twitch`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));cards.push(card);
+ const rounds=visible.markets.map(m=>({at:m.openMs,card:byteMarketView(m,config?{...config,enabled:config.enabled&&fresh}:undefined,state.byteOperation,account?.wallet,state.byteReceipts??[])}));
+ for(const item of visible.predictions){
+  if(item.market?.rateLimited){rounds.push({at:Date.parse(item.prediction.createdAt),card:twitchPreviewView(item)});continue;}
+  const card=el('article',null,'prediction');card.dataset.predictionId=item.prediction.id;card.append(el('span',`@${selectedChannel} · Twitch · Ronda ${time(item.prediction.createdAt)}`,'status'),el('h1',item.prediction.title),el('p',item.prediction.outcomes.map(o=>o.title).join(' · ')),el('p',item.market?.error||'Creando réplica en Solana devnet…','warning'));rounds.push({at:Date.parse(item.prediction.createdAt),card});
  }
+ rounds.sort((a,b)=>b.at-a.at);
+ const cards=rounds.map(r=>r.card);
+ if(cards.length>1){cards.splice(1,0,roundLabel('history','Rondas anteriores'));cards.unshift(roundLabel('current','Ronda actual'));}
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='El operador crea los mercados de este canal desde el panel. Elegí una opción para firmar con Phantom.';
  $('#dashboard').href=base;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Conectá Phantom para apostar y seguir tus transacciones desde la extensión.';$('#streamer-console').hidden=true;
 }
@@ -89,7 +129,7 @@ async function refreshByte(base,scope){
  const balance=async wallet=>{if(!wallet)return;const data=await query('/api/byte/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[wallet]})});if(!Number.isSafeInteger(data?.result?.value)||data.result.value<0)throw new Error('No se pudo actualizar el saldo.');await update({balance:{wallet,lamports:data.result.value,at:Date.now()}});};
  const knownWallet=byteCache.account?.wallet;
  const results=await Promise.allSettled([
-  query('/api/byte/markets').then(data=>update({markets:data.markets,marketsAt:Date.now()})),
+  query('/api/byte/markets').then(data=>update({markets:data.markets,predictions:data.predictions??[],marketsAt:Date.now()})),
   query('/api/byte/config').then(config=>update({config,configAt:Date.now()})),
   (async()=>{
    if(!state.pointsToken){await update({account:undefined,balance:undefined});return;}
@@ -105,12 +145,13 @@ async function load(force=false){
   if(loading){again=true;forceAgain ||= force;return;}loading=true;
   const focused=document.activeElement;const restore=focused?.matches('input[aria-label="Puntos a apostar"]')?focused.closest('[data-market-key]')?.dataset.marketKey:null;
   try{
-    state=await chrome.storage.local.get(null);contextDirty=false;const base=bridgeUrl(),scope=await popupScope(base,state.pointsToken);
+    state=await chrome.storage.local.get(null);contextDirty=false;const incoming=state.resolutionAlerts?.[activeChannel];if(incoming&&incoming.delivery!=='seen'&&incoming.id!==revealedAlert&&Date.now()-incoming.at<600000)selectedChannel=activeChannel;const base=bridgeUrl(),scope=await popupScope(base,state.pointsToken);
     const stored=matchingCache(state.popupCache,base,scope);
     if(byteCache?.scope!==scope){byteCache=stored??(byteMode?{version:1,base,scope,markets:[],marketsAt:0,configAt:0}:undefined);lastRefresh=0;byteError='';}
-    if(byteCache){byteMode=true;renderByte();if(!force&&Date.now()-lastRefresh<4000)return;}
+    if(byteCache){byteMode=true;renderByte();if(!force&&Date.now()-lastRefresh<(liveReady?20000:4000))return;}
     const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);if(health)byteMode=health.marketMode==='byte';
     if(byteMode){
+      connectLive(base);
       if(['pending','signing'].includes(state.byteOperation?.status))void chrome.runtime.sendMessage({type:'BYTE_CHECK'}).catch(()=>{});
       await refreshByte(base,scope);return;
     }
@@ -120,19 +161,27 @@ async function load(force=false){
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Puntos internos sin conexión: ${e.message}`;}
     const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
-    $('#channel').replaceChildren(...(channels.length?channels.map(c=>{const o=el('option',`@${c}`);o.value=c;return o;}):[el('option','Esperando un canal…')]));$('#channel').value=selectedChannel;snapshot=state[`channel:${selectedChannel}`];
+    updateChannelSearch(selectedChannel,activeChannel);snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`No se pudo actualizar Twitch: ${snapshot.sourceError}`:'';
     $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=base;$('#user-console').href=`${base}/#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Conectada':'Sin conectar';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){const force=forceAgain;again=false;forceAgain=false;void load(force);}}
 }
-async function requestPoll(force=false){if(!selectedChannel||selectedChannel==='demo_streamer'){await load(force);return;}$('#refresh').disabled=true;try{await chrome.runtime.sendMessage({type:'POLL_CHANNEL',channel:selectedChannel});await load(force);}catch(e){$('#source-error').hidden=false;$('#source-error').textContent=e.message;}finally{$('#refresh').disabled=false;}}
+async function requestPoll(force=false){
+ const channel=selectedChannel;lastPollAttempt=Date.now();
+ if(!channel||channel==='demo_streamer'){await load(force);return;}
+ if(polling.has(channel)){if(force)await load(true);return;}
+ polling.add(channel);if(force)$('#refresh').disabled=true;
+ try{const result=await chrome.runtime.sendMessage({type:'POLL_CHANNEL',channel});if(result?.error)throw new Error(result.error);}
+ catch(e){$('#source-error').hidden=false;$('#source-error').textContent=e.message;}
+ finally{polling.delete(channel);if(force)$('#refresh').disabled=false;await load(force);}
+}
 $('#connect-phantom').onclick=async()=>{const button=$('#connect-phantom');button.disabled=true;$('#auth-message').textContent='Abriendo el acceso con Phantom…';try{const result=await chrome.runtime.sendMessage({type:'CONNECT_PHANTOM'});if(result?.error)throw new Error(result.error);}catch(e){$('#auth-message').textContent=e.message;}finally{button.disabled=false;}};
-$('#channel').onchange=async()=>{selectedChannel=$('#channel').value;await load();void requestPoll();};$('#refresh').onclick=()=>void requestPoll(true);
+$('#refresh').onclick=()=>void requestPoll(true);
 chrome.storage.onChanged.addListener((changes,area)=>{
  if(area!=='local')return;
  if(changes.pointsToken||changes.bridgeUrl){contextDirty=true;$('#wallet').hidden=true;$('#own-balance').textContent='—';$('#history').replaceChildren();document.querySelectorAll('.points-bet').forEach(button=>{button.disabled=true;});}
  if(Object.keys(changes).some(key=>key!=='popupCache'))void load();
 });
-try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
-setInterval(tick,1000);await load();void requestPoll();setInterval(()=>void requestPoll(),5000);
+try{const [active]=await chrome.tabs.query({active:true,currentWindow:true});const url=active?.url?new URL(active.url):null;if(url?.hostname==='www.twitch.tv'&&/^\/[a-zA-Z0-9_]{1,40}\/?$/.test(url.pathname))selectedChannel=activeChannel=url.pathname.split('/')[1].toLowerCase();}catch{/* Use remembered channel when no Twitch tab is selected. */}
+setInterval(tick,1000);await load();void requestPoll();setInterval(()=>{void load();if(!liveReady||Date.now()-lastPollAttempt>=30000)void requestPoll();},5000);

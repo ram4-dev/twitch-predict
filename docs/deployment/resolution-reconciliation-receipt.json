@@ -1,0 +1,24 @@
+{
+  "task": "Market resolution reconciliation and refund/result distinction",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "aea62fb",
+    "branch": "fix-market-resolution-reconciliation",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-market-resolution-reconciliation",
+    "cleanup": "retained"
+  },
+  "verifiedLive": {
+    "Gorgc Legion vs BB": "Twitch prediction 612265d2-e607-40e8-a30d-a02398194b73 was LOCKED with no winner at inspection.",
+    "Avice current round": "Twitch prediction 1e9bf11d-a711-42bb-a21d-3bfcc790e747 was LOCKED with no winner at inspection.",
+    "Avice previous morph round": "pm_688010f8f6 had Twitch RESOLVED, local winner decision 1, Byte invalid with nobody bet on the outcome and chain settled. This is a refund, not a missing Twitch result."
+  },
+  "fixes": [
+    "Do not mark mirror resolved when Byte accepts request but authoritative market remains open. Preserve durable intent and retry.",
+    "Continue saved-ID reconciliation when channel active feed or another historical ID fails.",
+    "Evaluate early lock using Twitch lockedAt, even if received after chain close.",
+    "Show verified source winner separately from empty-winning-pool refund, without inventing personal SOL payout."
+  ],
+  "verification": "New recovery regressions failed before fix. npm run check passed with isolated PostgreSQL and zero skips; four Byte/MV3 lifecycle E2E passed including delayed response, closed Twitch tabs, refund/result distinction, 429 recovery and terminal previews. Test PostgreSQL stopped and removed. Screenshot inspected.",
+  "financialBoundary": "Read-only production diagnosis; no manual resolution, bet, wallet signature or receipt mutation."
+}

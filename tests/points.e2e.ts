@@ -26,7 +26,7 @@ test('consumer UI: two separate accounts bet, winner claims, loser cannot claim;
 });
 test('MV3 detects a prediction, automatically creates one mirror, bets own points and claims after server tracks Twitch result without extension polling',async()=>{
   const profile=await mkdtemp(`${tmpdir()}/points-extension-`);const extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
-  for(const file of ['background.js','popup.js']){const path=resolve(extension,file);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+  for(const file of ['background.js','popup.js','app-config.js']){const path=resolve(extension,file);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
   const prediction={id:randomUUID(),channel:`fixture_${randomUUID().replaceAll('-','').slice(0,12)}`,title:'¿Gana el equipo azul?',status:'ACTIVE',createdAt:new Date().toISOString(),predictionWindowSeconds:600,lockedAt:null,endedAt:null,winningOutcome:null as null|{id:string},outcomes:[{id:'blue',title:'Azul',color:'BLUE',totalPoints:9_000_000,totalUsers:500},{id:'red',title:'Rojo',color:'PINK',totalPoints:1_000_000,totalUsers:200}]};
   await writeFile(fixture,JSON.stringify([prediction]));
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
@@ -51,7 +51,16 @@ test('MV3 detects a prediction, automatically creates one mirror, bets own point
     await popup.close();await twitch.close();
     prediction.status='RESOLVED';prediction.winningOutcome={id:'blue'};await writeFile(fixture,JSON.stringify([prediction]));
     await expect.poll(async()=>{const r=await dashboard.request.get(`${base}/api/markets`);return (await r.json()).find((m:{prediction:{id:string}})=>m.prediction.id===prediction.id)?.phase;},{timeout:20000}).toBe('resolved');
-    const reopened=await context.newPage();await reopened.goto(`chrome-extension://${id}/popup.html`);await expect(reopened.locator('#own-balance')).toHaveText('9.750');await reopened.getByRole('button',{name:'Cobrar 250 pts',exact:true}).click();await expect(reopened.locator('#own-balance')).toHaveText('10.000');
+    const reopened=await context.newPage();await reopened.goto(`chrome-extension://${id}/popup.html`);await expect(reopened.locator('#own-balance')).toHaveText('9.750');const resolution=reopened.locator('.plot-resolution.count');await expect(resolution).toHaveAttribute('data-state','won');await expect(resolution.locator('.resolution-result')).toContainText('Azul');await expect(resolution.locator('.resolution-outcomes')).toHaveCount(0);await expect(resolution.locator('.resolution-net')).toHaveText('0 pts');await expect(resolution.locator('.resolution-receipt')).toContainText('250 pts');
+    expect(await resolution.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
+    const claim=reopened.getByRole('button',{name:'Cobrar 250 pts',exact:true});
+    const claimPosition=await claim.boundingBox();expect(claimPosition!.y+claimPosition!.height).toBeLessThan(560);
+    await claim.click();await expect(reopened.locator('#own-balance')).toHaveText('10.000');await expect(resolution.locator('.resolution-credited')).toContainText('Cobro acreditado');await expect(resolution.locator('.resolution-net')).toHaveText('0 pts');await expect(resolution.locator('.points-claim')).toHaveCount(0);
+    await expect(resolution.locator('.resolution-count')).toHaveAttribute('data-complete','true');const amountNode=await resolution.locator('.resolution-count').elementHandle();
+    await reopened.getByRole('button',{name:'Actualizar predicción',exact:true}).click();await expect(reopened.getByRole('button',{name:'Actualizar predicción',exact:true})).toBeEnabled();
+    expect(await resolution.locator('.resolution-count').evaluate((el,previous)=>el===previous,amountNode)).toBe(true);await expect(resolution.locator('.resolution-count')).toHaveAttribute('data-complete','true');
+    await reopened.screenshot({path:'test-results/liquid-extension-settled.png',fullPage:true});
+    await reopened.emulateMedia({reducedMotion:'reduce'});expect(await resolution.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
     const all=await(await dashboard.request.get(`${base}/api/markets`)).json();expect(all.filter((m:{prediction:{id:string}})=>m.prediction.id===prediction.id)).toHaveLength(1);
     const live=all.find((m:{prediction:{id:string}})=>m.prediction.id===prediction.id);
     await expect(operator(dashboard,'/api/demo/resolve',{key:live.key,winnerId:'red'})).rejects.toThrow(/Solo/);

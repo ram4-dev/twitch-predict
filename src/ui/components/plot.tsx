@@ -5,8 +5,8 @@ import {cn} from '../lib/utils.js';
 export function PlotLogo({className}: {className?:string}) {
   return <span className={cn('plot-logo',className)} role="img" aria-label="plot"><span aria-hidden="true">pl</span><span className="plot-o" aria-hidden="true"><span className="plot-o-ring"/><span className="plot-o-dot"/></span><span aria-hidden="true">t</span></span>;
 }
-export function Chameleon({mood='watch',className}: {mood?:'doubt'|'watch'|'reaction';className?:string}) {
-  return <span className={cn('plot-chameleon',`mood-${mood}`,className)} role="img" aria-label={{doubt:'Camaleón escéptico',watch:'Camaleón observando',reaction:'Camaleón sorprendido'}[mood]}/>;
+export function PlotMascot({mood='watch',className}: {mood?:'doubt'|'watch'|'reaction';className?:string}) {
+  return <span className={cn('plot-mascot',`mood-${mood}`,className)} role="img" aria-label={{doubt:'Mascota de Plot esperando',watch:'Mascota de Plot observando',reaction:'Mascota de Plot festejando'}[mood]}/>;
 }
 export function Field({label,hint,error,children}: {label:string;hint?:string;error?:string;children:(props:{id:string;'aria-describedby'?:string;'aria-invalid'?:true})=>ReactNode}) {
   const id=useId();return <div className="plot-field"><label htmlFor={id}>{label}</label>{children({id,'aria-describedby':hint||error?`${id}-help`:undefined,'aria-invalid':error?true:undefined})}{(hint||error)&&<p id={`${id}-help`} className={error?'field-error':'field-hint'}>{error||hint}</p>}</div>;
@@ -21,7 +21,7 @@ export function MarketStatus({phase}: {phase:'open'|'locked'|'resolved'|'void'|'
   return <span className={`plot-status status-${phase}`}><span aria-hidden="true"/>{labels[phase]}</span>;
 }
 export function EmptyState({title,children,action}: {title:string;children:ReactNode;action?:ReactNode}) {
-  return <div className="plot-empty"><Chameleon mood="doubt"/><div><h2>{title}</h2><p>{children}</p>{action}</div></div>;
+  return <div className="plot-empty"><PlotMascot mood="doubt"/><div><h2>{title}</h2><p>{children}</p>{action}</div></div>;
 }
 export function Skeleton(){return <div className="plot-skeleton" role="status" aria-label="Cargando mercado"><span/><span/><div><span/><span/></div></div>;}
 export function Segmented<T extends string>({label,options,value,onChange}: {label:string;options:{value:T;label:string}[];value:T;onChange:(v:T)=>void}) {

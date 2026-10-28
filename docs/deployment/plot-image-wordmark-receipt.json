@@ -1,0 +1,13 @@
+{
+  "task": "Replace live particle wordmark with supplied static Plot! logo",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "0ad247f",
+    "branch": "feat-plot-image-wordmark",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-plot-image-wordmark",
+    "cleanup": "retained"
+  },
+  "asset": "Original uploaded JPEG copied unchanged to public/brand/plot-wordmark.jpg; CSS frames the artwork for the live page and MV3 headers. Existing background and payout animations preserved. Historical component gallery retains its particle component.",
+  "verification": "npm run check passed (65 tests, 7 SQL cases skipped); 2 dashboard/MV3 E2E passed plus native 700px popup E2E. Original 1792px image loads from web and packaged extension; particle logo absent from live headers. 320/360/768/1440 layouts, reduced motion, keyboard betting form and refresh verified. Mobile and popup screenshots inspected."
+}

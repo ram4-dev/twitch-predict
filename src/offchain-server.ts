@@ -1,3 +1,5 @@
+import {EventEmitter} from 'node:events';
+import {TwitchChannelSearch} from './twitch-search.js';
 import {contentSecurityPolicy} from './content-security-policy.js';
 import express from 'express';
 import {execFile} from 'node:child_process';
@@ -23,9 +25,12 @@ await mkdir(directory,{recursive:true,mode:0o700});
 try{await writeFile(`${directory}/bridge-token`,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});}catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
 const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
 const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
-const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined);await byte.load();
-const byteMirror=new ByteTwitchMirror(directory,byte,source);await byteMirror.load();
+const marketEvents=new EventEmitter();marketEvents.setMaxListeners(0);
+const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,undefined,()=>marketEvents.emit('markets'));await byte.load();
+const byteMirror=new ByteTwitchMirror(directory,byte,source,Date.now,undefined,()=>marketEvents.emit('markets'));await byteMirror.load();
+const channelSearch=new TwitchChannelSearch();
 const waitlist=new Waitlist(directory);await waitlist.load();
+
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
   if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
@@ -53,6 +58,13 @@ app.post(['/api/waitlist','/waitlist'],express.urlencoded({extended:false,limit:
   }
 });
 const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
+app.get('/api/live/markets',(req,res)=>{
+  const origin=req.get('origin');if(origin&&/^chrome-extension:\/\/[a-p]{32}$/.test(origin))res.set('Access-Control-Allow-Origin',origin).vary('Origin');
+  if(marketEvents.listenerCount('markets')>=100){res.status(503).set('Retry-After','5').end();return;}
+  res.status(200).set({'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no','Connection':'keep-alive'});res.flushHeaders();
+  const changed=()=>{if(!res.destroyed)res.write('event: markets\ndata: {}\n\n');};marketEvents.on('markets',changed);res.write('retry: 5000\nevent: ready\ndata: {}\n\n');
+  const heartbeat=setInterval(()=>res.write(': heartbeat\n\n'),15000);heartbeat.unref();res.on('close',()=>{clearInterval(heartbeat);marketEvents.off('markets',changed);});
+});
 app.get('/api/health',(_req,res)=>res.json({ok:true,marketMode:process.env.MARKET_MODE==='byte'?'byte':'offchain',network:process.env.MARKET_MODE==='byte'?'devnet':'offchain',protocol:process.env.MARKET_MODE==='byte'?'byte partner markets':'Puntos internos',features:process.env.MARKET_MODE==='byte'?['wallet-bet','resolve','automatic-payout']:['bet','resolve','claim'],sourceError:source.lastError}));
 app.get('/api/markets',(_req,res)=>res.json(points.markets()));
 app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),details:source.channels(),sourceError:source.lastError}));
@@ -63,19 +75,25 @@ const twitchAuth=new TwitchAuth(points,{clientId:process.env.TWITCH_CLIENT_ID??'
 const cookieName='twitch_link';
 const linkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${cookieName}=`))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
 const cookieOptions={httpOnly:true,secure:new URL(twitchOrigin).protocol==='https:',sameSite:'lax' as const,path:'/',maxAge:10*60_000};
+app.get('/api/twitch/search',async(req,res)=>{
+  const query=typeof req.query.q==='string'?req.query.q:'';
+  if(!/^[a-zA-Z0-9_]{2,40}$/.test(query)){res.status(400).json({error:'Ingresá al menos dos caracteres del usuario de Twitch.'});return;}
+  try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
+ });
 app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
 app.post('/api/twitch/start',route((req,res)=>{
   if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
-  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.json({url:result.url});
+  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
 }));
 app.get('/auth/twitch/callback',async(req,res)=>{
   if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
+  const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
   try{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
-    res.redirect(`/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
+    res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
   }catch{
-    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.redirect(`/?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#streamer`);
+    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';res.redirect(onboarding?`/onboarding?streamer=1&twitch_error=${error}`:`/?twitch_error=${error}#streamer`);
   }
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{

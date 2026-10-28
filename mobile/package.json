@@ -1,0 +1,47 @@
+{
+  "name": "plot-mobile",
+  "version": "0.1.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "2.2.9",
+    "@solana-mobile/seeker-connect-react-native": "^0.2.0",
+    "@solana/web3.js": "1.98.4",
+    "buffer": "^6.0.3",
+    "expo": "~55.0.32",
+    "expo-build-properties": "~55.0.18",
+    "expo-constants": "~55.0.17",
+    "expo-crypto": "~55.0.19",
+    "expo-dev-client": "~55.0.41",
+    "expo-font": "~55.0.8",
+    "expo-linking": "~55.0.17",
+    "expo-router": "~55.0.18",
+    "expo-secure-store": "~55.0.18",
+    "expo-status-bar": "~55.0.6",
+    "expo-system-ui": "~55.0.22",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.10",
+    "react-native-get-random-values": "~1.11.0",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-url-polyfill": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~55.0.1",
+    "typescript": "~5.9.2"
+  },
+  "scripts": {
+    "start": "portless plot-mobile expo start --dev-client",
+    "android": "node scripts/run-android.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "expo lint",
+    "check": "npm run typecheck && npm run lint",
+    "build:android": "expo prebuild --platform android && node scripts/build-android.mjs",
+    "dev:fixture": "cd .. && portless plot-mobile-test tsx scripts/mobile-e2e-server.ts",
+    "build:local": "node scripts/build-local.mjs"
+  },
+  "private": true
+}

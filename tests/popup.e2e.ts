@@ -1,3 +1,4 @@
+import {chooseChannel} from './fixtures/extension-search.js';
 import { test, expect, chromium } from '@playwright/test';
 import { resolve } from 'node:path';
 import { mkdtemp, rm, cp, readFile, writeFile } from 'node:fs/promises';
@@ -19,15 +20,15 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
     }
     await context.route('http://twitch-predict.localhost:1356/api/**',route=>route.fulfill({json:route.request().url().endsWith('/api/markets')?[]:{error:'Offline points fixture'},status:route.request().url().endsWith('/api/markets')?200:503}));
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);
-    await expect(popup.locator('#channel option')).toHaveCount(2,{timeout:15000});
-    await popup.getByLabel('Canal de Twitch').selectOption('alpha_stream');
+    await expect(popup.getByRole('button',{name:'Buscar canal',exact:true})).toBeVisible();
+    await chooseChannel(popup,'alpha_stream');
     await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();
     await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('100 puntos');
     await expect(popup.locator('#login')).toBeVisible();await expect(popup.locator('.market strong')).toHaveText('Conectá la extensión para crear la copia');
-    await popup.getByLabel('Canal de Twitch').selectOption('beta_stream');
+    await chooseChannel(popup,'beta_stream');
     await expect(popup.getByRole('heading',{name:'¿Gana Beta?'})).toBeVisible();await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('900 puntos');
     emptySecond=true;await popup.getByRole('button',{name:'Actualizar predicción'}).click();await expect(popup.locator('#empty')).toBeVisible();await expect(popup.locator('.prediction')).toHaveCount(0);
-    await popup.getByLabel('Canal de Twitch').selectOption('alpha_stream');await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();
+    await chooseChannel(popup,'alpha_stream');await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();
     // A broken bridge must not erase fresh Twitch data.
     await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({bridgeToken:'a'.repeat(64),bridgeUrl:'http://twitch-predict.localhost:1356'});});
     await context.route('http://twitch-predict.localhost:1356/api/predictions',route=>route.fulfill({status:503,json:{error:'Bridge maintenance'}}));
@@ -41,7 +42,7 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
 test('native action popup is 700px wide without resizing the browser window',async()=>{
   const profile=await mkdtemp(`${tmpdir()}/mirror-native-popup-`);const extension=resolve(profile,'extension');await cp(resolve('extension'),extension,{recursive:true});
   const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
-  for(const name of ['background.js','popup.js']){const path=resolve(extension,name);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
+  for(const name of ['background.js','popup.js','app-config.js']){const path=resolve(extension,name);await writeFile(path,(await readFile(path,'utf8')).replaceAll('http://twitch-predict.localhost:1356',base));}
   const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,viewport:null,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   try {
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;

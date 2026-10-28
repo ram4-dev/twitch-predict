@@ -1,0 +1,13 @@
+{
+  "task": "Exaggerate balloon logo hover",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "86d4f28",
+    "branch": "feat-stronger-logo-hover",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.feat-stronger-logo-hover",
+    "cleanup": "retained"
+  },
+  "changes": "Increase active inflation from 2.5% to 7.5%, double the breathing and tilt amplitudes, strengthen pointer deformation and spring rebound. Baseline rest and reduced motion remain static. Original supplied texture retained.",
+  "verification": "npm run check passed (68 tests, 7 SQL skips). Five relevant browser E2E passed: hover/press/settle, reduced motion, context loss, compact layout, background, responsive dashboard and real MV3 forms. Pressed logo screenshot inspected."
+}

@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+node_modules
+mobile
+artifacts
+data
+test-results
+playwright-report
+dist
+*.log

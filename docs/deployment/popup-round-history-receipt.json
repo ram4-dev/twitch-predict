@@ -1,0 +1,14 @@
+{
+  "task": "Distinguish current Twitch round from older result cards",
+  "workspace": {
+    "sourceRepository": "/Users/ramiro/.t3/projects/twitch-predict",
+    "sourceBranch": "branding/plot-mascot",
+    "base": "236c82e",
+    "branch": "fix-popup-current-round-history",
+    "path": "/Users/ramiro/.t3/projects/twitch-predict.fix-popup-current-round-history",
+    "cleanup": "retained"
+  },
+  "verifiedLive": "Gorgc Legion vs BB / 612265d2-e607-40e8-a30d-a02398194b73 remained LOCKED without winningOutcome in direct Twitch lookup. The other card was Astra vs BB / cbfb7a63-f82d-4e3f-a2ce-28a178dac252, already RESOLVED. No duplicated source ID or premature Legion resolution.",
+  "changes": "Sort real markets and source previews together by round start. Label current round and older rounds separately. Show start date on terminal cards. Keep card nodes attached across refreshes; preserve reveal/ack behavior. Only native action popups acknowledge resolution delivery; an extension tab cannot consume it.",
+  "verification": "npm run check passed (68 tests; 7 SQL cases skipped). Grouped current/history MV3 lifecycle test passed at 700x600; native closed action popup opens once and stays dismissed after later polls. Initial native attempts intermittently found a consumed alert without an open popup; diagnostic logs retained in /tmp/plot-rounds-auto-open-first-failure.log. A headless visibility assertion was discarded because Chromium reported all documents visible; no production visibility/focus guard was mocked. Final native test passed with popup-context acknowledgement."
+}

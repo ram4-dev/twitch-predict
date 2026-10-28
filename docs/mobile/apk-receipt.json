@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-10-26T08:29:54.827485+00:00",
+  "apkFiles": {
+    "plot-android-https.apk": {
+      "sha256": "a23c809a76f5407d47e175185f0425722c4e0963993820be876be8b5ab3f7bef",
+      "bytes": 46430867,
+      "path": "/Users/ramiro/.t3/worktrees/twitch-predict/feat-expo-seeker-mobile/mobile/artifacts/plot-android-https.apk",
+      "signing": "Android development key; apksigner verify passed",
+      "architecture": "arm64-v8a"
+    },
+    "plot-android-local-devnet.apk": {
+      "sha256": "29a5cf66828f5c01e1ab30819f76952e4399c8ef712415ca0ed3a8600ea28fa2",
+      "bytes": 46430875,
+      "path": "/Users/ramiro/.t3/worktrees/twitch-predict/feat-expo-seeker-mobile/mobile/artifacts/plot-android-local-devnet.apk",
+      "signing": "Android development key; apksigner verify passed",
+      "architecture": "arm64-v8a"
+    }
+  }
+}

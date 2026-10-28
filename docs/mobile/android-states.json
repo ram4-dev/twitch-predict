@@ -1,0 +1,11 @@
+{
+  "passed": [
+    "Rechaza enlaces que imitan Twitch",
+    "Buscar por enlace abre el canal correcto",
+    "Canal sin mercados muestra el estado vac\u00edo",
+    "Los mercados cerrados dejan de ofrecer apuestas",
+    "Captura en pantalla compacta y fuente al 130 por ciento",
+    "Captura en orientaci\u00f3n horizontal",
+    "La navegaci\u00f3n vuelve a la b\u00fasqueda"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "passed": [
+    "Rechazar la firma no transmite una apuesta",
+    "La wallet firma y el RPC verifica la transacci\u00f3n Ed25519 y la instrucci\u00f3n Byte",
+    "El recibo pendiente sobrevive a cerrar el proceso",
+    "Una apuesta pendiente bloquea un segundo env\u00edo",
+    "Reabrir concilia la firma sin volver a transmitir",
+    "La confirmaci\u00f3n se conserva despu\u00e9s de otro reinicio"
+  ],
+  "broadcastsBefore": 1,
+  "broadcastsAfter": 2,
+  "syncs": 2,
+  "rpc": "controlled fixture; real wallet signatures",
+  "wallet": "official Solana Mobile Fake Wallet",
+  "device": "emulator-5554"
+}

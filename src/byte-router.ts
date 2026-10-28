@@ -15,7 +15,7 @@ export function byteRouter(service:ByteService,points:Points,localToken:string,e
   if((rpc.protocol!=='https:'&&!(rpc.protocol==='http:'&&['localhost','127.0.0.1'].includes(rpc.hostname)))||rpc.username||rpc.password)throw new Error('BYTE_RPC_URL debe ser HTTPS.');
   const operators=(environment.BYTE_OPERATOR_WALLETS??'').split(',').map(v=>v.trim()).filter(Boolean);
   const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
-  const local=(req:express.Request)=>!operators.length&&['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress??'');
+  const local=(req:express.Request)=>environment.PLOT_CLOUD!=='1'&&!operators.length&&['127.0.0.1','::1','::ffff:127.0.0.1'].includes(req.socket.remoteAddress??'');
   const operator=(req:express.Request)=>{
     if(req.get('sec-fetch-site')!=='same-origin')throw new ByteError(403,'Abrí el panel desde este servidor para operar.');
     if(local(req)&&equal(req.get('x-operator-token')??'',localToken))return;
@@ -25,7 +25,7 @@ export function byteRouter(service:ByteService,points:Points,localToken:string,e
   const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{
     try{await fn(req,res);}catch(e){res.status(e instanceof ByteError?e.status:e instanceof z.ZodError?400:500).json({error:e instanceof ByteError?e.message:e instanceof z.ZodError?'Datos inválidos. Revisá los campos de la operación.':'No se pudo completar la operación de byte.'});}
   };
-  router.get('/status',(_req,res)=>res.json({configured:service.configured,network:'devnet',currency:'sol',operatorMode:operators.length?'wallet':'local',automaticTwitchResolution:!!mirror,extensionId}));
+  router.get('/status',(_req,res)=>res.json({configured:service.configured,network:'devnet',currency:'sol',operatorMode:operators.length||environment.PLOT_CLOUD==='1'?'wallet':'local',manualOperations:environment.PLOT_CLOUD!=='1'||operators.length>0,automaticTwitchResolution:!!mirror,extensionId}));
   router.get('/twitch/channels',(_req,res)=>res.json({channels:mirror?.channels()??[]}));
   router.post('/twitch/watch',route(async(req,res)=>{
     if(!mirror)throw new ByteError(503,'La réplica de Twitch no está disponible');
@@ -35,7 +35,7 @@ export function byteRouter(service:ByteService,points:Points,localToken:string,e
     try{res.json(await mirror.watch(input.channel));}catch(e){throw new ByteError(502,`No se pudo verificar Twitch: ${(e as Error).message}`);}
   }));
   router.get('/config',route(async(_req,res)=>res.json(await service.config())));
-  router.get('/markets',route(async(_req,res)=>res.json({markets:await service.list()})));
+  router.get('/markets',route(async(_req,res)=>res.json({markets:await service.list(),predictions:mirror?.channels().flatMap(channel=>mirror.snapshot(channel))??[]})));
   router.get('/markets/:id',route(async(req,res)=>res.json({market:await service.get(marketId.parse(req.params.id))})));
   router.post('/markets',route(async(req,res)=>{operator(req);res.status(201).json({market:await service.create(req.body)});}));
   router.get('/operations',route((req,res)=>{operator(req);res.json({operations:service.operations()});}));

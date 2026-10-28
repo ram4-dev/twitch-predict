@@ -1,3 +1,4 @@
+import type {Documents} from './cloud/documents.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { closesAt, predictionSchema, type Prediction } from './prediction.js';
@@ -20,8 +21,9 @@ const now = () => new Date().toISOString();
 export class Points {
   private state:State = fresh();
   private queue:Promise<unknown> = Promise.resolve();
-  constructor(readonly directory:string) {}
+  constructor(readonly directory:string,private readonly documents?:Documents) {}
   async load() {
+    if(this.documents){this.state=await this.documents.read('points',fresh);return;}
     await mkdir(this.directory,{recursive:true,mode:0o700});
     try { this.state=JSON.parse(await readFile(`${this.directory}/points.json`,'utf8')); if(this.state.version!==1) throw new Error('Unsupported points database');this.state.sessions??={};this.state.streamers??={};
       for(const b of this.state.bets)b.wallet??=this.state.accounts[b.accountId]?.wallet;
@@ -31,6 +33,7 @@ export class Points {
   // Every operation commits one atomic snapshot; failed persistence never updates the live state.
   private transaction<T>(work:(draft:State)=>T):Promise<T> {
     const task=this.queue.then(async()=>{
+      if(this.documents){const committed=await this.documents.update('points',fresh,work);this.state=committed.state;return committed.result;}
       const draft=structuredClone(this.state);const result=work(draft);
       const file=`${this.directory}/points.json`;
       await writeFile(`${file}.tmp`,JSON.stringify(draft),{mode:0o600});await rename(`${file}.tmp`,file);
