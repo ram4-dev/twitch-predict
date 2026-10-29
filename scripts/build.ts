@@ -51,6 +51,9 @@ if(cloudOrigin){
  await writeFile('dist/extension/manifest.json',JSON.stringify(manifest,null,2));
 }
 await cp('public','dist/web',{recursive:true});
+// Chrome Web Store requires the direct policy URL to contain the policy on every release.
+const privacyPolicy=await readFile('dist/web/privacy.html','utf8');
+if(!privacyPolicy.includes('<h1>Privacidad de plot BETA</h1>'))throw new Error('Missing privacy policy in web release');
 await cp('public/byte.html','dist/web/app.html');
 await cp('public/landing.html','dist/web/index.html');
 await mkdir('dist/web/downloads',{recursive:true});
