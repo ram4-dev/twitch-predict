@@ -1,0 +1,58 @@
+name: Publish Chrome extension
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - 'scripts/build.ts'
+      - 'scripts/store-manifest.ts'
+      - 'scripts/publish-cws.ts'
+      - 'src/**'
+      - 'public/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'legacy-public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/publish-extension.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chrome-web-store-publish
+  queue: max
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: command -v zip
+      - run: npm run build
+      - name: Verify manifest, bump version and rebuild archive
+        run: npm run publish:cws -- prepare
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plot-extension-store
+          path: dist/web/downloads/plot-extension.zip
+          if-no-files-found: error
+      - run: npm run publish:cws
+        env:
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          CWS_EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          CWS_PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
