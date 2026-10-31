@@ -11,7 +11,7 @@ test('unknown counts are not invented and zero-point outcomes do not show 50/50 
   const zero=p.outcomes.map(o=>({...o,totalPoints:0}));assert.equal(pointShare(zero[0],zero),0);
 });
 test('countdown closes at deadline and honors Twitch lock even before the deadline',()=>{
-  const p=demoPrediction();const start=Date.parse(p.createdAt);assert.equal(countdown(p,start),'30:00');assert.equal(countdown(p,start+1800_000),'Apuestas cerradas');assert.equal(isOpen({...p,status:'LOCKED'},start),false);assert.equal(countdown({...p,status:'RESOLVED'}),'Resuelta');
+  const p=demoPrediction();const start=Date.parse(p.createdAt);assert.equal(countdown(p,start),'30:00');assert.equal(countdown(p,start+1800_000),'Staking closed');assert.equal(isOpen({...p,status:'LOCKED'},start),false);assert.equal(countdown({...p,status:'RESOLVED'}),'Resolved');
 });
 test('untrusted prediction input is rejected before storage or market creation',()=>{
   assert.throws(()=>parseTwitchPrediction({...demoPrediction(),outcomes:[{id:'a',title:'A',totalPoints:-1}]},'pgl'));

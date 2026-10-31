@@ -19,10 +19,10 @@ test('betting uses an existing tab, never creates windows, persists before sendi
  const dispatch=(message:unknown,sender:unknown)=>new Promise<Record<string,unknown>>(resolve=>{for(const handle of listeners)if(handle(message,sender,resolve))return;resolve({ignored:true});});
  const wager={type:'BYTE_BET',marketId:'pm_test',amount:'0.01',option:1};
  assert.equal((await dispatch(wager,{id:extension,url:'https://www.twitch.tv/foo'})).ignored,true);
- assert.match(String((await dispatch(wager,{id:extension,url})).error),/Abrí un canal/);
+ assert.match(String((await dispatch(wager,{id:extension,url})).error),/Open a Twitch channel/);
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(injections,0);tabs=[{id:11,url:'https://www.twitch.tv/fixture_streamer'}];
  assert.equal((await dispatch(wager,{id:extension,url})).ok,true);await completion;
  assert.equal(injections,2);assert.equal((state.byteOperation as {tabId:number}).tabId,11);
- assert.match(String((await dispatch(wager,{id:extension,url})).error),/pendiente/);
+ assert.match(String((await dispatch(wager,{id:extension,url})).error),/pending/);
 });

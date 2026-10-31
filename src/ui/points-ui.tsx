@@ -17,12 +17,12 @@ type Client=ReturnType<typeof createPointsClient>;
 const roots=new Map<string,{root:Root;node:HTMLElement;generation:number}>();
 let generation=0;
 export const number=(n:number|null|undefined)=>new Intl.NumberFormat('es-AR').format(n??0);
-export function createPointsClient(base:string,storage:{get():Promise<string|null|undefined>;set(token:string):Promise<void>}) {
+export function createPointsClient(base:string,storage:{get():Promise<string|null|undefined>;set(token:string):Promise<void>},english=false) {
   const request=async<T=unknown>(path:string,body?:unknown,token?:string):Promise<T>=>{
     const response=await fetch(`${base}${path}`,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
     const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);return data;
   };
-  const ensure=async()=>{const token=await storage.get();if(!token)throw new Error('Conectá Phantom para acceder a tus puntos.');return token;};
+  const ensure=async()=>{const token=await storage.get();if(!token)throw new Error(english?'Connect Phantom to access your points.':'Conectá Phantom para acceder a tus puntos.');return token;};
   return {request,authRequest:async<T=unknown>(path:string,body?:unknown)=>request<T>(path,body,await ensure()),me:async()=>request<Account>('/api/points/me',undefined,await ensure()),bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
 }
 // Reconcile retained markets instead of replacing a focused input on every poll.
@@ -48,53 +48,57 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
   const own=(account?.bets??[]).filter(b=>b.marketKey===market.key);
   const pending=own.filter(b=>!b.claimed).reduce((n,b)=>n+b.payout,0);
   const stake=own.reduce((n,b)=>n+b.amount,0);
-  const status={open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
+  const fmt=(n:number)=>new Intl.NumberFormat(extension?'en-US':'es-AR').format(n);
+  const status=extension
+    ?{open:market.canBet?'Staking open':market.sourceFresh?'Staking closed':'Waiting for Twitch',locked:'Waiting for the Twitch result',resolved:'Result confirmed',void:'Refund available'}
+    :{open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
   const change=(value:string)=>{setAmount(value);form.amount=value;form.pending=undefined;};
-  const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message='Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
+  const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message=extension?'Enter a whole amount within your balance.':'Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
   if(extension&&['resolved','void'].includes(market.phase)){
     const payout=own.reduce((n,b)=>n+b.payout,0);
-    return <Resolution key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}>
-      {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recuperar':'Cobrar'} {number(pending)} pts<ArrowUpRight size={16}/></Button>}
-      {payout>0&&pending===0&&<p className="resolution-credited">{market.phase==='void'?'Reembolso acreditado':'Cobro acreditado'} · {number(payout)} pts</p>}
+    return <Resolution english key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}>
+      {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recover':'Claim'} {fmt(pending)} pts<ArrowUpRight size={16}/></Button>}
+      {payout>0&&pending===0&&<p className="resolution-credited">{market.phase==='void'?'Refund credited':'Payout credited'} · {fmt(payout)} pts</p>}
       {market.reason&&<p className="points-rule">{market.reason}</p>}
-      {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?'Guardando operación…':form.message}</p>}
+      {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?'Saving…':form.message}</p>}
     </Resolution>;
   }
   return <>
-    <div className="points-market-head"><span className={`points-status ${market.canBet?'live':''}`}><span className="status-mark"/>{status[market.phase]}</span><Badge variant="secondary">{market.demo?'Ejemplo':'Puntos internos'}</Badge></div>
-    <div className="pool-summary"><div className="points-pool"><span>Pozo de la comunidad</span><strong>{number(market.totalPoints)} <small>pts</small></strong></div><div className="pool-people"><span>{number(market.participants)} {market.participants===1?'jugador':'jugadores'}</span><span>{number(market.totalBets)} {market.totalBets===1?'apuesta':'apuestas'}</span></div></div>
-    <div className="pool-split" role="img" aria-label={`Distribución de puntos internos: ${market.outcomes.map(o=>`${o.title} ${number(o.points)}`).join(', ')}`}>
+    <div className="points-market-head"><span className={`points-status ${market.canBet?'live':''}`}><span className="status-mark"/>{status[market.phase]}</span><Badge variant="secondary">{market.demo?(extension?'Example':'Ejemplo'):(extension?'Internal points':'Puntos internos')}</Badge></div>
+    <div className="pool-summary"><div className="points-pool"><span>{extension?'Community pool':'Pozo de la comunidad'}</span><strong>{(extension?fmt:number)(market.totalPoints)} <small>pts</small></strong></div><div className="pool-people"><span>{(extension?fmt:number)(market.participants)} {market.participants===1?(extension?'player':'jugador'):(extension?'players':'jugadores')}</span><span>{(extension?fmt:number)(market.totalBets)} {market.totalBets===1?(extension?'stake':'apuesta'):(extension?'stakes':'apuestas')}</span></div></div>
+    <div className="pool-split" role="img" aria-label={extension?`Internal points split: ${market.outcomes.map(o=>`${o.title} ${fmt(o.points)}`).join(', ')}`:`Distribución de puntos internos: ${market.outcomes.map(o=>`${o.title} ${number(o.points)}`).join(', ')}`}>
       {market.outcomes.map((o,i)=><span key={o.id} className={i===0?'share-primary':'share-secondary'} style={{width:`${o.share}%`}}/>)}
     </div>
-    {market.canBet&&<div className="stake-row"><label className="points-stake"><span>Tu apuesta</span><span className="stake-input"><Coins size={16}/><Input type="number" min={1} max={account?.balance??0} step={1} aria-label="Puntos a apostar" value={amount} disabled={form.busy} onInput={e=>change(e.currentTarget.value)} onChange={e=>change(e.currentTarget.value)}/><span>pts</span></span></label><div className="points-quick">{[100,250,500,1000].map(value=><Button key={value} variant="ghost" size="sm" type="button" aria-pressed={Number(amount)===value} disabled={form.busy||!account||account.balance<value} onClick={()=>change(String(value))}>{number(value)}</Button>)}</div></div>}
+    {market.canBet&&<div className="stake-row"><label className="points-stake"><span>{extension?'Your stake':'Tu apuesta'}</span><span className="stake-input"><Coins size={16}/><Input type="number" min={1} max={account?.balance??0} step={1} aria-label={extension?'Points to stake':'Puntos a apostar'} value={amount} disabled={form.busy} onInput={e=>change(e.currentTarget.value)} onChange={e=>change(e.currentTarget.value)}/><span>pts</span></span></label><div className="points-quick">{[100,250,500,1000].map(value=><Button key={value} variant="ghost" size="sm" type="button" aria-pressed={Number(amount)===value} disabled={form.busy||!account||account.balance<value} onClick={()=>change(String(value))}>{(extension?fmt:number)(value)}</Button>)}</div></div>}
     <div className="points-options">{market.outcomes.map((o,i)=>{
       const my=own.filter(b=>b.outcomeId===o.id).reduce((n,b)=>n+b.amount,0);
       return <div key={o.id} className={`points-option ${i===0?'side-first':'side-second'}`}>
-        <div className="points-option-title"><strong>{o.title}</strong><span>{market.totalPoints?`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:1}).format(o.share)}%`:'Sin apuestas'}</span></div>
-        <p>{number(o.points)} pts <span>· {number(o.bets)} {o.bets===1?'apuesta':'apuestas'}</span></p>
-        {my>0&&<p className="points-own">Apostaste {number(my)} pts</p>}
-        {market.winnerId===o.id&&<strong className="points-winner"><Check size={14}/> Resultado ganador</strong>}
-        {market.canBet&&<Button type="button" variant="default" tone={i===0?'positive':'negative'} className="points-bet" disabled={form.busy||!account||account.balance<1} onClick={()=>bet(o.id)}>Apostar a {o.title}<ArrowUpRight size={14}/></Button>}
+        <div className="points-option-title"><strong>{o.title}</strong><span>{market.totalPoints?`${new Intl.NumberFormat(extension?'en-US':'es-AR',{maximumFractionDigits:1}).format(o.share)}%`:(extension?'No stakes':'Sin apuestas')}</span></div>
+        <p>{(extension?fmt:number)(o.points)} pts <span>· {(extension?fmt:number)(o.bets)} {o.bets===1?(extension?'stake':'apuesta'):(extension?'stakes':'apuestas')}</span></p>
+        {my>0&&<p className="points-own">{extension?`You staked ${fmt(my)} pts`:`Apostaste ${number(my)} pts`}</p>}
+        {market.winnerId===o.id&&<strong className="points-winner"><Check size={14}/> {extension?'Winning result':'Resultado ganador'}</strong>}
+        {market.canBet&&<Button type="button" variant="default" tone={i===0?'positive':'negative'} className="points-bet" disabled={form.busy||!account||account.balance<1} onClick={()=>bet(o.id)}>{extension?`Stake on ${o.title}`:`Apostar a ${o.title}`}<ArrowUpRight size={14}/></Button>}
       </div>;
     })}</div>
 
-    {stake>0&&<p className="points-position">Tu participación <strong>{number(stake)} pts</strong>{own.every(b=>b.claimed)&&<span> · cobrada</span>}</p>}
-    {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recuperar':'Cobrar'} {number(pending)} pts<ArrowUpRight size={16}/></Button>}
-    {market.phase==='resolved'&&stake>0&&!own.some(b=>b.payout)&&<p className="points-position">Tu opción no ganó. No hay puntos para cobrar.</p>}
+    {stake>0&&<p className="points-position">{extension?'Your position':'Tu participación'} <strong>{(extension?fmt:number)(stake)} pts</strong>{own.every(b=>b.claimed)&&<span>{extension?' · claimed':' · cobrada'}</span>}</p>}
+    {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?(extension?'Recover':'Recuperar'):(extension?'Claim':'Cobrar')} {(extension?fmt:number)(pending)} pts<ArrowUpRight size={16}/></Button>}
+    {market.phase==='resolved'&&stake>0&&!own.some(b=>b.payout)&&<p className="points-position">{extension?'Your option did not win. There are no points to claim.':'Tu opción no ganó. No hay puntos para cobrar.'}</p>}
     {market.reason&&<p className="points-rule">{market.reason}</p>}
-    {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?<><Loader2 size={14} className="animate-spin"/> Guardando operación…</>:form.message}</p>}
-    <p className="points-rule">El pozo se reparte entre quienes ganan, según sus puntos apostados. Sin comisión.</p>
+    {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?<><Loader2 size={14} className="animate-spin"/> {extension?'Saving…':'Guardando operación…'}</>:form.message}</p>}
+    <p className="points-rule">{extension?'The pool is split among the winners, in proportion to the points they staked. No fee.':'El pozo se reparte entre quienes ganan, según sus puntos apostados. Sin comisión.'}</p>
   </>;
 }
-export async function performPointsAction(action:Action,client:Client,refresh:()=>Promise<void>){
+export async function performPointsAction(action:Action,client:Client,refresh:()=>Promise<void>,english=false){
   if(action.type==='render'){await refresh();return;}
   const {form,market}=action;if(form.busy)return;form.busy=true;form.message='';form.failed=false;
   const fingerprint=JSON.stringify([action.type,market.key,action.outcomeId,action.amount]);
   if(form.pending?.fingerprint!==fingerprint)form.pending={fingerprint,id:crypto.randomUUID()};
   void refresh();
+  const fmt=(n:number)=>new Intl.NumberFormat(english?'en-US':'es-AR').format(n);
   try{
-    if(action.type==='bet'){const result=await client.bet({key:market.key,outcomeId:action.outcomeId,amount:action.amount,requestId:form.pending.id});form.message=`Apuesta registrada: ${number(result.amount)} pts.`;}
-    else{const result=await client.claim({key:market.key,requestId:form.pending.id});form.message=`Se acreditaron ${number(result.paid)} pts a tu saldo.`;}
+    if(action.type==='bet'){const result=await client.bet({key:market.key,outcomeId:action.outcomeId,amount:action.amount,requestId:form.pending.id});form.message=english?`Stake recorded: ${fmt(result.amount)} pts.`:`Apuesta registrada: ${number(result.amount)} pts.`;}
+    else{const result=await client.claim({key:market.key,requestId:form.pending.id});form.message=english?`${fmt(result.paid)} pts were added to your balance.`:`Se acreditaron ${number(result.paid)} pts a tu saldo.`;}
     form.pending=undefined;
   }catch(e){form.message=(e as Error).message;form.failed=true;}
   finally{form.busy=false;await refresh();}

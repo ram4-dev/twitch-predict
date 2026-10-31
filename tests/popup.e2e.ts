@@ -20,21 +20,21 @@ test('popup shows Twitch data without pairing and isolates snapshots from concur
     }
     await context.route('http://twitch-predict.localhost:1356/api/**',route=>route.fulfill({json:route.request().url().endsWith('/api/markets')?[]:{error:'Offline points fixture'},status:route.request().url().endsWith('/api/markets')?200:503}));
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);
-    await expect(popup.getByRole('button',{name:'Buscar canal',exact:true})).toBeVisible();
+    await expect(popup.getByRole('button',{name:'Search channel',exact:true})).toBeVisible();
     await chooseChannel(popup,'alpha_stream');
     await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();
-    await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('100 puntos');
-    await expect(popup.locator('#login')).toBeVisible();await expect(popup.locator('.market strong')).toHaveText('Conectá la extensión para crear la copia');
+    await popup.getByText('View Twitch points and original data').click();await expect(popup.locator('.outcome').first()).toContainText('100 points');
+    await expect(popup.locator('#login')).toBeVisible();await expect(popup.locator('.market strong')).toHaveText('Connect the extension once to create the copy');
     await chooseChannel(popup,'beta_stream');
-    await expect(popup.getByRole('heading',{name:'¿Gana Beta?'})).toBeVisible();await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('900 puntos');
-    emptySecond=true;await popup.getByRole('button',{name:'Actualizar predicción'}).click();await expect(popup.locator('#empty')).toBeVisible();await expect(popup.locator('.prediction')).toHaveCount(0);
+    await expect(popup.getByRole('heading',{name:'¿Gana Beta?'})).toBeVisible();await popup.getByText('View Twitch points and original data').click();await expect(popup.locator('.outcome').first()).toContainText('900 points');
+    emptySecond=true;await popup.getByRole('button',{name:'Refresh prediction'}).click();await expect(popup.locator('#empty')).toBeVisible();await expect(popup.locator('.prediction')).toHaveCount(0);
     await chooseChannel(popup,'alpha_stream');await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();
     // A broken bridge must not erase fresh Twitch data.
     await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({bridgeToken:'a'.repeat(64),bridgeUrl:'http://twitch-predict.localhost:1356'});});
     await context.route('http://twitch-predict.localhost:1356/api/predictions',route=>route.fulfill({status:503,json:{error:'Bridge maintenance'}}));
-    await popup.getByRole('button',{name:'Actualizar predicción'}).click();
-    await expect(popup.locator('.market strong')).toHaveText('Mercado sin conexión');
-    await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();await popup.getByText('Ver puntos de Twitch y datos originales').click();await expect(popup.locator('.outcome').first()).toContainText('100 puntos');
+    await popup.getByRole('button',{name:'Refresh prediction'}).click();
+    await expect(popup.locator('.market strong')).toHaveText('Market offline');
+    await expect(popup.getByRole('heading',{name:'¿Gana Alpha?'})).toBeVisible();await popup.getByText('View Twitch points and original data').click();await expect(popup.locator('.outcome').first()).toContainText('100 points');
     await popup.screenshot({path:'test-results/popup-offline.png',fullPage:true});
   } finally {await context.close();await rm(profile,{recursive:true,force:true});}
 });
