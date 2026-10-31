@@ -72,3 +72,18 @@ npm run test:e2e
 Las E2E arrancan un servidor y un proxy Portless aislados en http://twitch-predict.localhost:1358 con datos temporales. La fuente Twitch y el proveedor de wallet se controlan en la prueba; las firmas Ed25519 y su verificación del servidor son reales. Prueban instalación, onboarding, cancelación, firma inválida, cuenta compartida entre panel/extensión y otro navegador, apuesta, resultado, cobro, reembolso y popup nativo. No sustituyen la aprobación manual con una instalación real de Phantom.
 
 El prototipo Solana anterior se conserva como modo optativo (`MARKET_MODE=solana`); ver SOLANA_LEGACY.md. Sus E2E están excluidas del flujo offchain.
+
+## Publicación en Chrome Web Store
+
+El workflow publica mediante la API v2 al recibir un push a `main` que afecta la extensión o sus dependencias de build. También admite ejecución manual desde Actions. Las ejecuciones se encolan para evitar publicaciones simultáneas. Google revisa cada envío antes de hacerlo público; una revisión pendiente puede impedir otro envío y requerir que se vuelva a ejecutar el workflow.
+
+La versión en `extension/manifest.json` es la versión base y permanece en el repositorio. CI consulta las versiones publicadas y enviadas a revisión, elige la mayor entre ellas y la base, e incrementa su componente patch. Solo modifica `dist/extension/manifest.json` y vuelve a crear el ZIP; no hace commits a `main`. El ZIP se conserva como artifact del workflow. Si una versión usa cuatro componentes, el incremento de patch descarta el cuarto. Si el patch alcanza 65535, hay que subir la versión base manualmente.
+
+Para habilitar la publicación:
+
+1. En [Google Cloud Console](https://console.cloud.google.com/), creá o seleccioná un proyecto y habilitá Chrome Web Store API. Configurá la pantalla de consentimiento OAuth y agregá como usuario de prueba la cuenta que administra la extensión.
+2. En Credenciales, creá un cliente OAuth de tipo aplicación web y agregá `https://developers.google.com/oauthplayground` como URI de redirección autorizada. Guardá el client ID y client secret.
+3. En [OAuth 2.0 Playground](https://developers.google.com/oauthplayground/), abrí la configuración y seleccioná “Use your own OAuth credentials”. Ingresá ese client ID y secret, autorizá el scope `https://www.googleapis.com/auth/chromewebstore` con la cuenta propietaria de la extensión e intercambiá el código por un refresh token. Consultá la [guía oficial](https://developer.chrome.com/docs/webstore/using-api/) para los pasos actualizados. Las credenciales de aplicaciones externas en modo Testing pueden vencer; configurá el consentimiento para el uso previsto y renová el token cuando sea necesario.
+4. Buscá el publisher ID y el ID de la extensión en el [Developer Dashboard](https://chrome.google.com/webstore/devconsole/). En GitHub, abrí Settings → Secrets and variables → Actions y agregá los secretos de repositorio `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN`, `CWS_EXTENSION_ID` y `CWS_PUBLISHER_ID`.
+
+El build usa `PLOT_PUBLIC_ORIGIN` cuando está configurado. Sin él, conserva la configuración local predeterminada del proyecto. Para una distribución conectada a un servidor público, configurá ese origen de HTTPS en el workflow antes de publicar.
