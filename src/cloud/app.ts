@@ -16,13 +16,14 @@ import {cloudConfig} from './config.js';
 export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
  const liveMarkets=new LiveMarkets(documents);app.locals.liveMarkets=liveMarkets;
- const extensionOrigin=`chrome-extension://${config.extensionId}`;
+ const extensionOrigins=new Set(config.extensionIds.map(id=>`chrome-extension://${id}`));
+ const extensionIdSchema=z.string().refine(id=>config.extensionIds.includes(id));
  app.use((req,res,next)=>{
   res.set({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'});
   const origin=req.get('origin');
-  if(origin&&origin!==config.origin&&origin!==extensionOrigin){res.status(403).json({error:'Origen no autorizado'});return;}
+  if(origin&&origin!==config.origin&&!extensionOrigins.has(origin??'')){res.status(403).json({error:'Origen no autorizado'});return;}
   // Native clients have no Origin. A foreign browser cannot send state-changing requests or read responses.
-  if(req.get('sec-fetch-site')==='cross-site'&&origin!==extensionOrigin&&req.path!=='/auth/twitch/callback'){res.status(403).json({error:'Sitio no autorizado'});return;}
+  if(req.get('sec-fetch-site')==='cross-site'&&!extensionOrigins.has(origin??'')&&req.path!=='/auth/twitch/callback'){res.status(403).json({error:'Sitio no autorizado'});return;}
   if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.sendStatus(204);return;}next();
  });
@@ -62,7 +63,9 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  const context=(res:express.Response)=>res.locals.context as {points:Points;byte:ByteService;mirror:ByteTwitchMirror;auth:CloudAuth;twitch:CloudTwitchAuth};
  app.get('/api/auth/config',(_req,res)=>res.json({origin:config.origin}));
  app.post('/api/auth/extension/start',route(async(req,res)=>{
-  const i=z.object({extensionId:z.literal(config.extensionId),state:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);res.json(await context(res).auth.start(i.extensionId,i.state,bearer(req)||undefined,config.origin));
+  const i=z.object({extensionId:extensionIdSchema,state:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
+  if(req.get('origin')?.startsWith('chrome-extension://')&&req.get('origin')!==`chrome-extension://${i.extensionId}`)throw new Error('Origen de extensión inválido');
+  res.json(await context(res).auth.start(i.extensionId,i.state,bearer(req)||undefined,config.origin));
  }));
  app.get('/api/auth/flow/:flowId',route(async(req,res)=>res.json(await context(res).auth.context(String(req.params.flowId)))));
  app.post('/api/auth/challenge',route(async(req,res)=>{const i=z.object({address:z.string().min(32).max(44),flowId:z.string().regex(/^[a-f0-9]{64}$/).optional()}).parse(req.body);res.json(await context(res).auth.challenge(i.address,config.origin,i.flowId,bearer(req)||undefined));}));
@@ -71,8 +74,8 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
   if(req.get('origin')!==config.origin)throw new Error('Vinculá la cuenta desde el panel');const i=z.object({flowId:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);res.json(await context(res).auth.authorize(i.flowId,bearer(req),config.origin));
  }));
  app.post('/api/auth/extension/complete',route(async(req,res)=>{
-  const i=z.object({flowId:z.string().regex(/^[a-f0-9]{64}$/),state:z.string().regex(/^[a-f0-9]{64}$/),code:z.string().regex(/^[a-f0-9]{64}$/),extensionId:z.literal(config.extensionId)}).parse(req.body);
-  if(req.get('origin')&&req.get('origin')!==extensionOrigin)throw new Error('Origen de extensión inválido');res.json(await context(res).auth.complete(i.flowId,i.state,i.code,i.extensionId));
+  const i=z.object({flowId:z.string().regex(/^[a-f0-9]{64}$/),state:z.string().regex(/^[a-f0-9]{64}$/),code:z.string().regex(/^[a-f0-9]{64}$/),extensionId:extensionIdSchema}).parse(req.body);
+  if(req.get('origin')&&req.get('origin')!==`chrome-extension://${i.extensionId}`)throw new Error('Origen de extensión inválido');res.json(await context(res).auth.complete(i.flowId,i.state,i.code,i.extensionId));
  }));
  const cookieName='twitch_link',cookieOptions={httpOnly:true,secure:true,sameSite:'lax' as const,path:'/',maxAge:600000};
  const cookie=(req:express.Request)=>{const value=req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(cookieName+'='))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(value)?value:'';};
