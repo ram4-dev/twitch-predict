@@ -8,17 +8,17 @@ const notifyResolution=createResolutionNotifier(chrome);
 const channelKey = channel => `channel:${channel.toLowerCase()}`;
 async function saveSnapshot(channel, snapshot) { await chrome.storage.local.set({ [channelKey(channel)]: snapshot }); }
 async function mirrorPrediction(prediction, previous, config) {
-  if (!config.bridgeToken) return { state: 'unpaired', error: 'Conectá la extensión una vez para activar la creación automática.' };
+  if (!config.bridgeToken) return { state: 'unpaired', error: 'Connect the extension once to turn on automatic creation.' };
   if (!isOpen(prediction) && !previous?.address && !previous?.key) return { state: 'closed', error: null };
   try {
     const response = await fetch(`${config.bridgeUrl || defaultBridge}/api/predictions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.bridgeToken}` },
       body: JSON.stringify(prediction), signal: AbortSignal.timeout(12000),
     });
-    if (response.status === 401) return { ...previous, state: 'unpaired', error: 'Reconectá la extensión al puente.' };
-    const data = await response.json(); if (!response.ok) throw new Error(data.error || `Puente HTTP ${response.status}`);
+    if (response.status === 401) return { ...previous, state: 'unpaired', error: 'Reconnect the extension to the bridge.' };
+    const data = await response.json(); if (!response.ok) throw new Error(data.error || `Bridge HTTP ${response.status}`);
     return { state: data.phase, key: data.key, address: data.market, network: data.network, signatures: data.signatures?.length ?? 0, error: data.error ?? null, checkedAt: new Date().toISOString() };
-  } catch (e) { return { ...previous, state: 'offline', error: e.name === 'TimeoutError' ? 'El puente tardó demasiado. Se reintentará la consulta.' : `Puente no disponible: ${e.message}` }; }
+  } catch (e) { return { ...previous, state: 'offline', error: e.name === 'TimeoutError' ? 'The bridge took too long. The check will be retried.' : `Bridge unavailable: ${e.message}` }; }
 }
 async function poll(channel, tabId) {
   const key = channelKey(channel);
@@ -31,12 +31,12 @@ async function poll(channel, tabId) {
       let observed;
       if(stored.bridgeToken||stored.pointsToken){
         const watch=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/twitch/watch`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.bridgeToken?{'x-operator-token':stored.bridgeToken}:{}),...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({channel}),signal:AbortSignal.timeout(40000)});
-        observed=await watch.json();if(!watch.ok)throw new Error(observed.error||'No se pudo replicar la predicción de Twitch');
+        observed=await watch.json();if(!watch.ok)throw new Error(observed.error||'Could not mirror the Twitch prediction');
       }
       const response=await fetch(`${stored.bridgeUrl||defaultBridge}/api/byte/markets`,{signal:AbortSignal.timeout(25000)});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo consultar byte');
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load byte');
       const byteMarkets=result.markets.filter(m=>m.notes?.channel===channel);
-      snapshot={channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken||stored.pointsToken?null:'Vinculá la extensión al panel para replicar las predicciones.',predictions:(observed?.predictions??result.predictions??[]).filter(item=>item.prediction.channel===channel),byteMarkets,mode:'byte'};
+      snapshot={channel,fetchedAt:new Date().toISOString(),sourceError:stored.bridgeToken||stored.pointsToken?null:'Link the extension to the dashboard to mirror predictions.',predictions:(observed?.predictions??result.predictions??[]).filter(item=>item.prediction.channel===channel),byteMarkets,mode:'byte'};
       await saveSnapshot(channel,snapshot);
       await chrome.storage.local.set({lastPoll:{channel,at:new Date().toISOString(),count:byteMarkets.length},lastError:null});
       if(Number.isInteger(tabId))try{await chrome.action.setBadgeText({tabId,text:byteMarkets.filter(m=>m.bettable).length?String(byteMarkets.filter(m=>m.bettable).length):''});}catch{/* The tab may have closed. */}
@@ -50,7 +50,7 @@ async function poll(channel, tabId) {
     if (!response.ok) throw new Error(`Twitch HTTP ${response.status}`);
     const json = await response.json();
     if (json.errors) throw new Error(json.errors.map(e => e.message).join('; '));
-    if (!json.data?.channel || !Array.isArray(json.data.channel.activePredictionEvents)) throw new Error('Twitch no devolvió las predicciones del canal.');
+    if (!json.data?.channel || !Array.isArray(json.data.channel.activePredictionEvents)) throw new Error('Twitch did not return this channel’s predictions.');
     const predictions = json.data.channel.activePredictionEvents.map(p => {
       const prediction = parseTwitchPrediction(p, channel);
       return { prediction, market: previous?.predictions?.find(old => old.prediction.id === prediction.id)?.market ?? { state: stored.bridgeToken ? 'pending' : 'unpaired' } };
@@ -89,18 +89,18 @@ chrome.runtime.onMessageExternal.addListener((message, sender, reply) => {
 });
 
 let authStart;
-function appUrl(value){const u=new URL(value||defaultBridge);if(!isAppOrigin(u.href))throw new Error('URL de la app inválida');return u.origin;}
+function appUrl(value){const u=new URL(value||defaultBridge);if(!isAppOrigin(u.href))throw new Error('Invalid app URL');return u.origin;}
 async function beginSession(base){
   const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
-  const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo iniciar la vinculación');
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not start linking');
   await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
   return {ok:true,flowId:result.flowId};
 }
 chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
   if(message.type!=='LINK_SESSION')return;
   void (async()=>{
-    const base=appUrl(message.bridgeUrl);if(!sender.url||new URL(sender.url).origin!==base)throw new Error('Origen de vinculación inválido');
+    const base=appUrl(message.bridgeUrl);if(!sender.url||new URL(sender.url).origin!==base)throw new Error('Invalid linking origin');
     reply(await beginSession(base));
   })().catch(e=>reply({error:e.message}));return true;
 });
@@ -110,10 +110,10 @@ async function startAuth(){
   let base=appUrl(stored.bridgeUrl);
   const health=await fetch(`${base}/api/health`,{signal:AbortSignal.timeout(5000)}).then(r=>r.ok?r.json():null).catch(()=>null);
   const byteMode=health?.marketMode==='byte';
-  const config=await fetch(`${base}/api/auth/config`,{signal:AbortSignal.timeout(8000)});if(!config.ok)throw new Error('No se pudo abrir el inicio de sesión');base=appUrl((await config.json()).origin);
+  const config=await fetch(`${base}/api/auth/config`,{signal:AbortSignal.timeout(8000)});if(!config.ok)throw new Error('Could not open sign-in');base=appUrl((await config.json()).origin);
   const state=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
-  const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo abrir el acceso');
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not open access');
   await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
   if(byteMode)await chrome.windows.create({url:`${base}/onboarding?extension=1#flow=${result.flowId}`,type:'popup',width:480,height:700});else await chrome.tabs.create({url:`${base}/onboarding#flow=${result.flowId}`});return {ok:true};
 }
@@ -138,10 +138,10 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
     const stored=await chrome.storage.local.get(['pendingAuth','pointsToken','lastAuthFlow']);
     const pending=stored.pendingAuth;
     if(stored.lastAuthFlow===message.flowId&&stored.pointsToken){reply({ok:true});return;}
-    if(!pending||pending.flowId!==message.flowId||Date.parse(pending.expiresAt)<=Date.now()||!sender.url||new URL(sender.url).origin!==pending.base)throw new Error('El acceso no coincide con esta extensión. Volvé a conectar Phantom.');
-    if(typeof message.code!=='string'||!/^[a-f0-9]{64}$/.test(message.code))throw new Error('Código de acceso inválido');
+    if(!pending||pending.flowId!==message.flowId||Date.parse(pending.expiresAt)<=Date.now()||!sender.url||new URL(sender.url).origin!==pending.base)throw new Error('This access does not match the extension. Connect Phantom again.');
+    if(typeof message.code!=='string'||!/^[a-f0-9]{64}$/.test(message.code))throw new Error('Invalid access code');
     const response=await fetch(`${pending.base}/api/auth/extension/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flowId:pending.flowId,state:pending.state,extensionId:chrome.runtime.id,code:message.code}),signal:AbortSignal.timeout(12000)});
-    const result=await response.json();if(!response.ok)throw new Error(result.error||'No se pudo vincular la extensión');
+    const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not link the extension');
     await chrome.storage.local.set({...(stored.pointsToken?{previousPointsToken:stored.pointsToken}:{}),pointsToken:result.token,walletAddress:result.account.wallet,bridgeToken:result.bridgeToken??null,bridgeUrl:pending.base,pendingAuth:null,lastAuthFlow:message.flowId,authError:null});
     reply({ok:true});
   })().catch(e=>reply({error:e.message}));return true;

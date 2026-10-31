@@ -30,13 +30,13 @@ test('MV3 liquid resolution uses account totals for winner, mixed bets, loser, r
   await expect(card.locator('.resolution-result')).toContainText('Se completa');await expect(card.locator('.resolution-outcomes')).toHaveCount(0);
   await expect(card.locator('.resolution-net')).toHaveText('+330 pts');await expect(card.locator('.resolution-receipt')).toContainText('530 pts');
   expect(await card.locator('.resolution-net-value').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(48);
-  const claimBox=await card.getByRole('button',{name:'Cobrar 530 pts'}).boundingBox();expect(claimBox!.y+claimBox!.height).toBeLessThan(560);
+  const claimBox=await card.getByRole('button',{name:'Claim 530 pts'}).boundingBox();expect(claimBox!.y+claimBox!.height).toBeLessThan(560);
   await page.screenshot({path:'test-results/liquid-resolution-large-pnl.png',fullPage:true});
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
   const overlay=page.locator('.prediction.plot-glow-card').first();await overlay.hover();await expect(overlay).toHaveAttribute('data-glow-active','true');expect(await overlay.evaluate(el=>getComputedStyle(el,'::after').pointerEvents)).toBe('none');expect(await overlay.evaluate(el=>{const rim=getComputedStyle(el,'::before');return {top:rim.top,right:rim.right,padding:rim.paddingTop,pointer:rim.pointerEvents};})).toEqual({top:'-3px',right:'-3px',padding:'3px',pointer:'none'});expect(await overlay.evaluate(el=>getComputedStyle(el,'::after').zIndex)).toBe('3');
   const stage=page.locator('body');await expect(stage).toHaveClass(/plot-glow-stage/);expect(await stage.evaluate(el=>getComputedStyle(el,'::before').filter)).toBe('blur(18px)');expect(await stage.evaluate(el=>getComputedStyle(el,'::before').position)).toBe('fixed');await page.locator('header').hover();await expect(stage).toHaveAttribute('data-glow-active','true');await page.locator('footer').hover();await expect(stage).toHaveAttribute('data-glow-active','true');
   await expect(page.getByRole('button',{name:/Pausar animación|Reanudar animación/})).toHaveCount(0);await expect(card.locator('.resolution-count')).toHaveAttribute('data-complete','true');expect(await card.locator('.resolution-net').evaluate(el=>getComputedStyle(el).color)).toBe('rgb(121, 226, 180)');
-  bets=[bet('yes',1000000,9500000)];await page.reload();await expect(card.locator('.resolution-net')).toHaveText('+8.500.000 pts');
+  bets=[bet('yes',1000000,9500000)];await page.reload();await expect(card.locator('.resolution-net')).toHaveText('+8,500,000 pts');
   expect(await card.locator('.resolution-net-value').evaluate(el=>{
    const box=el.getBoundingClientRect(),parent=el.closest('.resolution-personal')!.getBoundingClientRect();
    return box.left>=parent.left&&box.right<=parent.right&&el.scrollWidth<=el.clientWidth;
@@ -45,10 +45,10 @@ test('MV3 liquid resolution uses account totals for winner, mixed bets, loser, r
   // Claim state changes the available action, not the original financial result.
   bets=[bet('yes',200,530,true)];await page.reload();await expect(card.locator('.resolution-net')).toHaveText('+330 pts');await expect(card.locator('.resolution-credited')).toContainText('530 pts');await expect(card.locator('.points-claim')).toHaveCount(0);
   // A user can back both options and hit the winner while losing money overall.
-  bets=[bet('yes',100,150),bet('no',200,0)];await page.reload();await expect(card).toHaveAttribute('data-state','won');await expect(card.locator('.resolution-net')).toHaveText('−150 pts');await expect(card.locator('.resolution-label')).toHaveText('Pérdida neta');
+  bets=[bet('yes',100,150),bet('no',200,0)];await page.reload();await expect(card).toHaveAttribute('data-state','won');await expect(card.locator('.resolution-net')).toHaveText('−150 pts');await expect(card.locator('.resolution-label')).toHaveText('Net loss');
   bets=[bet('no',200,0)];await page.reload();await expect(card).toHaveAttribute('data-state','lost');await expect(card.locator('.resolution-net')).toHaveText('−200 pts');await expect(card.locator('.points-claim')).toHaveCount(0);
-  market.phase='void';bets=[bet('no',200,200)];await page.reload();await expect(card).toHaveAttribute('data-state','void');await expect(card.locator('.resolution-net')).toHaveText('0 pts');await expect(card.locator('.winner,.loser')).toHaveCount(0);await expect(card.getByRole('button',{name:'Recuperar 200 pts'})).toBeVisible();
-  market.phase='resolved';bets=[];await page.reload();await expect(card).toHaveAttribute('data-state','spectator');await expect(card.locator('.resolution-receipt')).toHaveCount(0);await expect(card.getByText('No participaste',{exact:true})).toBeVisible();
+  market.phase='void';bets=[bet('no',200,200)];await page.reload();await expect(card).toHaveAttribute('data-state','void');await expect(card.locator('.resolution-net')).toHaveText('0 pts');await expect(card.locator('.winner,.loser')).toHaveCount(0);await expect(card.getByRole('button',{name:'Recover 200 pts'})).toBeVisible();
+  market.phase='resolved';bets=[];await page.reload();await expect(card).toHaveAttribute('data-state','spectator');await expect(card.locator('.resolution-receipt')).toHaveCount(0);await expect(card.getByText('You did not take part',{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.emulateMedia({reducedMotion:'reduce'});expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
   expect(writes).toEqual([]);
@@ -67,12 +67,12 @@ test('MV3 SOL resolution uses animated glass and does not invent a wallet payout
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
   await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({byteOperation:{marketId:'pm_liquid',status:'confirmed',receipt:{signature:'test-signature'}}});});
   const page=await context.newPage();await page.goto(`chrome-extension://${id}/popup.html`);
-  const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(page.getByText('Apuesta confirmada en Solana.',{exact:false})).toHaveCount(0);await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.resolution-result')).toContainText('Gana');await expect(card.locator('.resolution-outcomes')).toHaveCount(0);await expect(card).toContainText('El importe de tu cobro no está disponible.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
-  await expect(card).toContainText('Esperando que byte complete los pagos.');
+  const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(page.getByText('Stake confirmed on Solana.',{exact:false})).toHaveCount(0);await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.resolution-result')).toContainText('Gana');await expect(card.locator('.resolution-outcomes')).toHaveCount(0);await expect(card).toContainText('Your payout amount is not available.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
+  await expect(card).toContainText('Waiting for byte to finish payouts.');
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
-  market.chain.settled=true;await page.reload();await expect(card).toContainText('Pagos o reembolsos completados en cadena.');await expect(card.locator('.resolution-net')).toHaveCount(0);
-  await expect(card.getByRole('link',{name:'Ver mercado en Solana devnet'})).toHaveAttribute('href',`https://explorer.solana.com/address/${market.chain.market}?cluster=devnet`);
-  market.status='invalid';await page.reload();await expect(card).toContainText('Anulada');await expect(card.locator('.winner,.loser')).toHaveCount(0);
+  market.chain.settled=true;await page.reload();await expect(card).toContainText('Payouts or refunds completed on-chain.');await expect(card.locator('.resolution-net')).toHaveCount(0);
+  await expect(card.getByRole('link',{name:'View market on Solana devnet'})).toHaveAttribute('href',`https://explorer.solana.com/address/${market.chain.market}?cluster=devnet`);
+  market.status='invalid';await page.reload();await expect(card).toContainText('Voided');await expect(card.locator('.winner,.loser')).toHaveCount(0);
   await page.screenshot({path:'test-results/liquid-sol-resolution.png',fullPage:true});
  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });

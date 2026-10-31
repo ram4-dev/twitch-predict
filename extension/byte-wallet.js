@@ -17,21 +17,21 @@ async function signerTab(base){
 }
 async function signInTab(tabId,transaction,wallet){
  const injected=await chrome.scripting.executeScript({target:{tabId,frameIds:[0]},world:'MAIN',files:['page-wallet.js']});
- const documentId=injected[0]?.documentId;if(!documentId)throw new Error('La pestaña cambió. Volvé a intentar desde Twitch.');
+ const documentId=injected[0]?.documentId;if(!documentId)throw new Error('The tab changed. Try again from Twitch.');
  const [response]=await chrome.scripting.executeScript({target:{tabId,documentIds:[documentId]},world:'MAIN',func:async input=>{
-  const sign=globalThis.__plotPhantomSign;if(typeof sign!=='function')return {error:'No se pudo acceder a Phantom en esta pestaña.'};return sign(input);
+  const sign=globalThis.__plotPhantomSign;if(typeof sign!=='function')return {error:'Phantom is not available on this tab.'};return sign(input);
  },args:[{transaction,wallet}]});
- if(!response?.result)throw new Error('Phantom no respondió desde la pestaña.');return response.result;
+ if(!response?.result)throw new Error('Phantom did not respond from the tab.');return response.result;
 }
 function runBet(op,receipts){
  const keeper=setInterval(()=>void chrome.runtime.getPlatformInfo(),20000);
  let timeout;
  const task=performExtensionBet(op,receipts,(transaction,wallet)=>signInTab(op.tabId,transaction,wallet),async receipt=>{
   const {byteOperation:current}=await chrome.storage.local.get('byteOperation');
-  if(current?.id!==op.id||(terminal.has(current.status)&&!(current.receipt?.signature===receipt.signature&&current.status===receipt.status)))throw new Error('Esta solicitud de apuesta ya terminó.');
+  if(current?.id!==op.id||(terminal.has(current.status)&&!(current.receipt?.signature===receipt.signature&&current.status===receipt.status)))throw new Error('This stake request is already finished.');
   await saveOperation({...current,status:receipt.status,receipt});
  });
- return Promise.race([task,new Promise((_resolve,reject)=>{timeout=setTimeout(()=>reject(new Error('La solicitud de Phantom expiró. Volvé a intentar.')),150000);})]).catch(async error=>{
+ return Promise.race([task,new Promise((_resolve,reject)=>{timeout=setTimeout(()=>reject(new Error('The Phantom request expired. Try again.')),150000);})]).catch(async error=>{
   const {byteOperation:current}=await chrome.storage.local.get('byteOperation');
   if(current?.id===op.id&&!terminal.has(current.status))await saveOperation({...current,status:current.receipt?'pending':'failed',error:error.message});
  }).finally(()=>{clearInterval(keeper);clearTimeout(timeout);});
@@ -40,16 +40,16 @@ export function installByteWallet(appUrl){
  chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(message.type!=='BYTE_BET')return;
   if(sender.id!==chrome.runtime.id||sender.url!==chrome.runtime.getURL('popup.html'))return;
-  if(starting||betting){reply({error:'Ya hay una solicitud pendiente en Phantom.'});return;}
+  if(starting||betting){reply({error:'A request is already pending in Phantom.'});return;}
   starting=true;
   void (async()=>{
    const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','byteOperation','byteReceipts']);
    const base=appUrl(stored.bridgeUrl),previous=stored.byteOperation;
-   if(previous&&!terminal.has(previous.status)&&(previous.receipt||Date.now()-previous.createdAt<120000))throw new Error('Hay una apuesta pendiente. Completá Phantom o revisá la transacción guardada.');
-   const tab=await signerTab(base);if(!tab)throw new Error('Abrí un canal de Twitch o el panel de Plot para usar Phantom. No se abrirán ventanas adicionales.');
+   if(previous&&!terminal.has(previous.status)&&(previous.receipt||Date.now()-previous.createdAt<120000))throw new Error('A stake is still pending. Finish it in Phantom or check the saved transaction.');
+   const tab=await signerTab(base);if(!tab)throw new Error('Open a Twitch channel or the Plot dashboard to use Phantom. No extra windows will open.');
    const me=await fetch(`${base}/api/points/me`,{headers:{Authorization:`Bearer ${stored.pointsToken||''}`},signal:AbortSignal.timeout(10000)});
-   const account=await me.json();if(!me.ok||!account.wallet)throw new Error('Conectá Phantom desde la extensión antes de apostar.');
-   if(!/^pm_[a-zA-Z0-9_-]{1,100}$/.test(message.marketId)||!Number.isInteger(message.option)||message.option<0||message.option>5||typeof message.amount!=='string'||!/^(0|[1-9]\d*)(\.\d{1,9})?$/.test(message.amount))throw new Error('Apuesta inválida.');
+   const account=await me.json();if(!me.ok||!account.wallet)throw new Error('Connect Phantom from the extension before staking.');
+   if(!/^pm_[a-zA-Z0-9_-]{1,100}$/.test(message.marketId)||!Number.isInteger(message.option)||message.option<0||message.option>5||typeof message.amount!=='string'||!/^(0|[1-9]\d*)(\.\d{1,9})?$/.test(message.amount))throw new Error('Invalid stake.');
    const operation={id:crypto.randomUUID(),base,marketId:message.marketId,option:message.option,amount:message.amount,wallet:account.wallet,tabId:tab.id,createdAt:Date.now(),status:'signing'};
    await saveOperation(operation);
    betting=runBet(operation,stored.byteReceipts??[]).finally(()=>{betting=undefined;});
@@ -61,12 +61,12 @@ export function installByteWallet(appUrl){
   void (async()=>{
    const {byteOperation:op}=await chrome.storage.local.get('byteOperation');
    if(op?.status==='signing'){
-    if(!betting&&!starting)await saveOperation({...op,status:'cancelled',error:'La solicitud de firma se interrumpió. Podés volver a apostar.'});
+    if(!betting&&!starting)await saveOperation({...op,status:'cancelled',error:'The signature request was interrupted. You can stake again.'});
     reply({ok:true});return;
    }
    if(!op||op.status!=='pending'||!op.receipt){reply({ok:true});return;}
-   const rpc=async(method,params=[])=>{const response=await fetch(`${op.base}/api/byte/rpc`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(10000)});const data=await response.json();if(!response.ok||data.error)throw new Error('No se pudo consultar Solana.');return data.result;};
-   if(await rpc('getGenesisHash')!=='EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG')throw new Error('La conexión no corresponde a devnet.');
+   const rpc=async(method,params=[])=>{const response=await fetch(`${op.base}/api/byte/rpc`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params}),signal:AbortSignal.timeout(10000)});const data=await response.json();if(!response.ok||data.error)throw new Error('Could not reach Solana.');return data.result;};
+   if(await rpc('getGenesisHash')!=='EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG')throw new Error('The connection is not devnet.');
    const status=(await rpc('getSignatureStatuses',[[op.receipt.signature],{searchTransactionHistory:true}])).value[0];
    let next='pending';if(status?.err)next='failed';else if(['confirmed','finalized'].includes(status?.confirmationStatus))next='confirmed';else if(!status&&await rpc('getBlockHeight',[{commitment:'finalized'}])>op.receipt.lastValidBlockHeight)next='expired';
    if(next!=='pending'){
@@ -77,5 +77,5 @@ export function installByteWallet(appUrl){
    reply({ok:true});
   })().catch(e=>reply({error:e.message}));return true;
  });
- chrome.tabs.onRemoved.addListener(tabId=>{void (async()=>{const {byteOperation:op}=await chrome.storage.local.get('byteOperation');if(op?.tabId===tabId&&op.status==='signing')await saveOperation({...op,status:'cancelled',error:'Cerraste la pestaña antes de firmar.'});})();});
+ chrome.tabs.onRemoved.addListener(tabId=>{void (async()=>{const {byteOperation:op}=await chrome.storage.local.get('byteOperation');if(op?.tabId===tabId&&op.status==='signing')await saveOperation({...op,status:'cancelled',error:'You closed the tab before signing.'});})();});
 }
