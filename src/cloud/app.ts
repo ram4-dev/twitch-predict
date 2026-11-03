@@ -12,9 +12,11 @@ import {twitchChannel} from '../mobile-model.js';
 import {Documents} from './documents.js';
 import {CloudAuth} from './auth.js';
 import {CloudTwitchAuth} from './twitch-auth.js';
+import {CloudTwitchBot} from './twitch-bot.js';
 import {cloudConfig} from './config.js';
 export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
+ const bot=new CloudTwitchBot(documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
  const liveMarkets=new LiveMarkets(documents);app.locals.liveMarkets=liveMarkets;
  const extensionOrigins=new Set(config.extensionIds.map(id=>`chrome-extension://${id}`));
  const extensionIdSchema=z.string().refine(id=>config.extensionIds.includes(id));
@@ -23,11 +25,14 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
   const origin=req.get('origin');
   if(origin&&origin!==config.origin&&!extensionOrigins.has(origin??'')){res.status(403).json({error:'Origen no autorizado'});return;}
   // Native clients have no Origin. A foreign browser cannot send state-changing requests or read responses.
-  if(req.get('sec-fetch-site')==='cross-site'&&!extensionOrigins.has(origin??'')&&req.path!=='/auth/twitch/callback'){res.status(403).json({error:'Sitio no autorizado'});return;}
+  if(req.get('sec-fetch-site')==='cross-site'&&!extensionOrigins.has(origin??'')&&!['/auth/twitch/callback','/auth/twitch/bot/callback'].includes(req.path)){res.status(403).json({error:'Sitio no autorizado'});return;}
   if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.sendStatus(204);return;}next();
  });
  app.get('/api/live/markets',(_req,res)=>liveMarkets.subscribe(res));
+ app.post('/api/twitch/bot/webhook',express.raw({type:'application/json',limit:'64kb'}),async(req,res)=>{
+  try{if(!Buffer.isBuffer(req.body)){res.sendStatus(400);return;}const headers=Object.fromEntries(['id','timestamp','signature','type'].map(name=>{const key=`twitch-eventsub-message-${name}`;return [key,req.get(key)??''];}));const result=await bot.webhook(headers,req.body);res.status(result.status).type('text/plain').send(result.body);}catch{res.sendStatus(400);}
+ });
  app.use(express.json({limit:'16kb'}));
  const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
  const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{
@@ -85,6 +90,27 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
    try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
   });
  app.get('/api/twitch/config',(_req,res)=>res.json({configured:context(res).twitch.configured,origin:config.origin}));
+ const botCookieName='twitch_bot';
+ const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
+ app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
+ app.post('/api/twitch/bot/start',route(async(req,res)=>{
+  if(req.get('origin')!==config.origin)throw new Error('Abrí la plataforma para agregar el bot');
+  if(!await documents.allowRequest('bot-auth',60)){res.status(429).json({error:'Demasiadas conexiones pendientes'});return;}
+  const result=await bot.start('channel',bearer(req));res.cookie(botCookieName,result.cookie,cookieOptions).json({url:result.url});
+ }));
+ app.post('/api/twitch/bot/account/start',route(async(req,res)=>{
+  if(req.get('origin')!==config.origin)throw new Error('Abrí la plataforma para autorizar plotfun');
+  if(!await documents.allowRequest('bot-auth',60)){res.status(429).json({error:'Demasiadas conexiones pendientes'});return;}
+  const result=await bot.start('account');res.cookie(botCookieName,result.cookie,cookieOptions).json({url:result.url});
+ }));
+ app.get('/auth/twitch/bot/callback',async(req,res)=>{
+  try{const result=await bot.callback(typeof req.query.state==='string'?req.query.state:'',botCookie(req),typeof req.query.code==='string'?req.query.code:'',!!req.query.error);
+   if(result.kind==='account'){res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/bot-setup.html?connected=1`);return;}
+   res.redirect(`${config.origin}/onboarding?streamer=1&bot_ticket=${encodeURIComponent(result.ticket)}`);
+  }catch{res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/onboarding?streamer=1&bot_error=failed`);}
+ });
+ app.post('/api/twitch/bot/complete',route(async(req,res)=>{const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const result=await bot.complete(bearer(req),ticket,botCookie(req));res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).json(result);}));
+ app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disable(bearer(req)))));
  app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req));res.cookie(cookieName,r.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:r.url});}));
  app.get('/auth/twitch/callback',async(req,res)=>{
   const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});

@@ -6,8 +6,10 @@ import {ByteTwitchMirror} from '../byte-twitch.js';
 import {TwitchSource} from '../twitch-source.js';
 import {cloudConfig} from './config.js';
 import {Documents} from './documents.js';
+import {CloudTwitchBot} from './twitch-bot.js';
 const config=cloudConfig(),documents=new Documents(config.database,config.namespace),owner=randomUUID();
 await documents.migrate();
+const bot=new CloudTwitchBot(documents,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
 let stopping=false,lost=false;
 process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
 while(!stopping){
@@ -24,6 +26,7 @@ while(!stopping){
     // Configured channels seed the list; authenticated viewers can enqueue any valid channel.
     await documents.update('byte-twitch',()=>({version:1,channels:[] as string[],mirrors:{}}),s=>{s.channels=[...new Set([...s.channels,...config.channels])];});
     if(!lost&&!stopping)await mirror.sync();
+    if(!lost&&!stopping)try{await bot.sync(channel=>mirror.snapshot(channel),()=>!lost&&!stopping);}catch{console.error('Twitch bot cycle failed; next cycle will retry');}
     if(lost)throw new Error('Worker lease lost');
     await documents.update('worker-status',()=>({checkedAt:0,sourceError:null as string|null}),state=>{state.checkedAt=Date.now();state.sourceError=mirror.lastError?'No se pudo verificar Twitch; las predicciones vencidas quedan bloqueadas.':null;});
     if(mirror.lastError)console.error('Twitch source unavailable; stale markets remain blocked');
