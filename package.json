@@ -21,7 +21,8 @@
     "dev:byte": "portless twitch-predict-byte tsx watch --include .env src/server.ts",
     "dev:mobile-api": "portless plot-mobile-api tsx scripts/mobile-server.ts",
     "check:mobile": "npm --prefix mobile run check",
-    "test:cloud": "tsx --test tests/cloud.test.ts"
+    "test:cloud": "tsx --test tests/cloud.test.ts",
+    "publish:cws": "tsx scripts/publish-cws.ts"
   },
   "keywords": [],
   "author": "",
