@@ -6,10 +6,29 @@ import {ByteTwitchMirror} from '../byte-twitch.js';
 import {TwitchSource} from '../twitch-source.js';
 import {cloudConfig} from './config.js';
 import {Documents} from './documents.js';
+import {CloudTwitchBot} from './twitch-bot.js';
 const config=cloudConfig(),documents=new Documents(config.database,config.namespace),owner=randomUUID();
 await documents.migrate();
+const bot=new CloudTwitchBot(documents,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
 let stopping=false,lost=false;
 process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
+// Chat has its own lease and cadence, so a slow prediction source cannot delay replies.
+const chatLoop=(async()=>{
+ while(!stopping){
+  let lostChat=false;
+  try{if(await documents.lease('twitch-chat-worker',owner,30)){
+   const renew=setInterval(()=>{void documents.lease('twitch-chat-worker',owner,30).then(ok=>{if(!ok)lostChat=true;}).catch(()=>{lostChat=true;});},8000);
+   try{await documents.withLease('twitch-chat-worker',owner,async()=>{
+    const points=new Points('',documents);await points.load();
+    const byte=new ByteService('',process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,documents);await byte.load();
+    const mirror=new ByteTwitchMirror('',byte,new TwitchSource(points),Date.now,documents);await mirror.load();
+    await bot.sync(channel=>mirror.snapshot(channel),()=>!lostChat&&!stopping);
+   });}finally{clearInterval(renew);}
+  }}catch{console.error('Twitch bot cycle failed; next cycle will retry');}
+  if(!stopping)await delay(5000);
+ }
+ await documents.release('twitch-chat-worker',owner).catch(()=>{});
+})();
 while(!stopping){
  try{
   if(!await documents.lease('twitch-worker',owner,30)){await delay(5000);continue;}
@@ -32,4 +51,4 @@ while(!stopping){
  }catch{console.error('Worker cycle failed; durable reservations retained');}
  if(!stopping)await delay(5000);
 }
-await documents.release('twitch-worker',owner).catch(()=>{});await documents.close();
+await chatLoop;await documents.release('twitch-worker',owner).catch(()=>{});await documents.close();

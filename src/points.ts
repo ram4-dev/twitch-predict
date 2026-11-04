@@ -6,7 +6,7 @@ import { closesAt, predictionSchema, type Prediction } from './prediction.js';
 export const STARTING_POINTS = 10_000;
 export const SOURCE_MAX_AGE = 30_000;
 export type TwitchIdentity = {id:string;login:string;displayName:string;linkedAt:string};
-type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; balance:number; createdAt:string };
+type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
 type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
@@ -87,6 +87,10 @@ export class Points {
   markets() { return Object.values(this.state.markets).map(m=>this.view(this.state,m)).reverse(); }
   market(key:string) {const m=this.state.markets[key];if(!m)throw new Error('Mercado desconocido');return this.view(this.state,m);}
   channels() {return [...this.state.channels];}
+  botChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled).map(a=>a.twitch!.login);}
+  enabledBotChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled&&a.botEpoch).map(a=>({id:a.twitch!.id,login:a.twitch!.login,epoch:a.botEpoch!}));}
+  botState(token:string){const a=this.account(this.state,token);return {enabled:!!a.twitch&&!!a.botEnabled,twitch:a.twitch??null};}
+  setBotEnabled(token:string,enabled:boolean,expected?:{accountId:string;twitchId:string}){return this.transaction(state=>{const a=this.account(state,token);if(!a.wallet||!a.twitch)throw new Error('Vinculá primero tu cuenta de Twitch');if(expected&&(a.id!==expected.accountId||a.twitch.id!==expected.twitchId))throw new Error('La cuenta cambió durante la conexión');if(enabled&&!a.botEnabled)a.botEpoch=randomUUID();a.botEnabled=enabled;return {enabled,channel:a.twitch.login};});}
   pendingSources() {return Object.values(this.state.markets).filter(m=>!m.demo&&!['resolved','void'].includes(m.phase)).map(m=>({id:m.prediction.id,channel:m.prediction.channel}));}
   async watch(channel:string) {
     if(!/^[a-zA-Z0-9_]{1,40}$/.test(channel))throw new Error('Canal inválido');
@@ -181,7 +185,7 @@ export class Points {
     });
   }
   async unlinkTwitch(token:string){
-    return this.transaction(state=>{const a=this.account(state,token);for(const [channel,s] of Object.entries(state.streamers))if(s.twitchId&&s.wallet===a.wallet)delete state.streamers[channel];delete a.twitch;return {ok:true};});
+    return this.transaction(state=>{const a=this.account(state,token);for(const [channel,s] of Object.entries(state.streamers))if(s.twitchId&&s.wallet===a.wallet)delete state.streamers[channel];delete a.twitch;delete a.botEnabled;delete a.botEpoch;return {ok:true};});
   }
   private streamer(state:State,token:string,key?:string){
     const a=this.account(state,token);if(!a.wallet)throw new Error('Conectá Phantom para usar la consola');
