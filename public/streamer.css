@@ -1,0 +1,36 @@
+/* Public streamer pages: /s/:platform/:login, /join and the OBS overlay. Mobile-first. */
+.streamer-page{max-width:760px;margin:0 auto;padding:16px 14px 48px;color:var(--foreground);font-family:Inter,system-ui,sans-serif;min-height:100dvh;box-sizing:border-box}
+.streamer-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+.streamer-head a[aria-label]{display:inline-flex}
+.streamer-identity{display:flex;align-items:center;gap:12px;margin:14px 0}
+.streamer-identity h1{font-size:22px;font-weight:600;margin:0;overflow-wrap:anywhere}
+.streamer-platform{margin:2px 0 0;font-size:12px;color:var(--muted-foreground)}
+.streamer-avatar{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:var(--secondary);color:var(--foreground);font-weight:600;font-size:20px;flex-shrink:0}
+.streamer-status{display:grid;gap:10px;justify-items:start;padding:28px 4px;color:var(--muted-foreground);font-size:14px}
+.streamer-status p{margin:0}
+.streamer-empty{justify-items:center;text-align:center;padding:40px 12px}
+.streamer-search-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:13px;margin-top:18px}
+.streamer-tools{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px;align-items:center}
+.streamer-tools a{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:13px;padding:8px 12px}
+.streamer-wallet{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-foreground)}
+.streamer-qr{margin:8px auto;padding:12px;background:#fff;border-radius:16px;width:fit-content;box-sizing:content-box}
+.streamer-qr canvas{display:block}
+.streamer-qr figcaption{color:#080808;font-size:11px;text-align:center;margin-top:6px;max-width:200px}
+.join-page{text-align:center;display:grid;justify-items:center;gap:4px;padding-top:48px}
+.join-copy{font-size:20px;font-weight:600;margin:10px 0 0}
+.join-sub{color:var(--muted-foreground);font-size:14px;margin:0 0 10px}
+.join-continue{margin-top:14px;min-height:48px}
+.streamer-direct-link{margin-top:14px;color:var(--muted-foreground);font-size:13px}
+.overlay-page{background:transparent;max-width:none;padding:0}
+.overlay-card{display:inline-grid;justify-items:center;gap:6px;padding:14px;border-radius:20px;background:rgba(0,0,0,.35)}
+.overlay-card .streamer-identity h1{font-size:16px}
+.overlay-card .streamer-identity .streamer-platform{display:none}
+.overlay-card .streamer-avatar{width:34px;height:34px;font-size:15px}
+.overlay-call{color:#fff;font-size:13px;margin:4px 0 0;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+.streamer-fallback{padding:24px;color:#fff}
+.streamer-fallback p{color:var(--muted-foreground)}
+.streamer-form{display:grid;gap:10px;margin:12px 0}
+.streamer-form .form-row{display:flex;gap:8px}
+.streamer-form input{flex:1;min-width:0}
+@media(min-width:640px){.join-page{padding-top:72px}.join-copy{font-size:24px}.streamer-identity h1{font-size:26px}}
+@media(prefers-reduced-motion:reduce){.streamer-page *,.overlay-card *{animation-duration:.01ms!important;transition-duration:.01ms!important}}

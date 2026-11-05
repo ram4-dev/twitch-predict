@@ -16,6 +16,18 @@
       "destination": "/onboarding.html"
     },
     {
+      "source": "/s/:platform/:login",
+      "destination": "/streamer.html"
+    },
+    {
+      "source": "/join/:platform/:login",
+      "destination": "/streamer.html"
+    },
+    {
+      "source": "/overlay/:platform/:login",
+      "destination": "/streamer.html"
+    },
+    {
       "source": "/byte",
       "destination": "/app.html"
     },

@@ -161,6 +161,10 @@ app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.ac
 app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
 app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}/onboarding`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
+// Public streamer pages: the bot, QR codes and search all target /s/twitch/:login.
+app.get(['/s/:platform/:login','/join/:platform/:login','/overlay/:platform/:login'],(_req,res)=>{
+  res.sendFile('streamer.html',{root:`${root}/public`});
+});
 // Named .localhost hosts need HTTPS for Phantom's injected provider.
 app.get(['/app', '/app.html', '/byte'],(req,res,next)=>{
   const origin=process.env.AUTH_ORIGIN;
