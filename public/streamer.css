@@ -1,5 +1,7 @@
 /* Public streamer pages: /s/:platform/:login, /join and the OBS overlay. Mobile-first. */
-.streamer-page{max-width:760px;margin:0 auto;padding:16px 14px 48px;color:var(--foreground);font-family:Inter,system-ui,sans-serif;min-height:100dvh;box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--background);color:var(--foreground);font:14px/1.5 Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.streamer-page{max-width:760px;margin:0 auto;padding:16px 14px 48px;min-height:100dvh}
 .streamer-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
 .streamer-head a[aria-label]{display:inline-flex}
 .streamer-identity{display:flex;align-items:center;gap:12px;margin:14px 0}
@@ -9,7 +11,9 @@
 .streamer-status{display:grid;gap:10px;justify-items:start;padding:28px 4px;color:var(--muted-foreground);font-size:14px}
 .streamer-status p{margin:0}
 .streamer-empty{justify-items:center;text-align:center;padding:40px 12px}
-.streamer-search-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:13px;margin-top:18px}
+.streamer-search-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:13px;margin-top:18px;text-decoration:none}
+.streamer-search-link:hover,.streamer-tools a:hover{color:var(--foreground)}
+.streamer-tools a{text-decoration:none}
 .streamer-tools{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 14px;align-items:center}
 .streamer-tools a{display:inline-flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:13px;padding:8px 12px}
 .streamer-wallet{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted-foreground)}
@@ -29,8 +33,20 @@
 .overlay-call{color:#fff;font-size:13px;margin:4px 0 0;text-shadow:0 1px 2px rgba(0,0,0,.8)}
 .streamer-fallback{padding:24px;color:#fff}
 .streamer-fallback p{color:var(--muted-foreground)}
-.streamer-form{display:grid;gap:10px;margin:12px 0}
-.streamer-form .form-row{display:flex;gap:8px}
-.streamer-form input{flex:1;min-width:0}
+.streamer-form{display:grid;gap:10px;margin:12px 0;max-width:520px}
+.streamer-form .form-row{display:flex;gap:8px;align-items:center}
+.streamer-form input{flex:1;min-width:0;min-height:44px;border:1px solid var(--input);background:var(--muted-surface);color:var(--foreground);border-radius:999px;padding:8px 16px;font:inherit}
+.streamer-form input::placeholder{color:var(--muted-foreground)}
+.streamer-search-feedback{min-height:1.2em;font-size:13px;color:var(--destructive)}
+.streamer-search-feedback:empty{display:none}
+.streamer-results{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px;max-width:520px}
+.streamer-results a{display:grid;gap:2px;padding:12px 16px;background:var(--muted-surface);border:1px solid var(--border);border-radius:14px;color:var(--foreground);text-decoration:none}
+.streamer-results a:hover{border-color:var(--muted-foreground)}
+.streamer-result-name{font-weight:500}
+.streamer-result-meta{font-size:12px;color:var(--muted-foreground)}
+.streamer-result-empty{padding:12px 16px;color:var(--muted-foreground);font-size:13px}
+.landing-search{max-width:620px;margin:48px auto;padding:0 16px 56px}
+.landing-search h2{font-size:20px;margin:0 0 4px}
+.landing-search p{color:var(--muted-foreground);font-size:13px;margin:0 0 8px}
 @media(min-width:640px){.join-page{padding-top:72px}.join-copy{font-size:24px}.streamer-identity h1{font-size:26px}}
 @media(prefers-reduced-motion:reduce){.streamer-page *,.overlay-card *{animation-duration:.01ms!important;transition-duration:.01ms!important}}
