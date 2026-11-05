@@ -1,7 +1,25 @@
 import {useEffect,useState} from 'react';
-import {ArrowRight,Check,Loader2} from 'lucide-react';
+import {ArrowRight,Check,Loader2,Share2,Download,Link2,MonitorSmartphone} from 'lucide-react';
 import {PlotLogo,PlotMascot} from './components/plot.js';
 import {Button} from './components/button.js';
+import {drawQr} from './streamer-page.js';
+
+/** Share tools for the linked channel: /join link, QR PNG for OBS and the OBS source URL. */
+export function StreamerTools({login}:{login:string}){
+ const origin=location.origin;
+ const copy=async(value:string,label:string)=>{try{await navigator.clipboard.writeText(value);}catch{window.prompt(`Copiá ${label}:`,value);}};
+ const downloadQr=async()=>{
+  const canvas=document.createElement('canvas');
+  await drawQr(canvas,`${origin}/s/twitch/${login}`);
+  const link=document.createElement('a');link.download=`plot-qr-${login}.png`;link.href=canvas.toDataURL('image/png');link.click();
+ };
+ return <div className="streamer-tools">
+  <Button variant="ghost" onClick={()=>void copy(`${origin}/join/twitch/${login}`,'el enlace del canal')}><Share2 size={15}/>Copiar enlace para compartir</Button>
+  <Button variant="ghost" onClick={()=>void downloadQr()}><Download size={15}/>Descargar QR</Button>
+  <Button variant="ghost" onClick={()=>void copy(`${origin}/overlay/twitch/${login}`,'la URL para OBS')}><Link2 size={15}/>Copiar URL para OBS</Button>
+  <a href={`/s/twitch/${login}`}><MonitorSmartphone size={15}/>Ver mis predicciones</a>
+ </div>;
+}
 
 type Provider={isPhantom?:boolean;connect(options?:{onlyIfTrusted?:boolean}):Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
 type Account={wallet:string|null;twitch?:{login:string;displayName:string}|null};
@@ -50,6 +68,8 @@ export function StreamerOnboarding(){
   <li><div><strong>Canal de Twitch</strong><p>{account?.twitch?`@${account.twitch.login}`:configured===false?'La conexión con Twitch todavía no está configurada.':'Verificá que el canal es tuyo.'}</p></div>{account?.twitch?<Check aria-label="Conectado" size={20}/>:<Button variant="outline" disabled={!account?.wallet||configured!==true||!!busy} onClick={()=>void connectTwitch()}>Conectar Twitch</Button>}</li>
   <li><div><strong>Bot plotfun</strong><p aria-live="polite">{!account?.twitch?'Vinculá tu canal para agregar el bot.':bot?.enabled?bot.phase==='connected'?'Conectado al chat. Probá !plot.':bot.error??(bot.available?'Conectando con el chat…':'El servicio está esperando la autorización de plotfun.'):'Anuncia predicciones y responde a !plot en tu chat.'}</p></div><Button variant="outline" disabled={!account?.twitch||bot?.configured!==true||!!busy} onClick={()=>void toggleBot()}>{bot?.enabled?'Quitar bot':'Agregar bot'}</Button></li></ol>
   {busy&&<p role="status"><Loader2 size={16} className="animate-spin"/> {busy}</p>}{error&&<p className="auth-error" role="alert">{error}</p>}
-  {account?.twitch&&<div className="streamer-finish">{watching?<p role="status">Tu canal está en seguimiento. Las predicciones elegibles se replicarán en devnet.</p>:<Button className="auth-primary" disabled={!!busy} onClick={()=>void register()}>Activar seguimiento <ArrowRight size={16}/></Button>}<a href={`/app?channel=${encodeURIComponent(account.twitch.login)}`}>Ver mercados de mi canal →</a></div>}
+  {account?.twitch&&<div className="streamer-finish">{watching?<p role="status">Tu canal está en seguimiento. Las predicciones elegibles se replicarán en devnet.</p>:<Button className="auth-primary" disabled={!!busy} onClick={()=>void register()}>Activar seguimiento <ArrowRight size={16}/></Button>}
+   <StreamerTools login={account.twitch.login}/>
+   <a href={`/app?channel=${encodeURIComponent(account.twitch.login)}`}>Ver mercados de mi canal →</a></div>}
   <p className="auth-note">La firma de acceso no envía una transacción. Las apuestas usan SOL de devnet.</p></section></main>;
 }
