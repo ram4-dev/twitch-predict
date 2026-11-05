@@ -38,3 +38,16 @@ test('exact channel matching keeps foo markets away from the foobar viewer',()=>
   assert.deepEqual(foo,['a','c']);
   assert.deepEqual(exactVisible(markets,'foobar').map(m=>m.id),['b']);
 });
+
+test('Phantom browse links wrap only same-origin http(s) targets and preserve public intention',async()=>{
+  const {phantomBrowseUrl}=await import('../src/ui/streamer-page.js');
+  const origin='https://twitch-predict.localhost:1358';
+  // The function resolves targets against location.origin, so stub a browser origin.
+  const locationStub={origin} as unknown as Location;
+  const saved=globalThis.location;Object.defineProperty(globalThis,'location',{value:locationStub,configurable:true});
+  try{
+    assert.equal(phantomBrowseUrl('/s/twitch/eggsterr?market=pm_1'),`https://phantom.com/ul/browse/${encodeURIComponent(`${origin}/s/twitch/eggsterr?market=pm_1`)}?ref=${encodeURIComponent(origin)}`);
+    for(const target of ['https://evil.example/s/twitch/eggsterr','javascript:alert(1)','//evil.example/x'])
+      assert.throws(()=>phantomBrowseUrl(target),/Destino de wallet inválido/);
+  }finally{if(saved)Object.defineProperty(globalThis,'location',{value:saved,configurable:true});}
+});

@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Download,Link2,MonitorSmartphone,ExternalLink,Share2} from 'lucide-react';
-import {channelFromPath,StreamerIdentity,QrBlock,SearchLink,StreamerMarket,StreamerStates,useMarketStream,restoreWallet,WalletButton,connectWallet,drawQr,walletError,type StreamerChannel} from './streamer-page.js';
+import {channelFromPath,StreamerIdentity,QrBlock,SearchLink,StreamerMarket,StreamerStates,useMarketStream,restoreWallet,WalletButton,connectWallet,drawQr,walletError,phantomBrowseUrl,readIntention,type StreamerChannel} from './streamer-page.js';
 import {type ByteConfig,type DisplayByteMarket} from '../byte-model.js';
 import type {TwitchPreview} from '../twitch-preview.js';
 import {TwitchMarketPreview} from './byte-market.js';
@@ -83,6 +83,14 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
     catch(e){setError(walletError(e));}
     finally{setBusy(false);}
   };
+  // Opening Phantom's in-app browser carries the channel and bet intention as public
+  // parameters; no tokens ride the link, and the user re-confirms before signing.
+  const openPhantom=()=>{
+    const intention=new URLSearchParams(readIntention());
+    const params=intention.toString();
+    try{location.assign(phantomBrowseUrl(`${location.pathname}${params?`?${params}`:''}`));}
+    catch(e){setError((e as Error).message);}
+  };
   const share=`/join/${channel.platform}/${channel.login}`;
   const copy=async(value:string,label:string)=>{
     try{await navigator.clipboard.writeText(value);setError('');}
@@ -96,7 +104,7 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
   const visible=state.markets.filter(m=>m.status==='open');
   const closed=state.markets.filter(m=>m.status!=='open');
   return <main className="streamer-page" ref={node=>{if(node)enhanceGlowStage(node);}}>
-    <header className="streamer-head"><a href="/" aria-label="plot, inicio"><PlotLogo/></a><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()}/></header>
+    <header className="streamer-head"><a href="/" aria-label="plot, inicio"><PlotLogo/></a><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/></header>
     <div className="byte-connection"><span>SOL devnet · sin dinero real</span></div>
     <StreamerIdentity login={channel.login}/>
     <div className="streamer-tools">
@@ -107,7 +115,7 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
     </div>
     {error&&<p role="alert">{error}</p>}
     <StreamerStates login={channel.login} loading={state.loading} loadError={state.error} markets={state.markets} previews={state.previews}>
-      {visible.map(m=><StreamerMarket key={m.id} market={m} config={config} wallet={wallet} disabled={busy} onDone={refresh}/>)}
+      {visible.map(m=><StreamerMarket key={m.id} market={m} config={config} wallet={wallet} disabled={busy} intention={readIntention()} onDone={refresh}/>)}
       {state.previews.map(item=><div className="market-card byte-market" key={`preview:${item.prediction.channel}:${item.prediction.id}`}><TwitchMarketPreview item={item}/></div>)}
       {closed.length>0&&<section><h2 className="byte-subheading">Predicciones cerradas</h2>{closed.map(m=><StreamerMarket key={m.id} market={m} config={config} wallet={wallet} disabled onDone={refresh}/>)}</section>}
     </StreamerStates>

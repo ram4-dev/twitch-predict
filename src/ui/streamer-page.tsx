@@ -76,8 +76,13 @@ export function QrBlock({value,size=180,label}:{value:string;size?:number;label:
 }
 
 /** Bets on the public channel page: connect when the viewer wants to stake, keep their selection. */
-export function StreamerMarket({market:m,config,wallet,disabled,onDone}:{market:DisplayByteMarket;config?:ByteConfig;wallet:string;disabled:boolean;onDone:()=>Promise<void>}){
-  const [selection,setSelection]=useState<ByteSelection>({amount:'0.01',option:0}),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failed,setFailed]=useState(false);
+export function StreamerMarket({market:m,config,wallet,disabled,onDone,intention}:{market:DisplayByteMarket;config?:ByteConfig;wallet:string;disabled:boolean;onDone:()=>Promise<void>;intention?:{market?:string;option?:string;amount?:string}}){
+  const restored=intention?.market===m.id?intention:undefined;
+  const initial=restored?{
+    amount:/^\d+(\.\d{1,9})?$/.test(restored.amount??'')?restored.amount!:'0.01',
+    option:Number.isInteger(Number(restored.option))&&Number(restored.option)>=0&&Number(restored.option)<m.options.length?Number(restored.option):0,
+  }:undefined;
+  const [selection,setSelection]=useState<ByteSelection>(initial??{amount:'0.01',option:0}),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[failed,setFailed]=useState(false);
   const bet=async(next:ByteSelection)=>{
     setSelection(next);
     if(!wallet){setMessage('Conectá tu wallet para apostar.');return;}
@@ -108,7 +113,7 @@ export function StreamerStates({login,loading,loadError,markets,previews,childre
 /** Minimal connect flow for the public page: Phantom sign-in without extension pairing. */
 export async function connectWallet():Promise<string>{
   const provider=phantom() as ReturnType<typeof phantom>&{isPhantom?:boolean;signMessage?:(message:Uint8Array,display:string)=>Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
-  if(!provider?.isPhantom||!provider.signMessage)throw new Error('No detectamos una wallet en este navegador. Abrí esta página en el navegador de Phantom o instalá Phantom en tu celu.');
+  if(!provider?.isPhantom||!provider.signMessage)throw new Error('No detectamos una wallet en este navegador. Tocá "Abrir en Phantom" para continuar en su navegador integrado.');
   const result=await provider.connect(),address=result.publicKey.toString();
   const challenge=await request<{challengeId:string;message:string}>('/auth/challenge',{address});
   const proof=await provider.signMessage(new TextEncoder().encode(challenge.message),'utf8');
@@ -116,6 +121,27 @@ export async function connectWallet():Promise<string>{
   const login=await request<{token:string}>('/auth/verify',{challengeId:challenge.challengeId,signature:btoa(String.fromCharCode(...proof.signature))});
   localStorage.setItem('pointsToken',login.token);
   return address;
+}
+
+/**
+ * Mobile wallet transport: Phantom's documented `browse` universal link opens the
+ * same channel page inside Phantom's in-app browser, where the injected provider
+ * exists. Intention (channel/market/option/amount) travels in public query
+ * parameters only — never tokens — because the regular browser and the in-app
+ * browser do not share localStorage or session.
+ * https://docs.phantom.com/phantom-deeplinks/other-methods/browse
+ */
+export function phantomBrowseUrl(target:string):string{
+  const url=new URL(target,location.origin);
+  if(url.origin!==location.origin||url.protocol!=='https:'&&url.protocol!=='http:')throw new Error('Destino de wallet inválido.');
+  return `https://phantom.com/ul/browse/${encodeURIComponent(url.href)}?ref=${encodeURIComponent(location.origin)}`;
+}
+
+/** Reads the preserved bet intention from public query parameters; internal paths only. */
+export function readIntention():{market?:string;option?:string;amount?:string}{
+  const query=new URLSearchParams(location.search);
+  const value=(key:string)=>{const raw=query.get(key);return raw&&/^[A-Za-z0-9_.:-]{1,64}$/.test(raw)?raw:undefined;};
+  return {market:value('market'),option:value('option'),amount:value('amount')};
 }
 
 export async function restoreWallet():Promise<string>{
@@ -129,8 +155,9 @@ export async function restoreWallet():Promise<string>{
   }
 }
 
-export function WalletButton({wallet,busy,onConnect}:{wallet:string;busy:boolean;onConnect:()=>void}){
+export function WalletButton({wallet,busy,onConnect,onOpenPhantom}:{wallet:string;busy:boolean;onConnect:()=>void;onOpenPhantom?:()=>void}){
   const provider=phantom();
   if(wallet)return <span className="streamer-wallet" title={wallet}><Wallet size={15}/>{short(wallet)}</span>;
-  return <Button variant="outline" disabled={busy} onClick={onConnect}><Wallet size={15}/>{provider?.isPhantom?'Conectar wallet':'Abrir en Phantom'}</Button>;
+  if(provider?.isPhantom)return <Button variant="outline" disabled={busy} onClick={onConnect}><Wallet size={15}/>Conectar wallet</Button>;
+  return <Button variant="outline" disabled={busy} onClick={onOpenPhantom??(()=>location.assign('https://phantom.com/download'))}><Wallet size={15}/>Abrir en Phantom</Button>;
 }
