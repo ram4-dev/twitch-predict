@@ -2,6 +2,7 @@ import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
 import {Points} from '../points.js';
 import {closesAt,type Prediction} from '../prediction.js';
+import {joinPath} from '../public-paths.js';
 import type {Documents} from './documents.js';
 
 type Config={clientId:string;clientSecret:string;origin:string;login?:string};
@@ -95,7 +96,7 @@ export class CloudTwitchBot {
   return {status:204,body:''};
  }
  private prune(s:Runtime){for(const [key,at] of Object.entries(s.events))if(at<this.now()-600_000)delete s.events[key];const events=Object.entries(s.events).sort((a,b)=>b[1]-a[1]);for(const [key] of events.slice(5000))delete s.events[key];for(const [key,job] of Object.entries(s.outbox))if(!key.startsWith('welcome:')&&job.createdAt<this.now()-86400_000)delete s.outbox[key];}
- private channelUrl(login:string){return `${this.config.origin}/app?channel=${encodeURIComponent(login)}`;}
+ private channelUrl(login:string){return `${this.config.origin}${joinPath('twitch',login)}`;}
  private async accessToken(){
   if(this.appToken&&this.appToken.expires>this.now()+60_000)return this.appToken.value;
   const r=await this.request('https://id.twitch.tv/oauth2/token',{method:'POST',body:new URLSearchParams({client_id:this.config.clientId,client_secret:this.config.clientSecret,grant_type:'client_credentials'}),signal:AbortSignal.timeout(10000)});
