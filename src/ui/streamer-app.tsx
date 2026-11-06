@@ -19,11 +19,14 @@ export function useChannelData(login:string|undefined){
   const reload=useRef(async()=>{
     if(!login)return;
     try{
-      const status=await fetch('/api/byte/status').then(r=>r.json());
-      if(!status.configured){setState({loading:false,error:'',markets:[],previews:[]});return;}
-      const both=await fetch('/api/byte/markets').then(r=>r.json());
-      const reconciled=reconcileBytePredictions(both.markets??[],(both.predictions??[]) as TwitchPreview[],login);
-      setState({loading:false,error:'',markets:reconciled.markets,previews:reconciled.predictions});
+      // The public points feed always exists; byte-mode errors surface only for betting actions.
+      const both=await fetch('/api/markets').then(r=>r.json());
+      const markets=(Array.isArray(both)?both:[]).filter(m=>m.prediction?.channel?.toLowerCase()===login);
+      // SAFETY: the points feed returns the same market shape (options, pools, phase, prediction) the betting UI reads.
+      const shaped=markets as unknown as DisplayByteMarket[];
+      const open=shaped.filter(m=>m.status!=='resolved'&&m.status!=='invalid');
+      const closed=shaped.filter(m=>m.status==='resolved'||m.status==='invalid');
+      setState({loading:false,error:'',markets:open,previews:[]});
     }catch(e){setState({loading:false,error:(e as Error).message,markets:[],previews:[]});}
   });
   useMarketStream(()=>void reload.current());
