@@ -21,10 +21,9 @@ export function useChannelData(login:string|undefined){
     try{
       const status=await fetch('/api/byte/status').then(r=>r.json());
       if(!status.configured){setState({loading:false,error:'',markets:[],previews:[]});return;}
-      const mobile=await fetch(`/api/mobile/channels/${encodeURIComponent(login)}`).then(r=>r.json());
       const both=await fetch('/api/byte/markets').then(r=>r.json());
       const reconciled=reconcileBytePredictions(both.markets??[],(both.predictions??[]) as TwitchPreview[],login);
-      setState({loading:false,error:'',markets:reconciled.markets.length?reconciled.markets:mobile.markets??[],previews:reconciled.predictions});
+      setState({loading:false,error:'',markets:reconciled.markets,previews:reconciled.predictions});
     }catch(e){setState({loading:false,error:(e as Error).message,markets:[],previews:[]});}
   });
   useMarketStream(()=>void reload.current());
