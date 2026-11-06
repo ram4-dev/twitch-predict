@@ -33,7 +33,7 @@ const waitlist=new Waitlist(directory);await waitlist.load();
 
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
-  if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
+  if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1','twitch-predict.local'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
   const origin=req.headers.origin;
   if(origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(origin)&&origin!==`${req.protocol}://${req.get('host')}`){res.status(403).json({error:'Untrusted origin'});return;}
   // A local POC with anonymous points: never allow a foreign website to create accounts or place bets.
