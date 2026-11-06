@@ -15,14 +15,14 @@ test('install → Phantom signature → automatic extension link → dashboard; 
     await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url(),{timeout:15000}).toBeTruthy();
     const onboarding=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;await onboarding.reload();
     await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL(`${base}/app#markets`);
-    await expect(onboarding.locator('#own-balance')).toHaveText('10.000');
+    await expect(onboarding.locator('#own-balance')).toHaveText('10.000 pts');
     const web=await onboarding.evaluate(async()=>{const r=await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}});return r.json();});
     const ext=await worker.evaluate(async url=>{const s=await (globalThis as unknown as {chrome:{storage:{local:{get(keys:string[]):Promise<{pointsToken:string;bridgeToken:string;pendingAuth:unknown}>}}}}).chrome.storage.local.get(['pointsToken','bridgeToken','pendingAuth']);const r=await fetch(`${url}/api/points/me`,{headers:{Authorization:`Bearer ${s.pointsToken}`}});return {account:await r.json(),paired:!!s.bridgeToken,pending:s.pendingAuth};},base);
     expect(ext.account.id).toBe(web.id);expect(ext.account.wallet).toBe(wallet.address);expect(ext.paired).toBe(true);expect(ext.pending).toBeNull();
     const created=await onboarding.evaluate(async()=>{const {token}=await(await fetch('/api/pair')).json();return(await fetch('/api/demo',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:'{}'})).json();});
-    await onboarding.reload();const card=onboarding.locator(`[data-key="${created.key}"]`);await card.getByLabel('Puntos a apostar').fill('400');await card.getByRole('button',{name:'Apostar a Gana',exact:true}).click();await expect(onboarding.locator('#own-balance')).toHaveText('9.600');
+    await onboarding.reload();await onboarding.getByRole('combobox',{name:'Buscar streamer'}).fill('demo_streamer');await onboarding.getByRole('option').filter({hasText:'@demo_streamer'}).click();const card=onboarding.locator(`[data-key="${created.key}"]`);await card.getByRole('button',{name:'Apostar a Gana',exact:true}).click();await onboarding.getByLabel('Puntos a apostar',{exact:true}).fill('400');await onboarding.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(onboarding.locator('#own-balance')).toHaveText('9.600 pts');
     const id=new URL(worker.url()).host;const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.locator('#own-balance')).toHaveText('9,600');await expect(popup.locator('#login')).toBeHidden();await expect(popup.locator('#history')).toContainText('400 pts');
-    const otherContext=await browser.newContext();try{const other=await otherContext.newPage();await phantomProvider(other,wallet);await other.goto(`${base}/onboarding`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL(`${base}/app#markets`);await expect(other.locator('#own-balance')).toHaveText('9.600');await other.getByRole('link',{name:'Mis apuestas',exact:true}).click();await expect(other.locator('#history')).toContainText('400 pts');}finally{await otherContext.close();}
+    const otherContext=await browser.newContext();try{const other=await otherContext.newPage();await phantomProvider(other,wallet);await other.goto(`${base}/onboarding`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL(`${base}/app#markets`);await expect(other.locator('#own-balance')).toHaveText('9.600 pts');await other.getByRole('button',{name:'Mis jugadas',exact:true}).click();await expect(other.locator('.phone-bets')).toContainText('400 pts');}finally{await otherContext.close();}
     await onboarding.screenshot({path:'test-results/phantom-linked-dashboard.png',fullPage:true});
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
@@ -35,7 +35,7 @@ test('login uses a server challenge; a forged signature cannot create a session 
   await page.goto('/onboarding');const wallet=testWallet();
   const result=await page.evaluate(async address=>{const c=await(await fetch('/api/auth/challenge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})})).json();const r=await fetch('/api/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({challengeId:c.challengeId,signature:btoa(String.fromCharCode(...new Uint8Array(64)))})});return {status:r.status,body:await r.json()};},wallet.address);
   expect(result.status).toBe(400);expect(result.body.token).toBeUndefined();expect(result.body.error).toContain('firma');
-  await signIn(page);await expect(page.locator('#own-balance')).toHaveText('10.000');
+  await signIn(page);await expect(page.locator('#own-balance')).toHaveText('10.000 pts');
 });
 
 test('cross-site document links can open consoles while API requests stay blocked',async({request})=>{

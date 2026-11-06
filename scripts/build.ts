@@ -22,6 +22,8 @@ await build({entryPoints:['src/extension-page-wallet.ts'],outfile:'extension/pag
 await build({entryPoints:['src/ui/byte-ui.tsx'],outfile:'public/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/extension-search.tsx'],outfile:'extension/channel-search.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/byte-market.tsx'],outfile:'extension/byte-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['src/ui/mobile-app.tsx'],outfile:'public/mobile-app.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
+await build({entryPoints:['src/ui/navbar-options.tsx'],outfile:'public/navbar-options.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/catalog.tsx'],outfile:'public/catalog.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/resolution.tsx'],outfile:'public/resolution.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/payout-showcase.tsx'],outfile:'public/payout-showcase.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
@@ -30,6 +32,7 @@ await build({entryPoints:['src/ui/surfaces.tsx'],outfile:'public/surfaces.js',pl
 await cp('node_modules/@paper-design/shaders/LICENSE','public/brand/Paper-Shaders-LICENSE.txt');
 await cp('node_modules/@paper-design/shaders/NOTICE','public/brand/Paper-Shaders-NOTICE.txt');
 await cp('src/ui/components/LICENSE.materials','public/brand/Materials-LICENSE.txt');
+await cp('src/ui/vendor/opaline/LICENSE','public/brand/Opaline-LICENSE.txt');
 await cp('public/brand','extension/brand',{recursive:true});
 await cp('public/surfaces.js','extension/surfaces.js');
 await cp('public/fonts','extension/fonts',{recursive:true});

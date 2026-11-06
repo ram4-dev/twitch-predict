@@ -56,6 +56,7 @@ function setView(){
   $('#market-section').hidden=view!=='markets';$('#history').hidden=view!=='history';$('#streamer').hidden=view!=='streamer';$('#channels').hidden=!operator;$('#streamer-channels').hidden=!(operator||view==='streamer');
   document.querySelectorAll('[data-view]').forEach(a=>{if(a.dataset.view===(operator?'channels':view))a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
   $('#page-title').textContent=operator?'Canales y extensión':view==='streamer'?'Consola del streamer':view==='history'?'Mis apuestas':'Predicciones de la comunidad';
-  $('#page-description').textContent=operator?'Elegí qué comunidades seguir. Cada apuesta abierta se replica automáticamente.':view==='streamer'?'Estado y resultados de los mercados de tus canales, sincronizados con Twitch.':view==='history'?'Tus puntos en juego y los resultados de tus apuestas.':'Las mismas opciones del stream. Un pozo propio para jugar.';
+  $('#page-description').textContent=operator?'Elegí qué comunidades seguir. Cada apuesta abierta se replica automáticamente.':view==='streamer'?'Estado y resultados de los mercados de tus canales, sincronizados con Twitch.':view==='history'?'Tus puntos en juego y los resultados de tus apuestas.':'';
+  $('#page-description').hidden=view==='markets';
 }
-window.addEventListener('hashchange',setView);setView();
+window.addEventListener('hashchange',()=>{setView();window.scrollTo({top:0,behavior:'instant'});});setView();

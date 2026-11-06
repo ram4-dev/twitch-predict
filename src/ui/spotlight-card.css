@@ -1,5 +1,6 @@
 /* Spotlight Card / EaseMize: translucent face, colored border light and white hotspot.
    Automatic height preserves every outcome, stake field and settlement message. */
+:root{--plot-card-surface:rgb(24 24 24 / .78);--plot-card-blur:5px}
 .plot-glow-card,
 .plot-glow-card.plot-spotlight {
   --glow-color: 255 112 73;
@@ -9,8 +10,8 @@
   isolation: isolate;
   border: 1px solid rgb(255 255 255 / .18);
   border-radius: 20px;
-  background: rgb(24 24 24 / .78);
-  backdrop-filter: blur(5px); /* taste-skill-ignore: translucent card explicitly selected by user. */
+  background: var(--plot-card-surface);
+  backdrop-filter: blur(var(--plot-card-blur)); /* taste-skill-ignore: translucent card explicitly selected by user. */
 }
 .plot-glow-card::before,
 .plot-glow-card::after {
@@ -82,3 +83,9 @@
 @media (forced-colors: active) {
   .plot-glow-stage::before { display: none; }
 }
+
+/* App panels reuse the extension surface without its outlined rim. */
+body:has(#markets) .plot-translucent-panel{border:0;background:var(--plot-card-surface);backdrop-filter:blur(var(--plot-card-blur));box-shadow:none}
+body:has(#markets) .plot-translucent-panel.plot-glow-card::before{display:none}
+body:has(#markets) :is(.points-option,.position-outcomes>div){border:0;background:rgb(20 20 20 / .4);box-shadow:none}
+@media(forced-colors:active){body:has(#markets) .plot-translucent-panel{outline:1px solid CanvasText}}

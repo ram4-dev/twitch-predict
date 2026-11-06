@@ -8,7 +8,17 @@ test('landing uses current balloon artwork and previews a prediction locally',as
   await page.goto('/');
   await expect(page.getByRole('heading',{level:1})).toHaveText('El stream juega.Vos elegís.');
   await expect(page.locator('.plot-balloon-wordmark')).toHaveAttribute('data-renderer','balloon');
-  await expect(page.locator('.plot-latex-field')).toHaveAttribute('data-ready','true');
+  await expect(page.locator('.plot-latex-field')).toHaveCount(0);
+  await expect(page.locator('body')).toHaveCSS('background-color','rgb(0, 0, 0)');
+  await expect(page.locator('.landing-header img')).toHaveAttribute('src','/brand/plot-logo-transparent.png');
+  const fade=()=>page.locator('.landing').evaluate(el=>{const style=getComputedStyle(el,'::before');return {animation:style.animationName,pointer:style.pointerEvents,background:style.backgroundImage};});
+  expect(await fade()).toMatchObject({animation:'none',pointer:'none'});
+  expect((await fade()).background).toContain('radial-gradient');
+  await page.mouse.move(110,180);
+  await expect(page.locator('.landing')).toHaveAttribute('data-pointer-active','true');
+  await expect.poll(()=>page.locator('.landing').evaluate(el=>getComputedStyle(el,'::after').opacity)).toBe('1');
+  await page.mouse.move(250,220);
+  expect(await page.locator('.landing').evaluate(el=>el.style.getPropertyValue('--pointer-x'))).toBe('250px');
   await expect(page.getByRole('img',{name:'Plot!',exact:true})).toHaveCount(3);
   await expect(page.locator('.plot-halftone,.plot-o')).toHaveCount(0);
   const preview=page.getByLabel('Predicción de ejemplo');
@@ -27,8 +37,11 @@ test('landing uses current balloon artwork and previews a prediction locally',as
     await page.screenshot({path:`test-results/landing-${width}.png`,fullPage:true});
   }
   await page.emulateMedia({reducedMotion:'reduce'});
+  expect((await fade()).animation).toBe('none');
+  await expect(page.locator('.landing')).not.toHaveAttribute('data-pointer-active','true');
+  expect(await page.locator('.landing').evaluate(el=>getComputedStyle(el,'::after').display)).toBe('none');
   await expect(page.locator('.plot-balloon-wordmark')).toHaveAttribute('data-renderer','image');
-  await expect(page.locator('.plot-latex-field')).toHaveAttribute('data-reduced','true');
+  await expect(page.locator('.plot-latex-field')).toHaveCount(0);
   expect(writes).toEqual([]);expect(errors).toEqual([]);
   await expect(page.getByRole('link',{name:'Entrar a la waitlist'})).toHaveCount(2);
   await expect(page.getByRole('textbox',{name:'Sumate a la waitlist'})).toBeVisible();
@@ -70,7 +83,7 @@ test('root is the landing, app has its own route and existing section links keep
   await page.goto('/');await expect(page.getByRole('form',{name:'Lista de espera'})).toBeVisible();
   await expect(page.locator('#markets')).toHaveCount(0);
   await page.goto('/landing');await expect(page.getByRole('form',{name:'Lista de espera'})).toBeVisible();
-  await page.goto('/app');await expect(page.locator('#markets')).toBeAttached();await expect(page.locator('#waitlist')).toHaveCount(0);
+  await page.goto('/app');await expect(page.locator('.phone-search-wrap')).toBeAttached();await expect(page.locator('#waitlist')).toHaveCount(0);
   await page.goto('/#history');await expect(page).toHaveURL(/\/app#history$/);await expect(page.getByRole('heading',{level:1})).toHaveText('Mis apuestas');
   await page.goto('/?channel=eggsterr');await expect(page).toHaveURL(/\/app\?channel=eggsterr$/);
   await page.goto('/#waitlist');await expect(page).toHaveURL(/\/#waitlist$/);await expect(page.getByRole('form',{name:'Lista de espera'})).toBeVisible();
