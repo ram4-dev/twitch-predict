@@ -8,6 +8,28 @@ La integración de mercados con byte está en [BYTE_MARKETS.md](BYTE_MARKETS.md)
 
 Extensión Chrome que replica predicciones de Twitch y permite apostar puntos internos. Phantom identifica al usuario mediante una firma; saldo, apuestas, resultado y cobro siguen offchain.
 
+## Acceso web móvil: buscar streamer, QR y OBS
+
+Las predicciones de un canal se consultan sin instalar la extensión:
+
+- `/` — home con búsqueda pública ("Buscá a tu streamer"). Acepta nombre, `@usuario` o enlace canónico de Twitch; los resultados abren la página del canal. Buscar y visitar no registran canales ni crean mercados.
+- `/s/twitch/:login` — página pública del canal: predicciones abiertas, selección, importe y confirmación con la wallet, estados de cierre/resultado y error diferenciados. Muestra exactamente los mercados de ese login (coincidencia exacta).
+- `/join/twitch/:login` — enlace que comparte el bot. En PC muestra el QR y el botón "Continuar en este dispositivo"; en el celular abre directo la página del canal (`?desktop=1` fuerza la vista de QR).
+- `/overlay/twitch/:login` — fuente de navegador para OBS: QR compacto con fondo claro detrás y fondo transparente alrededor, sin animaciones. No requiere sesión.
+- `/app?channel=:login` — panel anterior, sigue operativo.
+
+El QR se genera localmente (sin recursos externos) y siempre apunta a `/s/twitch/:login`; nunca a `/join` ni al overlay. Los enlaces públicos no transportan sesiones ni tokens.
+
+En el panel del canal vinculado: **Copiar enlace para compartir**, **Descargar QR** (PNG con el destino directo), **Copiar URL para OBS** y **Ver mis predicciones**.
+
+### Participar desde el celular
+
+El flujo inyectado de escritorio no cambia. En el celular, si no hay proveedor, el botón **Abrir en Phantom** usa el universal link documentado de Phantom (`phantom.com/ul/browse/...`) para continuar en el navegador integrado de la wallet, donde el proveedor inyectado sí existe. La intención (canal, mercado, opción, importe) viaja en parámetros públicos de la URL; no se transportan tokens y la apuesta nunca se envía sola: al volver, la página revalida cierre y opción, y el usuario confirma antes de firmar. No asumimos localStorage compartido entre Safari/Chrome y el navegador de Phantom.
+
+### Apuestas por chat (!yes / !no / !N)
+
+Cualquier persona puede vincular su cuenta de Twitch con su cuenta de Plot desde el onboarding, sin necesidad de wallet. Con el vínculo activo, escribir `!yes`, `!no` o `!1`–`!6` en el chat de un canal con predicción abierta apuesta 100 puntos del saldo interno de Plot (las cuentas nuevas empiezan con 10.000). El bot responde con la confirmación; los comandos repetidos por Twitch se deduplican y los canales sin predicción abierta reciben un aviso. La liquidación del pozo interno es el modelo de puntos existente; el movimiento de fondos reales entre cuentas queda definido más adelante.
+
 ## Recorrido del usuario
 
 1. Instala la extensión. Se abre automáticamente el onboarding.

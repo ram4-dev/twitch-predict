@@ -10,6 +10,8 @@ async function seedTwitch(predictions:unknown[]){const file=resolve('test-result
 
 /** Seeds a market through the local operator route (same path byte.e2e.ts uses). */
 async function seedMarket(request:APIRequestContext,base:string,channel:string,title='¿Gana la próxima partida?'){
+  // Playwright wipes test-results at startup; the byte fixture file must exist before seeding.
+  await writeFile(resolve('test-results/byte-fixture.json'),JSON.stringify({markets:[],signatures:{},broadcasts:0,resolutions:0,invalidations:0,syncs:0}),{flag:'wx'}).catch(()=>{});
   const response=await request.post(`${base}/api/byte/markets`,{headers:{'x-operator-token':(await readFile(resolve('artifacts/bridge-token'),'utf8')).trim(),host:new URL(base).host,'sec-fetch-site':'same-origin',origin:base},data:{channel,title,options:['Sí','No'],currency:'sol',windowSecs:600,rules:'Gana si el marcador final muestra victoria. Evidencia: VOD del canal.',requestId:randomUUID()}});
   expect(response.ok()).toBe(true);
   return (await response.json()) as {market:DisplayByteMarket};
@@ -88,8 +90,8 @@ test.describe('public streamer web',()=>{
     await page.goto(`${base}/#streamer-search`);
     await page.getByLabel('Buscar streamer').fill(`https://www.twitch.tv/${channel}?ref=home`);
     await page.getByRole('button',{name:'Buscar',exact:true}).click();
-    await expect(page.getByRole('link',{name:/Eggsterr/}).first()).toBeVisible();
-    await page.getByRole('link',{name:/Eggsterr/}).first().click();
+    await expect(page.getByRole('link',{name:/@eggsterr/}).first()).toBeVisible();
+    await page.getByRole('link',{name:/@eggsterr/}).first().click();
     await expect(page).toHaveURL(new RegExp(`/s/twitch/${channel}$`));
     // A public search and visit must not create watch registrations.
     const watched=await page.request.get(`${base}/api/byte/twitch/channels`).then(r=>r.json());
