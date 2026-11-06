@@ -29,7 +29,7 @@ test('provider cancellation, wrong client, conflicting identity and exchange err
   assert.throws(()=>new TwitchAuth(p,{...config,clientSecret:''}).start(a.token),/configurar/);
 }));
 test('one Twitch identity cannot own two wallets; unlink revokes console permissions and preserves balance/history',()=>fixture(async(p,dir)=>{
-  const a=await p.walletLogin('wallet-a'),b=await p.walletLogin('wallet-b');await p.linkTwitch(a.token,identity);await assert.rejects(p.linkTwitch(b.token,identity),/otra wallet/);await assert.rejects(p.assignStreamer('somebody_else','wallet-a'),/Twitch/);
+  const a=await p.walletLogin('wallet-a'),b=await p.walletLogin('wallet-b');await p.linkTwitch(a.token,identity);await assert.rejects(p.linkTwitch(b.token,identity),/otra cuenta de Plot/);await assert.rejects(p.assignStreamer('somebody_else','wallet-a'),/Twitch/);
   const raw=JSON.parse(await readFile(`${dir}/points.json`,'utf8'));raw.streamers.unverified={channel:'unverified',wallet:'wallet-b',assignedAt:new Date().toISOString()};await writeFile(`${dir}/points.json`,JSON.stringify(raw));const loaded=new Points(dir);await loaded.load();assert.deepEqual(loaded.me(b.token).streamerChannels,[]);assert.deepEqual(loaded.streamerConsole(b.token).channels,[]);
   await p.unlinkTwitch(a.token);assert.equal(p.me(a.token).twitch,null);assert.deepEqual(p.streamerConsole(a.token).channels,[]);assert.equal(p.me(a.token).balance,10000);await p.linkTwitch(b.token,identity);assert.equal(p.me(b.token).twitch?.id,'12345');
 }));

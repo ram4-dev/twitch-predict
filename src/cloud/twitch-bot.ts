@@ -1,7 +1,8 @@
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
-import {Points} from '../points.js';
+import {Points,CHAT_BET_POINTS} from '../points.js';
 import {closesAt,type Prediction} from '../prediction.js';
+import {TwitchSource} from '../twitch-source.js';
 import {joinPath} from '../public-paths.js';
 import type {Documents} from './documents.js';
 
@@ -87,7 +88,15 @@ export class CloudTwitchBot {
   if(type!=='notification'||data.subscription?.type!=='channel.chat.message')return {status:204,body:''};
   const event=z.object({broadcaster_user_id:z.string(),chatter_user_id:z.string(),message:z.object({text:z.string().max(2000)})}).parse(data.event);
   const auth=await this.documents.read('twitch-bot-auth',authState),p=await this.points(),channel=p.enabledBotChannels().find(c=>c.id===event.broadcaster_user_id);
-  if(!channel||!auth.bot||data.subscription.condition?.user_id!==auth.bot.id||event.chatter_user_id===auth.bot.id||!/^!plot(?:\s|$)/i.test(event.message.text))return {status:204,body:''};
+  if(!channel||!auth.bot||data.subscription.condition?.user_id!==auth.bot.id||event.chatter_user_id===auth.bot.id)return {status:204,body:''};
+  // Chat bets: !yes/!no/!1..!6 from a viewer with a linked Twitch account (S19a).
+  const chatMatch=/^!(yes|no|[1-6])\s*$/i.exec(event.message.text.trim());
+  if(chatMatch){
+   const outcome=chatMatch[1].toLowerCase(),reply=await this.chatBet(p,channel,event.chatter_user_id,outcome);
+   await this.documents.update('twitch-bot-runtime',runtime,s=>{this.prune(s);const key=`chat:${headers['twitch-eventsub-message-id']}`;if(s.events[key])return;s.events[key]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`@${event.chatter_user_id}: ${reply}`.slice(0,500),createdAt:this.now(),status:'pending'};});
+   return {status:204,body:''};
+  }
+  if(!/^!plot(?:\s|$)/i.test(event.message.text))return {status:204,body:''};
   await this.documents.update('twitch-bot-runtime',runtime,s=>{
    this.prune(s);const id=headers['twitch-eventsub-message-id'];if(s.events[id])return;s.events[id]=this.now();
    if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();
@@ -97,6 +106,22 @@ export class CloudTwitchBot {
  }
  private prune(s:Runtime){for(const [key,at] of Object.entries(s.events))if(at<this.now()-600_000)delete s.events[key];const events=Object.entries(s.events).sort((a,b)=>b[1]-a[1]);for(const [key] of events.slice(5000))delete s.events[key];for(const [key,job] of Object.entries(s.outbox))if(!key.startsWith('welcome:')&&job.createdAt<this.now()-86400_000)delete s.outbox[key];}
  private channelUrl(login:string){return `${this.config.origin}${joinPath('twitch',login)}`;}
+ /** Resolves the channel's open prediction and places the internal-balance bet for a linked viewer. */
+ private async chatBet(p:Points,channel:Channel,chatterId:string,outcome:string):Promise<string>{
+  try{
+   const predictions=await new TwitchSource(p).active(channel.login);
+   const open=predictions.find(pred=>pred.status==='ACTIVE'&&!pred.lockedAt&&closesAt(pred)>this.now());
+   if(!open)return 'No hay predicciones abiertas en este canal.';
+   const option=isNaN(Number(outcome))
+    ?open.outcomes.findIndex(o=>o.title.trim().toLowerCase()===(outcome==='yes'?'sí':'no')||o.title.trim().toLowerCase()===(outcome==='yes'?'si':'no'))
+    :Number(outcome)-1;
+   const chosen=open.outcomes[option];
+   if(!chosen)return `Esa opción no existe. Las opciones son: ${open.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}.`;
+   const key=`offchain:${channel.login}:${open.id}`;
+   await p.chatBet(chatterId,key,chosen.id,`chat:${chatterId}:${open.id}:${chosen.id}`);
+   return `Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}". Revisá tus predicciones en ${this.channelUrl(channel.login)}.`;
+  }catch(e){return (e as Error).message.slice(0,300);}
+ }
  private async accessToken(){
   if(this.appToken&&this.appToken.expires>this.now()+60_000)return this.appToken.value;
   const r=await this.request('https://id.twitch.tv/oauth2/token',{method:'POST',body:new URLSearchParams({client_id:this.config.clientId,client_secret:this.config.clientSecret,grant_type:'client_credentials'}),signal:AbortSignal.timeout(10000)});
