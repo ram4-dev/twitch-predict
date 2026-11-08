@@ -4,6 +4,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { closesAt, predictionSchema, type Prediction } from './prediction.js';
 
 export const STARTING_POINTS = 10_000;
+/** Fixed stake for chat bets (!yes/!no/!N); the internal-funds model is still being defined. */
+export const CHAT_BET_POINTS = 100;
 export const SOURCE_MAX_AGE = 30_000;
 export type TwitchIdentity = {id:string;login:string;displayName:string;linkedAt:string};
 type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
@@ -159,6 +161,22 @@ export class Points {
       const result={paid,balance:account.balance};state.receipts[id]={fingerprint,result};return result;
     });
   }
+  /** Chat bet from a linked Twitch account, paid from the internal Plot balance (S19a). */
+  async chatBet(twitchId:string,key:string,outcomeId:string,requestId:string) {
+    return this.transaction<{betId:string;amount:number;outcomeId:string;balance:number}>(state=>{
+      const account=Object.values(state.accounts).find(a=>a.twitch?.id===twitchId);
+      if(!account)throw new Error('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
+      const id=`${account.id}:${requestId}`,fingerprint=JSON.stringify(['chatBet',key,outcomeId]);
+      const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');return previous.result as {betId:string;amount:number;outcomeId:string;balance:number};}
+      const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
+      if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
+      const amount=CHAT_BET_POINTS;
+      const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
+      this.ledger(state,account,'bet',-amount,key);
+      const bet:Bet={id:randomUUID(),accountId:account.id,wallet:account.wallet,marketKey:key,outcomeId,amount,payout:0,claimed:false,createdAt:now()};state.bets.push(bet);
+      const result={betId:bet.id,amount,outcomeId,balance:account.balance};state.receipts[id]={fingerprint,result};return result;
+    });
+  }
   // Provisioned only by the local bridge operator; a login cannot claim a Twitch channel.
   async assignStreamer(channel:string,wallet:string){
     if(!/^[a-zA-Z0-9_]{1,40}$/.test(channel))throw new Error('Canal inválido');
@@ -173,14 +191,19 @@ export class Points {
   async linkTwitch(token:string,identity:TwitchIdentity){
     if(!/^\d+$/.test(identity.id)||!/^[a-z0-9_]{1,40}$/.test(identity.login))throw new Error('Identidad de Twitch inválida');
     return this.transaction(state=>{
-      const a=this.account(state,token);if(!a.wallet)throw new Error('Conectá Phantom primero');
-      if(a.twitch&&a.twitch.id!==identity.id)throw new Error('Esta wallet ya tiene otra cuenta de Twitch conectada. Desconectala primero.');
-      if(Object.values(state.accounts).some(other=>other.id!==a.id&&other.twitch?.id===identity.id))throw new Error('Esta cuenta de Twitch ya está vinculada a otra wallet');
-      const owner=state.streamers[identity.login];if(owner?.twitchId&&owner.wallet!==a.wallet)throw new Error('El canal ya está vinculado a otra wallet');
+      const a=this.account(state,token);
+      // Viewers may link without a wallet; streamer registration still requires one below.
+      if(a.twitch&&a.twitch.id!==identity.id)throw new Error('Esta cuenta ya tiene otra cuenta de Twitch conectada. Desconectala primero.');
+      const previousOwner=Object.values(state.accounts).find(other=>other.id!==a.id&&other.twitch?.id===identity.id);
+      if(previousOwner)throw new Error('Esta cuenta de Twitch ya está vinculada a otra cuenta de Plot');
+      const owner=state.streamers[identity.login];
+      if(owner?.twitchId&&owner.wallet&&owner.wallet!==a.wallet)throw new Error('El canal ya está vinculado a otra wallet');
       if(!state.channels.includes(identity.login)&&state.channels.length>=30)throw new Error('Quitá un canal seguido antes de conectar otro');
-      for(const [name,s] of Object.entries(state.streamers))if(s.twitchId===identity.id)delete state.streamers[name];
-      a.twitch={...identity};state.streamers[identity.login]={channel:identity.login,wallet:a.wallet,twitchId:identity.id,assignedAt:now()};
-      if(!state.channels.includes(identity.login))state.channels.push(identity.login);
+      for(const [name,s] of Object.entries(state.streamers))if(s.twitchId===identity.id&&s.wallet!==a.wallet)delete state.streamers[name];
+      a.twitch={...identity};
+      // Channel registration is a streamer capability: only wallet-backed accounts claim channels.
+      if(a.wallet&&!state.channels.includes(identity.login))state.channels.push(identity.login);
+      if(a.wallet)state.streamers[identity.login]={channel:identity.login,wallet:a.wallet,twitchId:identity.id,assignedAt:now()};
       return {twitch:a.twitch,channel:identity.login};
     });
   }

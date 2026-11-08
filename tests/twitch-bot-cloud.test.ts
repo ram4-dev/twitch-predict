@@ -44,13 +44,40 @@ test('rejects wrong bot account, missing scopes, callback replay and wrong broad
 test('signed chat events enqueue durable replies once; worker subscribes, greets, announces and stops after disable',options,()=>fixture(async({bot,token,sent,setIdentity,subscriptions,clock})=>{
  await authorizeBot(bot);const flow=await bot.start('channel',token);setIdentity('123','streamer',['channel:bot']);const done=await bot.callback(stateOf(flow.url),flow.cookie,'code');if(done.kind!=='channel')throw new Error();await bot.complete(token,done.ticket!,flow.cookie);
  const snapshot=()=>[{prediction:{id:'p1',channel:'streamer',title:'¿Gana?',status:'ACTIVE' as const,createdAt:new Date(clock.now).toISOString(),predictionWindowSeconds:600,outcomes:[{id:'yes',title:'Sí'},{id:'no',title:'No'}]},market:{state:'created',byteMarketId:'market1'}}];
- await bot.sync(snapshot);assert.equal(subscriptions.length,1);await bot.sync(snapshot);assert.equal(sent.length,1);assert.match(sent[0].message,/conectado/);
- clock.now+=2000;await bot.sync(snapshot);assert.equal(sent.length,2);assert.match(sent[1].message,/Nueva predicción/);clock.now+=2000;await bot.sync(snapshot);assert.equal(sent.length,2);
+ await bot.sync(snapshot);assert.equal(subscriptions.length,1);await bot.sync(snapshot);assert.equal(sent.length,1);assert.match(sent[0].message,/conectado/);assert.match(sent[0].message,/https:\/\/plot\.example\/join\/twitch\/streamer/);
+ clock.now+=2000;await bot.sync(snapshot);assert.equal(sent.length,2);assert.match(sent[1].message,/Nueva predicción/);assert.match(sent[1].message,/\/join\/twitch\/streamer/);clock.now+=2000;await bot.sync(snapshot);assert.equal(sent.length,2);
  const event={subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:'999',message:{text:'!plot'}}},signature=signed(event,'event-1',clock.now);
- assert.equal((await bot.webhook(signature.headers,signature.raw)).status,204);await bot.webhook(signature.headers,signature.raw);await bot.sync(snapshot);assert.equal(sent.length,3);assert.match(sent[2].message,/las predicciones/);
+ assert.equal((await bot.webhook(signature.headers,signature.raw)).status,204);await bot.webhook(signature.headers,signature.raw);await bot.sync(snapshot);assert.equal(sent.length,3);assert.match(sent[2].message,/las predicciones/);assert.match(sent[2].message,/\/join\/twitch\/streamer/);
  const bad={...signature.headers,'twitch-eventsub-message-signature':'bad'};assert.equal((await bot.webhook(bad,signature.raw)).status,403);
  const old=signed(event,'old',clock.now-700_000);assert.equal((await bot.webhook(old.headers,old.raw)).status,403);
  await bot.disable(token);clock.now+=31000;const after=signed(event,'after',clock.now);await bot.webhook(after.headers,after.raw);await bot.sync(snapshot);assert.equal(subscriptions.length,0);assert.equal(sent.length,3);
+}));
+test('linked viewers bet from chat with !yes/!no and unlinked chatters get the link instructions',options,()=>fixture(async({bot,points,token,setIdentity,sent,clock})=>{
+ await authorizeBot(bot);const flow=await bot.start('channel',token);setIdentity('123','streamer',['channel:bot']);const done=await bot.callback(stateOf(flow.url),flow.cookie,'code');if(done.kind!=='channel')throw new Error();await bot.complete(token,done.ticket!,flow.cookie);
+ // A viewer links Twitch with the shared identity flow (no wallet needed) and gets starting points.
+ const viewer=await points.createAccount();await points.linkTwitch(viewer.token,{id:'555',login:'chat_viewer',displayName:'Chat Viewer',linkedAt:new Date().toISOString()});
+ // The channel has an open prediction: same shape the sync snapshot provides.
+ const prediction={id:'p1',channel:'streamer',title:'¿Gana?',status:'ACTIVE' as const,createdAt:new Date(clock.now).toISOString(),predictionWindowSeconds:600,outcomes:[{id:'yes',title:'Sí'},{id:'no',title:'No'}]};
+ // TwitchSource reads the open prediction from Twitch: fixture a single gql response.
+ const originalFetch=globalThis.fetch;globalThis.fetch=async(input,options)=>String(input)==='https://gql.twitch.tv/gql'?Response.json({data:{channel:{activePredictionEvents:[prediction]}}}):originalFetch(input,options);
+ try{
+  const chatEvent=(text:string,id:string,chatter='555')=>signed({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:chatter,message:{text}}},id,clock.now);
+  await bot.webhook(chatEvent('!yes','chat-1').headers,chatEvent('!yes','chat-1').raw);
+  clock.now+=2000;await bot.sync(()=>[]);
+  assert.match(sent.at(-1)!.message,/Apostaste 100 puntos a "Sí"/);
+  assert.equal(points.me(viewer.token).balance,10_000-100);
+  // Duplicate event: deduplicated, balance unchanged.
+  await bot.webhook(chatEvent('!yes','chat-1').headers,chatEvent('!yes','chat-1').raw);clock.now+=2000;await bot.sync(()=>[]);
+  assert.equal(points.me(viewer.token).balance,10_000-100);
+  // An unlinked chatter gets the linking instruction instead of a bet.
+  await bot.webhook(chatEvent('!no','chat-2','666').headers,chatEvent('!no','chat-2','666').raw);
+  clock.now+=2000;await bot.sync(()=>[]);
+  assert.match(sent.at(-1)!.message,/Vinculá tu cuenta de Twitch/);
+  // !plot still answers with the channel link.
+  await bot.webhook(chatEvent('!plot','chat-3').headers,chatEvent('!plot','chat-3').raw);
+  clock.now+=2000;await bot.sync(()=>[]);
+  assert.match(sent.at(-1)!.message,/\/join\/twitch\/streamer/);
+ }finally{globalThis.fetch=originalFetch;}
 }));
 test('HTTP webhook endpoint preserves raw-body signature and rejects tampering before touching chat',options,()=>fixture(async({docs,bot,token,setIdentity,sent,clock})=>{
  await authorizeBot(bot);const flow=await bot.start('channel',token);setIdentity('123','streamer',['channel:bot']);const done=await bot.callback(stateOf(flow.url),flow.cookie,'code');if(done.kind!=='channel')throw new Error();await bot.complete(token,done.ticket!,flow.cookie);await bot.sync(()=>[]);await bot.sync(()=>[]);
