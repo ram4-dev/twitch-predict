@@ -1,3 +1,7 @@
+import {UserMarketCard,BetSheet,type Selection} from './components/user-market-card.js';
+import {MarketDetail} from './market-detail.js';
+import {createPointsClient} from './points-ui.js';
+import type {AppMarket,AppAccount} from './mobile-app-data.js';
 import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Download,Link2,MonitorSmartphone,ExternalLink,Share2} from 'lucide-react';
@@ -5,47 +9,37 @@ import {channelFromPath,StreamerIdentity,QrBlock,SearchLink,StreamerMarket,Strea
 import {type ByteConfig,type DisplayByteMarket} from '../byte-model.js';
 import type {TwitchPreview} from '../twitch-preview.js';
 import {TwitchMarketPreview} from './byte-market.js';
+import {reconcileBytePredictions} from '../popup-cache.js';
 import {Scene} from './scene.js';
-import {PlotMascot,PlotLogo} from './components/plot.js';
+import {PlotMascot} from './components/plot.js';
 import {Button} from './components/button.js';
 import {enhanceGlowStage} from '@/components/ui/spotlight-card';
 
-type LoadState={loading:boolean;error:string;markets:DisplayByteMarket[];previews:TwitchPreview[]};
+type LoadState={loading:boolean;error:string;markets:DisplayByteMarket[];previews:TwitchPreview[];points:AppMarket[]};
 
 /** Anonymous channel snapshot; existence and availability come from the served markets, not guesses. */
-type PointsOutcome={id:string;title:string;points:number};
-type PointsMarket={key:string;phase:string;canBet:boolean;demo:boolean;totalPoints:number;totalBets:number;sourceCheckedAt:string;winnerId?:string;prediction:{id:string;channel:string;title:string;status:string;createdAt:string;predictionWindowSeconds:number;outcomes:PointsOutcome[]};outcomes:PointsOutcome[]};
-
 export function useChannelData(login:string|undefined){
-  const [state,setState]=useState<LoadState>({loading:!!login,error:'',markets:[],previews:[]});
+  const [state,setState]=useState<LoadState>({loading:!!login,error:'',markets:[],previews:[],points:[]});
   const reload=useRef(async()=>{
     if(!login)return;
     try{
-      // The public points feed always exists in every mode; byte-mode errors surface only when betting.
-      // SAFETY: the points feed returns the points-market shape; the betting components expect the byte
-      // DisplayByteMarket shape, so map every field the UI reads (status, options, pools, chain).
-      const both=await fetch('/api/markets').then(r=>r.json()) as unknown;
-      const shaped=(Array.isArray(both)?(both as PointsMarket[]):[]).filter(m=>m.prediction?.channel?.toLowerCase()===login).map((m):DisplayByteMarket=>({
-        id:m.key,
-        title:m.prediction.title,
-        options:m.prediction.outcomes.map(o=>o.title),
-        currency:'sol',
-        status:m.phase==='resolved'?'resolved':m.phase==='void'?'invalid':'open',
-        bettable:m.canBet===true,
-        resolvable:false,
-        openMs:Date.parse(m.prediction.createdAt),
-        closeMs:Date.parse(m.prediction.createdAt)+m.prediction.predictionWindowSeconds*1000,
-        chain:{market:'11111111111111111111111111111111',settled:m.phase==='resolved'},
-        pools:m.outcomes.map(o=>o.points),
-        total:m.totalPoints??0,
-        bettors:m.totalBets??0,
-        winner:m.phase==='resolved'&&m.winnerId?m.prediction.outcomes.findIndex(o=>o.id===m.winnerId):null,
-        invalidReason:m.phase==='void'?'Predicción cancelada':null,
-        notes:{channel:m.prediction.channel,rules:m.demo?'Mercado de demostración con puntos internos.':'Predicción de Twitch con puntos internos de Plot.',createdAt:new Date(Date.parse(m.prediction.createdAt)).toISOString(),twitch:{predictionId:m.prediction.id,status:m.prediction.status,closesAt:Date.parse(m.prediction.createdAt)+m.prediction.predictionWindowSeconds*1000,checkedAt:Date.parse(m.sourceCheckedAt)}},
-      }));
-      const open=shaped.filter(m=>m.status==='open');
-      setState({loading:false,error:'',markets:open,previews:[]});
-    }catch(e){setState({loading:false,error:(e as Error).message,markets:[],previews:[]});}
+      const statusResponse=await fetch('/api/byte/status');
+      if(!statusResponse.ok)throw new Error('No pudimos consultar el estado del canal.');
+      const status=await statusResponse.json();
+      if(status.configured){
+        const response=await fetch('/api/byte/markets');
+        if(!response.ok)throw new Error('No pudimos cargar las predicciones del canal.');
+        const data=await response.json();
+        const reconciled=reconcileBytePredictions(data.markets??[],(data.predictions??[]) as TwitchPreview[],login);
+        setState({loading:false,error:'',markets:reconciled.markets,previews:reconciled.predictions,points:[]});
+        return;
+      }
+      const response=await fetch('/api/markets');
+      if(!response.ok)throw new Error('No pudimos cargar las predicciones del canal.');
+      const data=await response.json() as AppMarket[];
+      const points=data.filter(m=>m.prediction.channel.toLowerCase()===login);
+      setState({loading:false,error:'',markets:[],previews:[],points});
+    }catch(e){setState({loading:false,error:(e as Error).message,markets:[],previews:[],points:[]});}
   });
   useMarketStream(()=>void reload.current());
   useEffect(()=>{void reload.current();},[login]);
@@ -124,8 +118,8 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
   const visible=state.markets.filter(m=>m.status==='open');
   const closed=state.markets.filter(m=>m.status!=='open');
   return <main className="streamer-page" ref={node=>{if(node)enhanceGlowStage(node);}}>
-    <header className="streamer-head"><a href="/" aria-label="plot, inicio"><PlotLogo/></a><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/></header>
-    <div className="byte-connection"><span>SOL devnet · sin dinero real</span></div>
+    <header className="streamer-head"><a href="/" aria-label="plot, inicio"><span className="streamer-brand"><img src="/brand/plot-logo-transparent.png" alt="Plot!" width={1888} height={833}/></span></a><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/></header>
+    <div className="byte-connection"><span>{state.points.length?'Puntos internos de Plot · sin dinero real':'SOL devnet · sin dinero real'}</span></div>
     <StreamerIdentity login={channel.login}/>
     <div className="streamer-tools">
       <Button variant="ghost" onClick={()=>void copy(`${location.origin}${share}`,'el enlace del canal')}><Share2 size={15}/>Compartir canal</Button>
@@ -134,13 +128,29 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
       <a href={`/app?channel=${encodeURIComponent(channel.login)}`}><ExternalLink size={15}/>Mis apuestas</a>
     </div>
     {error&&<p role="alert">{error}</p>}
-    <StreamerStates login={channel.login} loading={state.loading} loadError={state.error} markets={state.markets} previews={state.previews}>
+    <StreamerStates login={channel.login} loading={state.loading} loadError={state.error} markets={state.markets} previews={state.previews} hasPoints={state.points.length>0}>
+      <PublicPoints markets={state.points} onDone={refresh} wallet={wallet}/>
       {visible.map(m=><StreamerMarket key={m.id} market={m} config={config} wallet={wallet} disabled={busy} intention={readIntention()} onDone={refresh}/>)}
       {state.previews.map(item=><div className="market-card byte-market" key={`preview:${item.prediction.channel}:${item.prediction.id}`}><TwitchMarketPreview item={item}/></div>)}
       {closed.length>0&&<section><h2 className="byte-subheading">Predicciones cerradas</h2>{closed.map(m=><StreamerMarket key={m.id} market={m} config={config} wallet={wallet} disabled onDone={refresh}/>)}</section>}
     </StreamerStates>
     <SearchLink/>
   </main>;
+}
+
+const pointsClient=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async token=>localStorage.setItem('pointsToken',token)});
+function PublicPoints({markets,onDone,wallet}:{markets:AppMarket[];onDone:()=>Promise<void>;wallet:string}){
+  const [selection,setSelection]=useState<Selection>(),[account,setAccount]=useState<AppAccount>(),[detail,setDetail]=useState('');
+  useEffect(()=>{void pointsClient.me().then(setAccount).catch(()=>setAccount(undefined));},[wallet]);
+  const market=markets.find(m=>m.key===detail);
+  const bet=async(m:AppMarket,outcome:string,amount:number,id:string)=>{
+    await pointsClient.bet({key:m.key,outcomeId:outcome,amount,requestId:id});
+    setAccount(await pointsClient.me());await onDone();
+  };
+  return <div className="phone-app public-points theme-ember">
+    {market?<MarketDetail market={market} layout="hybrid" account={account} onBack={()=>setDetail('')} onChoose={outcome=>setSelection({market,outcome})}/>:<div className="phone-feed">{markets.map(m=><UserMarketCard key={m.key} market={m} theme="ember" chosenOutcome={selection?.market.key===m.key?selection.outcome:account?.bets.filter(b=>b.marketKey===m.key).at(-1)?.outcomeId} onDetail={()=>setDetail(m.key)} onChoose={setSelection}/>)}</div>}
+    {selection&&<BetSheet selection={selection} account={account} demo={false} theme="ember" onClose={()=>setSelection(undefined)} onBet={bet}/>}
+  </div>;
 }
 
 const entry=channelFromPath(location.pathname);

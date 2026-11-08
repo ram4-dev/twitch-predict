@@ -102,11 +102,11 @@ export function StreamerMarket({market:m,config,wallet,disabled,onDone,intention
 }
 
 /** Page shell with the states the viewer can hit while the channel data loads. */
-export function StreamerStates({login,loading,loadError,markets,previews,children}:{login:string;loading:boolean;loadError:string;markets:DisplayByteMarket[];previews:TwitchPreview[];children?:React.ReactNode}){
+export function StreamerStates({login,loading,loadError,markets,previews,hasPoints=false,children}:{login:string;loading:boolean;loadError:string;markets:DisplayByteMarket[];previews:TwitchPreview[];hasPoints?:boolean;children?:React.ReactNode}){
   if(loading)return <div className="streamer-status" role="status"><Loader2 size={18} className="animate-spin"/> Consultando las predicciones de @{login}…</div>;
   if(loadError)return <div className="streamer-status" role="alert"><p>No pudimos consultar las predicciones de @{login}.</p><p>{loadError}</p></div>;
   const open=markets.filter(m=>m.status==='open'),closed=markets.filter(m=>m.status!=='open');
-  if(!open.length&&!previews.length&&!closed.length)return <div className="streamer-status streamer-empty"><PlotMascot mood="doubt"/><p>@{login} todavía no tiene predicciones abiertas. Cuando abra una, aparecerá acá.</p><SearchLink/></div>;
+  if(!hasPoints&&!open.length&&!previews.length&&!closed.length)return <div className="streamer-status streamer-empty"><PlotMascot mood="doubt"/><p>@{login} todavía no tiene predicciones abiertas. Cuando abra una, aparecerá acá.</p><SearchLink/></div>;
   return <>{children}</>;
 }
 

@@ -1,27 +1,30 @@
-import {test,expect,type APIRequestContext} from '@playwright/test';
-import {writeFile,rename,readFile} from 'node:fs/promises';
+import {signIn} from './fixtures/phantom.js';
+import {test,expect,type Page} from '@playwright/test';
+import {writeFile,rename} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {default as jsQR} from 'jsqr';
 import {PNG} from 'pngjs';
-import type {DisplayByteMarket} from '../src/byte-model.js';
 
 async function seedTwitch(predictions:unknown[]){const file=resolve('test-results/twitch-fixture.json');await writeFile(file+'.test',JSON.stringify(predictions));await rename(file+'.test',file);}
 
 /** Seeds a market through the local operator route (same path byte.e2e.ts uses). */
-async function seedMarket(request:APIRequestContext,base:string,channel:string,title='¿Gana la próxima partida?'){
-  // Playwright wipes test-results at startup; the byte fixture file must exist before seeding.
+async function seedMarket(page:Page,base:string,channel:string,title='¿Gana la próxima partida?'){
   await writeFile(resolve('test-results/byte-fixture.json'),JSON.stringify({markets:[],signatures:{},broadcasts:0,resolutions:0,invalidations:0,syncs:0}),{flag:'wx'}).catch(()=>{});
-  const response=await request.post(`${base}/api/byte/markets`,{headers:{'x-operator-token':(await readFile(resolve('artifacts/bridge-token'),'utf8')).trim(),host:new URL(base).host,'sec-fetch-site':'same-origin',origin:base},data:{channel,title,options:['Sí','No'],currency:'sol',windowSecs:600,rules:'Gana si el marcador final muestra victoria. Evidencia: VOD del canal.',requestId:randomUUID()}});
-  expect(response.ok()).toBe(true);
-  return (await response.json()) as {market:DisplayByteMarket};
+  await page.goto(`${base}/byte`);
+  await page.getByRole('button',{name:'Operador',exact:true}).click();
+  await page.getByLabel('Canal de Twitch',{exact:true}).fill(channel);
+  await page.getByLabel('Pregunta',{exact:true}).fill(title);
+  await page.getByLabel('Reglas de resolución',{exact:true}).fill('Gana si el marcador final muestra victoria. Evidencia: VOD del canal.');
+  await page.getByRole('button',{name:'Crear mercado en devnet',exact:true}).click();
+  await expect(page.getByRole('heading',{name:title,exact:true})).toBeVisible();
 }
 
 test.describe('public streamer web',()=>{
   const base=process.env.APP_URL??'http://twitch-predict.localhost:1358';
-  test('/s/twitch/:login shows exact channel markets, live states and no cross-channel leaks',async({page,request})=>{
-    const channel=`stream_${randomUUID().replaceAll('-','').slice(0,8)}`,other=`stream_${randomUUID().replaceAll('-','').slice(0,8)}`;
-    await seedMarket(request,base,channel);await seedMarket(request,base,other,'Mercado del otro canal');
+  test('/s/twitch/:login shows exact channel markets, live states and no cross-channel leaks',async({page})=>{
+    const channel=`stream_${randomUUID().replaceAll('-','').slice(0,8)}`,other=`${channel}_extra`;
+    await seedMarket(page,base,channel);await seedMarket(page,base,other,'Mercado del otro canal');
     await page.goto(`/s/twitch/${channel}`);
     await expect(page.getByRole('heading',{name:`@${channel}`,exact:true})).toBeVisible();
     await expect(page.getByRole('heading',{name:'¿Gana la próxima partida?',exact:true})).toBeVisible();
@@ -97,4 +100,66 @@ test.describe('public streamer web',()=>{
     const watched=await page.request.get(`${base}/api/byte/twitch/channels`).then(r=>r.json());
     expect(JSON.stringify(watched)).not.toContain(`"${channel}"`);
   });
+});
+
+test('public surfaces fit popup and compact widths with readable QR codes',async({page},testInfo)=>{
+  for(const width of [700,360]){
+    await page.setViewportSize({width,height:600});
+    await page.emulateMedia({reducedMotion:'reduce'});
+    for(const route of ['/s/twitch/demo_streamer','/join/twitch/demo_streamer?desktop','/overlay/twitch/demo_streamer']){
+      await page.goto(route);
+      await expect(page.locator('.streamer-identity h1')).toBeVisible();
+      if(route.startsWith('/s/')){
+        const logo=page.getByRole('img',{name:'Plot!',exact:true});
+        await expect(logo).toHaveAttribute('src','/brand/plot-logo-transparent.png');
+        await expect.poll(()=>logo.evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);
+      }
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      const canvas=page.locator('.streamer-qr canvas');
+      if(await canvas.count()){
+        await expect.poll(async()=>{
+          const png=PNG.sync.read(await canvas.screenshot());
+          return jsQR.default(new Uint8ClampedArray(png.data),png.width,png.height)?.data??'';
+        }).toContain('/s/twitch/demo_streamer');
+      }
+      await page.screenshot({path:testInfo.outputPath(`${width}-${route.split('/')[1]}.png`),fullPage:true});
+    }
+  }
+});
+
+
+test('points channel reuses the user card and confirms a points bet without byte transactions',async({page},testInfo)=>{
+  await signIn(page);
+  const market=await page.evaluate(async()=>{
+    const {token}=await (await fetch('/api/pair')).json();
+    const response=await fetch('/api/demo',{method:'POST',headers:{Authorization:`Bearer ${token}`}});
+    if(!response.ok)throw new Error('Demo seed failed');
+    return response.json();
+  });
+  // Exercise the points transport even when this suite also provisions byte fixtures.
+  await page.route('**/api/byte/status',route=>route.fulfill({json:{configured:false}}));
+  await page.goto('/s/twitch/demo_streamer');
+  const card=page.locator(`[data-key="${market.key}"]`);
+  await expect(card).toHaveClass(/phone-market-ember/);
+  await expect(card.locator('.phone-market-meta')).toContainText('pts en juego');
+  await expect(page.getByText('SOL devnet · sin dinero real',{exact:true})).toHaveCount(0);
+  for(const width of [360,700]){
+    await page.setViewportSize({width,height:600});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:testInfo.outputPath(`points-${width}.png`),fullPage:true});
+  }
+  const posts:string[]=[];
+  page.on('request',r=>{if(r.method()==='POST')posts.push(new URL(r.url()).pathname);});
+  await card.getByRole('button',{name:'Apostar a Gana',exact:true}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(posts).toEqual([]);
+  await page.getByLabel('Puntos a apostar',{exact:true}).fill('100');
+  await page.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(card.locator('.phone-market-meta')).toContainText('100');
+  expect(posts).toEqual(['/api/points/bet']);
+  const account=await page.evaluate(async()=>fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}}).then(r=>r.json()));
+  expect(account.bets.filter((b:{marketKey:string})=>b.marketKey===market.key)).toHaveLength(1);
+  await card.getByRole('link',{name:`Ver detalle: ${market.prediction.title}`}).click();
+  await expect(page.getByRole('button',{name:/Volver/}).first()).toBeVisible();
 });
