@@ -36,3 +36,4 @@ extension/app-config.js
 artifacts/
 
 public/downloads/*.apk
+public/streamer-ui.js

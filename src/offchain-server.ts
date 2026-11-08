@@ -33,9 +33,14 @@ const waitlist=new Waitlist(directory);await waitlist.load();
 
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
-  if(!['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1','twitch-predict.local'].includes(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
+  const trustedHost=(name:string)=>['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1','twitch-predict.local'].includes(name)||/^[0-9a-z-]+\.sslip\.io$/.test(name)||/^[0-9.]+$/.test(name);
+  if(!trustedHost(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
   const origin=req.headers.origin;
-  if(origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(origin)&&origin!==`${req.protocol}://${req.get('host')}`){res.status(403).json({error:'Untrusted origin'});return;}
+  // The portless proxy rewrites Host to its backend address, so validate the origin's hostname against
+  // the same trusted set instead of comparing it to req.hostname.
+  let originUrl:URL|undefined;
+  if(origin)try{originUrl=new URL(origin);}catch{res.status(403).json({error:'Origen inválido'});return;}
+  if(origin&&!/^chrome-extension:\/\/[a-p]{32}$/.test(origin)&&!trustedHost(originUrl!.hostname)){res.status(403).json({error:'Untrusted origin'});return;}
   // A local POC with anonymous points: never allow a foreign website to create accounts or place bets.
   const documentNavigation=req.method==='GET'&&req.get('sec-fetch-mode')==='navigate'&&req.get('sec-fetch-dest')==='document'&&!req.path.startsWith('/api');
   if(req.get('sec-fetch-site')==='cross-site'&&!origin?.startsWith('chrome-extension://')&&!documentNavigation){res.status(403).json({error:'Untrusted site'});return;}
