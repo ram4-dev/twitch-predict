@@ -28,11 +28,15 @@ test('catalog families fit narrow viewports and load local fonts and mascot',asy
  }
 });
 
-test('first run renders the shared empty state and its slotted follow link',async({page})=>{
+test('first run uses one streamer search and restores the followed empty state when cleared',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/markets',route=>route.fulfill({json:[]}));
- await page.goto('/app');await expect(page.getByRole('heading',{name:'La próxima está por venir',exact:true})).toBeVisible();
- await page.getByRole('link',{name:'Seguir un canal',exact:true}).click();await expect(page.getByRole('heading',{name:'Streamers que seguís',exact:true})).toBeVisible();
- await expect(page.locator('#notice')).not.toContainText('Slot failed');
+ await page.route('**/api/channels',route=>route.fulfill({json:{channels:[]}}));
+ await page.route('**/api/twitch/search?*',route=>route.fulfill({json:{channels:[{login:'first_streamer',displayName:'First Streamer',live:false}]}}));
+ await page.goto('/app');await expect(page.getByText('Buscá un streamer para empezar.',{exact:true})).toBeVisible();
+ const search=page.getByRole('combobox',{name:'Buscar streamer'});await expect(search).toHaveCount(1);await search.fill('first');await page.getByRole('option').filter({hasText:'@first_streamer'}).click();
+ await expect(page.getByText('Sin apuestas activas.',{exact:true})).toBeVisible();await expect(search).toHaveValue('@first_streamer');
+ await page.getByRole('button',{name:'Limpiar búsqueda'}).click();await expect(page.getByText('Buscá un streamer para empezar.',{exact:true})).toBeVisible();expect(errors).toEqual([]);
 });
 
 test('Dia selection renders the dither shader, disposes button shader, and keeps keyboard choices working',async({page})=>{

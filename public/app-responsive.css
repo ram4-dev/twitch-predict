@@ -1,0 +1,104 @@
+/* Mobile is the base layout. Wider screens add columns when the content fits. */
+body:has(#markets){--app-gutter:clamp(16px,3vw,28px);padding-block-end:calc(76px + env(safe-area-inset-bottom));scroll-padding-block:20px}
+body:has(#markets) :is(header,main,footer){padding-inline:var(--app-gutter);min-inline-size:0}
+body:has(#markets)>header{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;min-block-size:76px;padding-block:12px;height:auto}
+body:has(#markets)>header .brand{grid-area:1/1;width:96px}
+body:has(#markets)>header .wallet-strip{grid-area:1/2;display:flex;justify-content:flex-end;gap:10px;padding:0;border:0;background:none;min-width:0}
+body:has(#markets)>header .wallet-strip :is(small,span){font-size:12px;line-height:1.4}
+body:has(#markets)>header #own-balance{font-size:clamp(23px,4vw,28px);color:#ff926e;overflow-wrap:anywhere}
+body:has(#markets)>header nav{position:fixed;inset:auto 0 0;z-index:20;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;width:auto;height:auto;min-height:64px;margin:0;padding:6px max(8px,env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));background:rgb(14 14 14 / .96);backdrop-filter:blur(12px)}
+body:has(#markets)>header nav a{display:flex;justify-content:center;align-items:center;min-width:0;min-height:48px;padding:8px 3px;border:0;border-radius:10px;font-size:13px;text-align:center;white-space:normal;line-height:1.3}
+body:has(#markets)>header nav a[aria-current=page]{color:#ffad91;background:rgb(255 112 73 / .1)}
+body:has(#markets) :is(a,button,input,select,summary){scroll-margin-block:24px 100px}
+body:has(#markets) :is(input,select){font-size:16px;max-inline-size:100%;min-block-size:48px}
+body:has(#markets) :is(button,summary,.login-panel a,.console-empty a,.streamer-actions a){min-block-size:44px}
+body:has(#markets) summary{display:flex;align-items:center}
+body:has(#markets) .intro{padding-block:24px 20px}
+body:has(#markets) .intro h1{font-size:clamp(24px,3vw,32px);line-height:1.2;overflow-wrap:anywhere}
+body:has(#markets) .intro p{font-size:14px;margin-block-start:12px;max-inline-size:52ch}
+body:has(#markets) :is(.market-grid,.position-list,.operator,.streamer-list){display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+body:has(#markets) :is(.market-card,.position-card,.managed-market,.operator,.streamer-channels,.console-empty){padding:clamp(16px,3vw,24px);min-inline-size:0}
+body:has(#markets) .market-card{container:market-card / inline-size}
+body:has(#markets) .market-card:only-child{display:block}
+body:has(#markets) .market-heading{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px}
+body:has(#markets) .market-heading a{overflow-wrap:anywhere;max-inline-size:100%}
+body:has(#markets) :is(.market-card h3,.position-card h3,.managed-market h3){font-size:clamp(23px,3vw,30px);line-height:1.2;overflow-wrap:anywhere}
+body:has(#markets) .points-market-head{flex-wrap:wrap}
+body:has(#markets) .points-options{grid-template-columns:minmax(0,1fr);gap:12px}
+body:has(#markets) .points-option{padding:14px}
+body:has(#markets) .points-option-title{align-items:flex-start}
+body:has(#markets) .points-option-title strong{overflow-wrap:anywhere}
+body:has(#markets) .stake-row{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+body:has(#markets) .points-stake{width:100%;gap:8px;font-size:14px}
+body:has(#markets) .stake-input{height:48px}
+body:has(#markets) .points-stake input[data-slot=input]{width:100%;height:44px;font-size:16px}
+body:has(#markets) .points-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;width:100%}
+body:has(#markets) .points-quick button{min-width:0;padding-inline:4px;min-height:44px;font-size:14px}
+body:has(#markets) :is(.points-bet,.points-claim){min-height:48px;height:auto;font-size:14px}
+body:has(#markets) .console-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-block:8px 24px}
+body:has(#markets) .console-stat{min-width:0;padding:16px;gap:10px;align-content:space-between}
+body:has(#markets) .console-stat>span{font-size:13px;line-height:1.5}
+body:has(#markets) .console-stat>strong{font-size:clamp(22px,4vw,28px);overflow-wrap:anywhere}
+body:has(#markets) .console-section-title{align-items:flex-start;flex-wrap:wrap;gap:12px}
+body:has(#markets) .console-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));width:100%;gap:0}
+body:has(#markets) .console-tabs button{font-size:13px;min-width:0;padding-inline:4px;min-height:44px}
+body:has(#markets) .position-outcomes>div{font-size:14px;min-width:0}
+body:has(#markets) .position-outcomes small{font-size:12px;overflow-wrap:anywhere}
+body:has(#markets) .streamer-console .console-section-title>label{inline-size:100%;font-size:14px}
+body:has(#markets) .streamer-console select{inline-size:100%;min-inline-size:0;margin-block-start:8px}
+body:has(#markets) .form-row{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+body:has(#markets) .form-row input{width:100%;flex:auto;margin:0}
+body:has(#markets) .form-row button{width:100%;flex:auto;margin:0;align-self:stretch}
+body:has(#markets) .streamer-list>.watch-row{flex-direction:column;align-items:stretch}
+body:has(#markets) .streamer-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+body:has(#markets) .streamer-actions a{display:flex;align-items:center}
+body:has(#markets)>footer{flex-wrap:wrap;gap:12px;font-size:12px;padding-block:20px}
+body:has(#markets)>footer .component-link{display:flex;align-items:center;min-height:44px;flex-basis:100%}
+/* Every ledger field stays visible. Compact rows replace horizontal scrolling. */
+body:has(#markets) .console-table-wrap{overflow:visible}
+body:has(#markets) .ledger-table{display:block;min-width:0;width:100%}
+body:has(#markets) .ledger-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+body:has(#markets) .ledger-table tbody{display:grid;gap:12px}
+body:has(#markets) .ledger-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;padding:16px;background:rgb(24 24 24 / .55);border-radius:16px}
+body:has(#markets) .ledger-table td{display:block;min-width:0;padding:0;border:0;overflow-wrap:anywhere;font-size:13px}
+body:has(#markets) .ledger-table [data-label=Movimiento]{grid-area:1/1;font-size:14px;color:var(--foreground)}
+body:has(#markets) .ledger-table [data-label=Mercado]{grid-area:2/1;color:var(--muted-foreground)}
+body:has(#markets) .ledger-table [data-label=Fecha]{grid-area:3/1/4/-1;color:var(--muted-foreground);font-size:12px}
+body:has(#markets) .ledger-table [data-label=Puntos]{grid-area:1/2;text-align:end;white-space:nowrap}
+body:has(#markets) .ledger-table [data-label=Puntos]::after{content:' pts'}
+body:has(#markets) .ledger-table [data-label=Saldo]{grid-area:2/2;text-align:end;color:var(--muted-foreground);white-space:nowrap;font-size:12px}
+body:has(#markets) .ledger-table [data-label=Saldo]::before{content:'Saldo '}
+@container market-card (min-width:23rem){body:has(#markets) .points-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container market-card (min-width:32rem){body:has(#markets) .stake-row{flex-direction:row;align-items:flex-end}body:has(#markets) .points-stake{max-width:220px}body:has(#markets) .points-quick{max-width:280px}}
+@media(min-width:42rem){
+ body:has(#markets) .form-row{flex-direction:row;align-items:flex-end}
+ body:has(#markets) .form-row input{flex:1;min-width:0}
+ body:has(#markets) .form-row button{width:auto;flex:none}
+ body:has(#markets) .console-tabs{width:auto;min-width:350px}
+ body:has(#markets) .streamer-console .console-section-title>label{width:auto}
+}
+@media(min-width:48rem){
+ body:has(#markets){padding-block-end:0}
+ body:has(#markets)>header nav{position:static;grid-area:2/1/3/-1;display:flex;gap:24px;padding:0;min-height:48px;background:none;backdrop-filter:none}
+ body:has(#markets)>header nav a{padding:8px 0;border-radius:0;border-bottom:2px solid transparent;font-size:14px}
+ body:has(#markets)>header nav a[aria-current=page]{background:none;border-color:#ffad91}
+ body:has(#markets) .console-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+ body:has(#markets) .position-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body:has(#markets) .operator{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body:has(#markets) .ledger-table{display:table;min-width:0}
+ body:has(#markets) .ledger-table thead{position:static;width:auto;height:auto;overflow:visible;clip-path:none;white-space:normal}
+ body:has(#markets) .ledger-table tbody{display:table-row-group}
+ body:has(#markets) .ledger-table tr{display:table-row;background:none}
+ body:has(#markets) .ledger-table td{display:table-cell;padding:14px;border-bottom:1px solid var(--border)}
+ body:has(#markets) .ledger-table td::before,body:has(#markets) .ledger-table td::after{content:none}
+ body:has(#markets) .ledger-table :is([data-label=Fecha],[data-label=Movimiento],[data-label=Mercado],[data-label=Puntos],[data-label=Saldo]){font-size:13px;white-space:normal}
+}
+@media(min-width:70rem){
+ body:has(#markets)>header{grid-template-columns:auto minmax(0,1fr) auto;gap:28px}
+ body:has(#markets)>header nav{grid-area:1/2}
+ body:has(#markets)>header .wallet-strip{grid-area:1/3}
+ body:has(#markets) .market-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body:has(#markets) .market-grid:has(>.market-card:only-child){grid-template-columns:minmax(0,1fr)}
+ body:has(#markets) .streamer-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion:reduce){body:has(#markets) *,body:has(#markets) *::before,body:has(#markets) *::after{scroll-behavior:auto}}

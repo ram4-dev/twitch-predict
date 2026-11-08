@@ -1,12 +1,11 @@
-import {useRef,useState,type FormEvent} from 'react';
+import {enhancePointerGlow} from '@/components/ui/spotlight-card';
+import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {createRoot} from 'react-dom/client';
-import {createPortal} from 'react-dom';
 import {ArrowRight,RotateCcw,Check} from 'lucide-react';
 import {BalloonWordmark} from './components/balloon-wordmark.js';
-import {LatexAtmosphere} from './components/latex-atmosphere.js';
 import {Button} from './components/button.js';
 import {StreamerSearch} from './streamer-search.js';
-function LandingBrand(){return <span className="landing-brand" role="img" aria-label="Plot!"><img src="/brand/plot-wordmark.jpg" alt="" width={1792} height={1008}/></span>;}
+function LandingBrand(){return <span className="landing-brand" role="img" aria-label="Plot!"><img src="/brand/plot-logo-transparent.png" alt="" width={1888} height={833}/></span>;}
 
 function WaitlistForm(){
   const [email,setEmail]=useState(''),[state,setState]=useState<'idle'|'saving'|'joined'|'error'>('idle'),[error,setError]=useState('');
@@ -44,8 +43,7 @@ function PredictionPreview(){
     <p className="preview-disclaimer">Simulación con puntos de prueba. No realiza apuestas.</p>
   </div>;
 }
-function Landing(){return <div className="landing">
-  {createPortal(<div className="landing-atmosphere" aria-hidden="true"><LatexAtmosphere/></div>,document.body)}
+function Landing(){useEffect(()=>{const node=document.querySelector<HTMLElement>('.landing');if(node)return enhancePointerGlow(node);},[]);return <div className="landing">
   <header className="landing-header"><a href="/" aria-label="plot, inicio"><LandingBrand/></a><nav aria-label="Navegación"><a href="#como-funciona">Cómo funciona</a><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></nav></header>
   <main id="contenido">
     <section className="landing-hero" aria-labelledby="landing-title">

@@ -46,3 +46,21 @@ export function GlowCard({children,className,glowColor,style,...props}: GlowCard
     {children}
   </article>;
 }
+
+// The page halo follows viewport coordinates; no loop runs when the mouse rests.
+export function enhancePointerGlow(node:HTMLElement){
+  const motion=matchMedia('(prefers-reduced-motion: reduce)');
+  const reset=()=>{delete node.dataset.pointerActive;};
+  const follow=(event:PointerEvent)=>{
+    if(event.pointerType!=='mouse'||motion.matches){reset();return;}
+    node.style.setProperty('--pointer-x',`${event.clientX}px`);
+    node.style.setProperty('--pointer-y',`${event.clientY}px`);
+    node.dataset.pointerActive='true';
+  };
+  node.addEventListener('pointermove',follow);
+  node.addEventListener('pointerleave',reset);
+  node.addEventListener('pointercancel',reset);
+  window.addEventListener('blur',reset);
+  motion.addEventListener('change',reset);
+  return ()=>{node.removeEventListener('pointermove',follow);node.removeEventListener('pointerleave',reset);node.removeEventListener('pointercancel',reset);window.removeEventListener('blur',reset);motion.removeEventListener('change',reset);reset();};
+}
