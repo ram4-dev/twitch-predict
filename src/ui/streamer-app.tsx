@@ -13,17 +13,37 @@ import {enhanceGlowStage} from '@/components/ui/spotlight-card';
 type LoadState={loading:boolean;error:string;markets:DisplayByteMarket[];previews:TwitchPreview[]};
 
 /** Anonymous channel snapshot; existence and availability come from the served markets, not guesses. */
+type PointsOutcome={id:string;title:string;points:number};
+type PointsMarket={key:string;phase:string;canBet:boolean;demo:boolean;totalPoints:number;totalBets:number;sourceCheckedAt:string;winnerId?:string;prediction:{id:string;channel:string;title:string;status:string;createdAt:string;predictionWindowSeconds:number;outcomes:PointsOutcome[]};outcomes:PointsOutcome[]};
+
 export function useChannelData(login:string|undefined){
   const [state,setState]=useState<LoadState>({loading:!!login,error:'',markets:[],previews:[]});
   const reload=useRef(async()=>{
     if(!login)return;
     try{
-      // The public points feed always exists; byte-mode errors surface only for betting actions.
-      const both=await fetch('/api/markets').then(r=>r.json());
-      const markets=(Array.isArray(both)?both:[]).filter(m=>m.prediction?.channel?.toLowerCase()===login);
-      // SAFETY: the points feed returns the same market shape (options, pools, phase, prediction) the betting UI reads.
-      const shaped=markets as unknown as DisplayByteMarket[];
-      const open=shaped.filter(m=>m.status!=='resolved'&&m.status!=='invalid');
+      // The public points feed always exists in every mode; byte-mode errors surface only when betting.
+      // SAFETY: the points feed returns the points-market shape; the betting components expect the byte
+      // DisplayByteMarket shape, so map every field the UI reads (status, options, pools, chain).
+      const both=await fetch('/api/markets').then(r=>r.json()) as unknown;
+      const shaped=(Array.isArray(both)?(both as PointsMarket[]):[]).filter(m=>m.prediction?.channel?.toLowerCase()===login).map((m):DisplayByteMarket=>({
+        id:m.key,
+        title:m.prediction.title,
+        options:m.prediction.outcomes.map(o=>o.title),
+        currency:'sol',
+        status:m.phase==='resolved'?'resolved':m.phase==='void'?'invalid':'open',
+        bettable:m.canBet===true,
+        resolvable:false,
+        openMs:Date.parse(m.prediction.createdAt),
+        closeMs:Date.parse(m.prediction.createdAt)+m.prediction.predictionWindowSeconds*1000,
+        chain:{market:'11111111111111111111111111111111',settled:m.phase==='resolved'},
+        pools:m.outcomes.map(o=>o.points),
+        total:m.totalPoints??0,
+        bettors:m.totalBets??0,
+        winner:m.phase==='resolved'&&m.winnerId?m.prediction.outcomes.findIndex(o=>o.id===m.winnerId):null,
+        invalidReason:m.phase==='void'?'Predicción cancelada':null,
+        notes:{channel:m.prediction.channel,rules:m.demo?'Mercado de demostración con puntos internos.':'Predicción de Twitch con puntos internos de Plot.',createdAt:new Date(Date.parse(m.prediction.createdAt)).toISOString(),twitch:{predictionId:m.prediction.id,status:m.prediction.status,closesAt:Date.parse(m.prediction.createdAt)+m.prediction.predictionWindowSeconds*1000,checkedAt:Date.parse(m.sourceCheckedAt)}},
+      }));
+      const open=shaped.filter(m=>m.status==='open');
       setState({loading:false,error:'',markets:open,previews:[]});
     }catch(e){setState({loading:false,error:(e as Error).message,markets:[],previews:[]});}
   });
