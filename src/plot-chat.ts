@@ -8,12 +8,12 @@ export type PlotCommand={kind:'create';title:string;options:string[]}
 
 export const plotChatHelp='Crear: !plot crear Pregunta, Sí, No · Listar: !plot mercados · Apostar: !plot apostar M7K2, 1 · Cerrar: !plot cerrar M7K2 · Resolver: !plot resolver M7K2, 1 · Cancelar: !plot cancelar M7K2 (usá "comillas" si el texto tiene comas)';
 
-/** Splits on commas outside double quotes; a quoted field keeps its commas. */
+/** Splits on commas or pipes outside double quotes; a quoted field keeps its separators. */
 function fields(argument:string):string[] {
  const parts:string[]=[];let current='';let quoted=false;
  for(const ch of argument){
   if(ch==='"'){quoted=!quoted;continue;}
-  if(ch===','&&!quoted){parts.push(current.trim());current='';continue;}
+  if((ch===','||ch==='|')&&!quoted){parts.push(current.trim());current='';continue;}
   current+=ch;
  }
  if(quoted)throw new Error('Comillas sin cerrar: encerrá entre comillas dobles el texto que contiene comas.');

@@ -66,10 +66,18 @@ export class Points {
       publishMarket:(input:PublishMarketInput)=>this.publishOnDraft(state,input)
     }));
   }
-  /** Publishes on an open draft: owner/mod only, persistent shortId, version-stamped receipt. */
+  /** Publishes on an open draft: owner/mod only, persistent shortId, version-stamped receipt.
+   * Idempotent replay: the same channel+requestId returns the original receipt without touching
+   * state; the same requestId with different payload is rejected as reuse. */
   private publishOnDraft(state:State,input:PublishMarketInput,revalidatedModerator:{granted:boolean;users?:string[]}|null=null):PublishedMarket {
     const account=state.accounts[input.actor.accountId];
     if(!account)throw new Error('Cuenta desconocida');
+    const receiptId=`plot-publish:${input.channel.id}:${input.requestId}`,fingerprint=JSON.stringify([input.actor.accountId,input.actor.twitchId,input.input]);
+    const previous=state.receipts[receiptId];
+    if(previous){
+      if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');
+      return previous.result as PublishedMarket;
+    }
     // When HTTP revalidation ran, its verdict overrides cached evidence: granted=false denies
     // the moderator (outage or revocation), granted=true uses the fresh list. Owner unaffected.
     const moderator=revalidatedModerator
@@ -82,8 +90,11 @@ export class Points {
     const prediction=predictionSchema.parse({id,channel:input.channel.login,title:input.input.title,status:'ACTIVE',createdAt:stamp,predictionWindowSeconds:input.input.durationSeconds??120,outcomes:input.input.options.map((title,i)=>({id:String(i+1),title}))});
     const shortId=this.nextShortId(state,input.channel.login);
     const market:Market={key:`plot:${input.channel.login}:${id}`,prediction,phase:'open',demo:false,source:'plot',ownerTwitchId:input.channel.id,creatorTwitchId:input.actor.twitchId,shortId,version:1,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
+    if(state.markets[market.key])throw new Error('Ese mercado ya fue publicado con este identificador.');
     state.markets[market.key]=market;
-    return {kind:'market',id,key:market.key,shortId,text:`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · 100 puntos por apuesta. Abierta 2 minutos.`};
+    const published:PublishedMarket={kind:'market',id,key:market.key,shortId,text:`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · 100 puntos por apuesta. Abierta 2 minutos.`};
+    state.receipts[receiptId]={fingerprint,result:published};
+    return published;
   }
   /** Persistent per-channel codes: never reused, survive restarts, allocated inside the aggregate transaction. */
   private nextShortId(state:State,channel:string):string {
@@ -218,7 +229,11 @@ export class Points {
     return this.transaction(state=>{
       const account=Object.values(state.accounts).find(a=>a.twitch?.id===channelId&&a.botEnabled);
       const owner=actorId===channelId&&account?.twitch&&state.streamers[account.twitch.login]?.twitchId===channelId;
-      if(!owner&&!(verifiedModerator&&command.kind==='create'))throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
+      // Viewers with a valid Twitch identity may bet and list; only the owner locks, resolves or
+      // cancels; a verified moderator may only create. The dispatch below enforces the rest.
+      const privileged=owner||(verifiedModerator&&command.kind==='create');
+      if(!privileged&&!['bet','list'].includes(command.kind))throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
+      if(!owner&&command.kind==='create'&&!verifiedModerator)throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
       const receiptId=`plot-command:${channelId}:${eventId}`,fingerprint=JSON.stringify([actorId,command]);
       const previous=state.receipts[receiptId];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de evento reutilizado con otros datos');return previous.result as {key:string;text:string};}
       const channel=account?.twitch?.login??'unknown';
@@ -304,7 +319,9 @@ export class Points {
       // Terminal refunded phase: winnerId/reason still distinguish an owner resolve with no winning bets from a cancellation.
       m.phase='void';
       const groups=new Map<string,Bet[]>();
-      for(const b of bets){b.payout=b.amount;b.claimed=true;b.creditedAt=now();b.creditMethod='refund';groups.set(b.accountId,[...(groups.get(b.accountId)??[]),b]);}
+      // Idempotency: positions already credited (refund/claim/distribution) are never re-credited.
+      const refundable=bets.filter(b=>!b.claimed&&b.creditMethod===undefined);
+      for(const b of refundable){b.payout=b.amount;b.claimed=true;b.creditedAt=now();b.creditMethod='refund';groups.set(b.accountId,[...(groups.get(b.accountId)??[]),b]);}
       for(const [accountId,group] of groups){const amount=group.reduce((n,b)=>n+b.amount,0);if(amount>0)this.ledger(state,state.accounts[accountId],'refund',amount,m.key);}
       return;
     }
