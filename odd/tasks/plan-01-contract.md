@@ -19,6 +19,6 @@ Sesión 2 entrega ProposalCreateHandler (tipo real): recibe actor/canal/input/ev
 
 Sintaxis: !plot crear Pregunta, Sí, No; campos con comas entre comillas dobles. !plot mercados; !plot apostar ID, 1; !plot cerrar ID; !plot resolver ID, 1; !plot cancelar ID. Atajos sin ID solo con destino único. IDs se resuelven dentro del canal. Cada evento Twitch es una apuesta nueva; replay usa eventId.
 
-Cancelación devuelve cada posición pendiente dentro de la misma transacción y marca claimed/creditedAt/creditMethod=refund; ledger kind=refund. claim/distribution excluyen posiciones acreditadas. Ganador sin apuestas conserva resultado resolved y devuelve apuestas (reason explícita). Auditoría histórica solo reporte, sin escritura de datos compartidos.
+Cancelación devuelve cada posición pendiente dentro de la misma transacción y marca claimed/creditedAt/creditMethod=refund; ledger kind=refund. claim/distribution excluyen posiciones acreditadas. Fase terminal de reembolso: cancelación y resolución con ganador sin apuestas quedan en fase `void` (UI: Reembolso) con winnerId/reason que distinguen ambos casos; el reembolso se acredita en el mismo asiento. Auditoría histórica solo reporte, sin escritura de datos compartidos.
 
 Identidad: login Twitch sin token previo; link explícito con token conserva accountId; conflicto entre proveedores nunca fusiona. Proveedor Google sin configuración se declara no disponible.

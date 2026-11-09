@@ -57,9 +57,10 @@ test('native chat bets settle and claim with existing point conservation and rec
  await p.plotCommand('123','123',{kind:'resolve',option:1},'resolve');
  await assert.rejects(p.plotCommand('123','123',{kind:'resolve',option:2},'change-winner'),/No hay/);
 }));
-test('canceling a native market returns the existing stake through claim',()=>fixture(async({p,viewer})=>{
+test('canceling a native market auto-refunds the stake without a claim',()=>fixture(async({p,viewer})=>{
  const {key}=await p.plotCommand('123','123',create(),'create');await p.chatBet('456',key,'2','bet');
- await p.plotCommand('123','123',{kind:'cancel'},'cancel');assert.equal(p.market(key).phase,'void');assert.equal((await p.claim(viewer,key,'claim') as {paid:number}).paid,100);assert.equal(p.me(viewer).balance,10000);
+ await p.plotCommand('123','123',{kind:'cancel'},'cancel');assert.equal(p.market(key).phase,'void');assert.equal(p.me(viewer).balance,10000);assert.equal(p.me(viewer).claimable,0);
+ await assert.rejects(p.claim(viewer,key,'claim'),/pendientes/);assert.equal(p.me(viewer).ledger.filter(l=>l.kind==='refund').length,1);
 }));
 function message(text:string,actor='123',id:string=randomUUID()){
  const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));

@@ -37,7 +37,14 @@ test('batch distribution and consumer claims race safely, credit offline wallets
 }));
 test('cancel and no winning bets refund every wallet and repeated distributions are harmless',()=>fixture(async p=>{
   const owner=await p.walletLogin('owner'),a=await p.walletLogin('a');await p.assignStreamer('demo_streamer','owner');
-  for(const kind of ['cancel','resolve'] as const){const m=await p.accept(demoPrediction(),true);await p.bet(a.token,m.key,'victory',200,randomUUID());await action(p,owner.token,m.key,'lock');await action(p,owner.token,m.key,kind,'defeat');assert.equal(p.market(m.key).phase,'void');await action(p,owner.token,m.key,'distribute');await action(p,owner.token,m.key,'distribute');assert.equal(p.me(a.token).balance,10000);}
+  for(const kind of ['cancel','resolve'] as const){
+   const m=await p.accept(demoPrediction(),true);await p.bet(a.token,m.key,'victory',200,randomUUID());await action(p,owner.token,m.key,'lock');await action(p,owner.token,m.key,kind,'defeat');
+   // Both cancellation and a resolve with no winning bets land in the refunded terminal phase, distinguished by winnerId.
+   assert.equal(p.market(m.key).phase,'void');if(kind==='resolve')assert.equal(p.market(m.key).winnerId,'defeat');
+   const refundEntries=p.me(a.token).ledger.filter(l=>l.kind==='refund'&&l.marketKey===m.key).length;
+   assert.equal(refundEntries,1);assert.equal(p.me(a.token).balance,10000);
+   await action(p,owner.token,m.key,'distribute');await action(p,owner.token,m.key,'distribute');assert.equal(p.me(a.token).balance,10000);
+  }
 }));
 test('Twitch automatic resolution is visible to streamer and can be distributed without changing winner',()=>fixture(async p=>{
   const owner=await p.walletLogin('owner'),a=await p.walletLogin('a');const source=demoPrediction();await p.assignStreamer(source.channel,'owner');const m=await p.accept(source);

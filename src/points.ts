@@ -11,11 +11,11 @@ export const CHAT_BET_POINTS = 100;
 export const SOURCE_MAX_AGE = 30_000;
 export type TwitchIdentity={id:string;login:string;displayName:string;linkedAt:string};
 type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
-type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'; createdAt:string };
+type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'|'refund'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
 type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
-type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'; delta:number; balance:number; marketKey?:string; createdAt:string };
+type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
 type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer> };
 export type StreamerAction = { key:string; action:'lock'|'resolve'|'cancel'|'distribute'; winnerId?:string; requestId:string };
@@ -205,14 +205,23 @@ export class Points {
   private settle(state:State,m:Market,winner:string|null,reason:string) {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const winners=bets.filter(b=>b.outcomeId===winner);
     const pool=bets.reduce((n,b)=>n+b.amount,0);const winningPool=winners.reduce((n,b)=>n+b.amount,0);
-    m.winnerId=winner??undefined;m.reason=reason;m.phase=winner&&winningPool?'resolved':'void';
-    m.settlement={source:m.demo?'demo':'twitch',at:now()};
-    if(m.phase==='void') {if(winner)m.reason='Sin apuestas al ganador: se devuelve cada apuesta';for(const bet of bets)bet.payout=bet.amount;return;}
+    m.winnerId=winner??undefined;m.reason=reason;m.settlement={source:m.demo?'demo':'twitch',at:now()};
+    if(!winner||!winningPool) {
+      // Automatic refund: credited inside the same transaction, once per position, even for offline accounts.
+      if(winner)m.reason='Sin apuestas al ganador: se devuelve cada apuesta';
+      // Terminal refunded phase: winnerId/reason still distinguish an owner resolve with no winning bets from a cancellation.
+      m.phase='void';
+      const groups=new Map<string,Bet[]>();
+      for(const b of bets){b.payout=b.amount;b.claimed=true;b.creditedAt=now();b.creditMethod='refund';groups.set(b.accountId,[...(groups.get(b.accountId)??[]),b]);}
+      for(const [accountId,group] of groups){const amount=group.reduce((n,b)=>n+b.amount,0);if(amount>0)this.ledger(state,state.accounts[accountId],'refund',amount,m.key);}
+      return;
+    }
     // Largest remainder allocation conserves every integer point without floating point arithmetic.
     const allocation=winners.map(b=>{const numerator=BigInt(b.amount)*BigInt(pool);return {bet:b,paid:Number(numerator/BigInt(winningPool)),remainder:numerator%BigInt(winningPool)};});
     let remaining=pool-allocation.reduce((sum,a)=>sum+a.paid,0);
     allocation.sort((a,b)=>a.remainder===b.remainder?a.bet.id.localeCompare(b.bet.id):a.remainder>b.remainder?-1:1);
-    for(const a of allocation){if(remaining>0){a.paid++;remaining--;}a.bet.payout=a.paid;}
+      for(const a of allocation){if(remaining>0){a.paid++;remaining--;}a.bet.payout=a.paid;}
+    m.phase='resolved';
   }
   async bet(token:string,key:string,outcomeId:string,amount:number,requestId:string) {
     if(!Number.isSafeInteger(amount)||amount<=0||amount>1_000_000)throw new Error('Ingresá puntos enteros entre 1 y 1.000.000');
