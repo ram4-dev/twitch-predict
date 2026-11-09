@@ -12,11 +12,11 @@ type Flow={kind:'account'|'channel';cookieHash:string;expires:number;accountId?:
 type Pending=Flow&{twitchId:string};
 type AuthState={flows:Record<string,Flow>;pending:Record<string,Pending>;bot?:{id:string;login:string;clientId:string;authorizedAt:number}};
 type Delivery={id:string;channelId:string;epoch:string;text:string;createdAt:number;status:'pending'|'sending'|'sent'|'failed';error?:string};
-type Runtime={channels:Record<string,{phase:'connecting'|'connected'|'error';checkedAt:number;error?:string}>;events:Record<string,number>;cooldowns:Record<string,number>;outbox:Record<string,Delivery>;nextSendAt:number};
+type Runtime={channels:Record<string,{phase:'connecting'|'connected'|'error';checkedAt:number;error?:string}>;events:Record<string,number>;cooldowns:Record<string,number>;outbox:Record<string,Delivery>;nextSendAt:number;moderators:Record<string,{users:string[];checkedAt:number}>};
 type Channel={id:string;login:string;epoch:string};
 type Subscription={id:string;status:string;type:string;condition:{broadcaster_user_id?:string;user_id?:string};transport:{method:string;callback?:string}};
 const authState=():AuthState=>({flows:{},pending:{}});
-const runtime=():Runtime=>({channels:{},events:{},cooldowns:{},outbox:{},nextSendAt:0});
+const runtime=():Runtime=>({channels:{},events:{},cooldowns:{},outbox:{},nextSendAt:0,moderators:{}});
 const nonce=()=>randomBytes(32).toString('hex');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
@@ -98,6 +98,20 @@ export class CloudTwitchBot {
   if(!this.configured||!id||id.length>256||!Number.isFinite(Date.parse(stamp))||Math.abs(this.now()-Date.parse(stamp))>600_000)return false;
   const expected='sha256='+createHmac('sha256',this.secret).update(id+stamp).update(body).digest('hex');return equal(expected,signature);
  }
+ /** Authoritative moderator check (P1-06): Twitch Get Moderators via the bot's app token,
+  * cached briefly in the runtime aggregate. Never accepts client-sent role claims.
+  * Called OUTSIDE any aggregate transaction: nested updates would deadlock the local queue. */
+ private async isModerator(channel:Channel,chatterId:string):Promise<boolean>{
+  const state=await this.documents.read('twitch-bot-runtime',runtime);
+  const cached=state.moderators[channel.id];
+  if(cached&&this.now()-cached.checkedAt<10*60_000)return cached.users.includes(chatterId);
+  const fresh=await this.api(`moderation/moderators?broadcaster_id=${encodeURIComponent(channel.id)}&first=100`)
+   .then(r=>z.object({data:z.array(z.object({user_id:z.string()})).max(1000)}).parse(r).data.map(m=>m.user_id))
+   .catch(()=>null);
+  if(!fresh)return false; // Twitch unavailable: deny without guessing; the owner path still works.
+  await this.documents.update('twitch-bot-runtime',runtime,s=>{s.moderators[channel.id]={users:fresh,checkedAt:this.now()};});
+  return fresh.includes(chatterId);
+ }
  async webhook(headers:Record<string,string>,body:Buffer){
   if(!this.verify(headers,body))return {status:403,body:'Firma inválida'};
   const data=JSON.parse(body.toString('utf8')),type=headers['twitch-eventsub-message-type'];
@@ -111,12 +125,18 @@ export class CloudTwitchBot {
   const auth=await this.documents.read('twitch-bot-auth',authState),p=await this.points(),channel=p.enabledBotChannels().find(c=>c.id===event.broadcaster_user_id);
   if(!channel||!auth.bot||data.subscription.condition?.user_id!==auth.bot.id||event.chatter_user_id===auth.bot.id)return {status:204,body:''};
   const plotMatch=/^!plot(?:\s+([\s\S]*))?$/i.exec(event.message.text.trim());
-  if(plotMatch?.[1]){
-   await this.documents.update('twitch-bot-runtime',runtime,async s=>{
-    this.prune(s);const id=headers['twitch-eventsub-message-id'],key=`command:${id}`;if(s.events[id])return;
-    if(event.chatter_user_id!==channel.id){if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();}
-    let reply:string;
-    try{const command=parsePlotCommand(event.message.text);reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id)).text:plotChatHelp;}catch(e){reply=(e as Error).message;}
+   if(plotMatch?.[1]){
+    // Moderator evidence is resolved BEFORE the aggregate update: resolving it inside would
+    // deadlock the local document queue and nest cloud transactions unnecessarily.
+    const verifiedModerator=event.chatter_user_id!==channel.id&&await this.isModerator(channel,event.chatter_user_id);
+    await this.documents.update('twitch-bot-runtime',runtime,async s=>{
+     this.prune(s);const id=headers['twitch-eventsub-message-id'],key=`command:${id}`;if(s.events[id])return;
+     if(event.chatter_user_id!==channel.id){if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();}
+     let reply:string;
+     try{
+      const command=parsePlotCommand(event.message.text);
+      reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id,verifiedModerator)).text:plotChatHelp;
+     }catch(e){reply=(e as Error).message;}
     s.events[id]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`${reply.slice(0,499-this.channelUrl(channel.login).length)} ${this.channelUrl(channel.login)}`,createdAt:this.now(),status:'pending'};
    });
    return {status:204,body:''};

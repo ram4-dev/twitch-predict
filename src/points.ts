@@ -147,7 +147,7 @@ export class Points {
     return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,google:account.google??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,channel:this.state.markets[b.marketKey].prediction.channel,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-100).reverse().map(l=>({...l,title:l.marketKey?this.state.markets[l.marketKey]?.prediction.title:undefined})),
-      streamerChannels:Object.values(this.state.streamers).filter(s=>s.wallet===account.wallet&&((s.twitchId&&s.twitchId===account.twitch?.id)||s.channel==='demo_streamer')).map(s=>s.channel)};
+      streamerChannels:Object.values(this.state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel)};
   }
   private view(state:State, m:Market) {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const total=bets.reduce((n,b)=>n+b.amount,0);
@@ -163,7 +163,7 @@ export class Points {
   botChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled).map(a=>a.twitch!.login);}
   enabledBotChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled&&a.botEpoch).map(a=>({id:a.twitch!.id,login:a.twitch!.login,epoch:a.botEpoch!}));}
   botState(token:string){const a=this.account(this.state,token);return {enabled:!!a.twitch&&!!a.botEnabled,twitch:a.twitch??null};}
-  setBotEnabled(token:string,enabled:boolean,expected?:{accountId:string;twitchId:string}){return this.transaction(state=>{const a=this.account(state,token);if(!a.wallet||!a.twitch)throw new Error('Vinculá primero tu cuenta de Twitch');if(expected&&(a.id!==expected.accountId||a.twitch.id!==expected.twitchId))throw new Error('La cuenta cambió durante la conexión');if(enabled&&!a.botEnabled)a.botEpoch=randomUUID();a.botEnabled=enabled;return {enabled,channel:a.twitch.login};});}
+  setBotEnabled(token:string,enabled:boolean,expected?:{accountId:string;twitchId:string}){return this.transaction(state=>{const a=this.account(state,token);if(!a.twitch)throw new Error('Vinculá primero tu cuenta de Twitch');if(expected&&(a.id!==expected.accountId||a.twitch.id!==expected.twitchId))throw new Error('La cuenta cambió durante la conexión');if(enabled&&!a.botEnabled)a.botEpoch=randomUUID();a.botEnabled=enabled;return {enabled,channel:a.twitch.login};});}
   pendingSources() {return Object.values(this.state.markets).filter(m=>!m.demo&&m.source!=='plot'&&!['resolved','void'].includes(m.phase)).map(m=>({id:m.prediction.id,channel:m.prediction.channel}));}
   async watch(channel:string) {
     if(!/^[a-zA-Z0-9_]{1,40}$/.test(channel))throw new Error('Canal inválido');
@@ -363,8 +363,8 @@ export class Points {
   /** Read-only JSON snapshot for auditors and repair tools; callers must never mutate it. */
   exportStateJson():string {return JSON.stringify(this.state);}
   private streamer(state:State,token:string,key?:string){
-    const a=this.account(state,token);if(!a.wallet)throw new Error('Conectá Phantom para usar la consola');
-    const channels=Object.values(state.streamers).filter(s=>s.wallet===a.wallet&&(s.channel==='demo_streamer'||(s.twitchId&&s.twitchId===a.twitch?.id))).map(s=>s.channel);
+    const a=this.account(state,token);// Real channels require the linked Twitch identity; the demo channel stays with its assigned wallet.
+    const channels=Object.values(state.streamers).filter(s=>(a.twitch&&s.twitchId===a.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===a.wallet)).map(s=>s.channel);
     if(key&&!channels.includes(state.markets[key]?.prediction.channel.toLowerCase()))throw new Error('No tenés permisos sobre este mercado');
     return {account:a,channels};
   }

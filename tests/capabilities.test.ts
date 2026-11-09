@@ -39,3 +39,51 @@ test('channel moderators may create but never close, resolve or cancel; creator 
  // Without verified moderator evidence the same actor cannot create either.
  await assert.rejects(p.plotCommand('123','999',parsePlotCommand('!plot crear ¿Sin evidencia?, Sí, No')!,'no-evidence'),/dueño/);
 }));
+import {mkdtemp as mkd2,rm as rm2} from 'node:fs/promises';
+import {join as j2} from 'node:path';
+import {createHmac as hmac2,randomUUID as uuid2} from 'node:crypto';
+import {CloudTwitchBot} from '../src/cloud/twitch-bot.js';
+import {LocalDocuments} from '../src/local-documents.js';
+
+test('bot promotes a real moderator from the authoritative Twitch list and a fake claim cannot create',async()=>{
+ const directory=await mkd2(j2(tmpdir(),'mod-bot-'));
+ try{
+  const p=new Points(directory);await p.load();
+  const owner=await p.walletLogin('owner-wallet');await p.linkTwitch(owner.token,identity('123','owner'));await p.setBotEnabled(owner.token,true);
+  const viewer=await p.createAccount();await p.linkTwitch(viewer.token,identity('456','real_mod'));
+  const store=new LocalDocuments(directory);
+  await store.update('twitch-bot-auth',()=>({bot:{id:'42',login:'plotfun',clientId:'fixture',authorizedAt:Date.now()}}),()=>{});
+  // Fixture Twitch API: app token + Get Moderators returns the real moderator for the channel.
+  const api=(async(url:string)=>{
+   const u=String(url);
+   if(u.includes('oauth2/token'))return Response.json({access_token:'fixture-app-token',expires_in:3600});
+   if(u.startsWith('https://id.twitch.tv/oauth2/validate'))return Response.json({client_id:'fixture',user_id:'42',login:'plotfun',scopes:['user:bot','user:read:chat','user:write:chat'],expires_in:3600});
+   if(u.includes('moderation/moderators'))return Response.json({data:[{user_id:'456'}]});
+   if(u.includes('/users?login='))return Response.json({data:[]});
+   return Response.json({});
+  }) as unknown as typeof fetch;
+  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},api,Date.now,p);
+  const send=async(text:string,actor:string,id:string=uuid2())=>{
+   const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));
+   const stamp=new Date().toISOString(),secret=hmac2('sha256','fixture-secret').update('plot-eventsub-webhook-v1').digest('hex');
+   return bot.webhook({'twitch-eventsub-message-id':id,'twitch-eventsub-message-timestamp':stamp,'twitch-eventsub-message-type':'notification','twitch-eventsub-message-signature':'sha256='+hmac2('sha256',secret).update(id+stamp).update(raw).digest('hex')},raw);
+  };
+  // Real moderator creates the market.
+  await send('!plot crear ¿De mods?, Sí, No','456');
+  assert.equal(p.markets().length,1);
+  // Moderator still cannot close or cancel.
+  await send('!plot cerrar','456');
+  assert.equal(p.markets()[0].phase,'open');
+  // A random chatter claiming nothing cannot create either.
+  await send('!plot crear ¿Fake?, Sí, No','999');
+  assert.equal(p.markets().length,1);
+  // Twitch outage denies moderation without guessing.
+  const failingBot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},(async()=>{throw new Error('down');}) as unknown as typeof fetch,Date.now,p);
+  const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:'456',message:{text:'!plot crear ¿Outage?, Sí, No'}}}));
+  const stamp=new Date().toISOString(),secret=hmac2('sha256','fixture-secret').update('plot-eventsub-webhook-v1').digest('hex'),id3=uuid2();
+  await failingBot.webhook({'twitch-eventsub-message-id':id3,'twitch-eventsub-message-timestamp':stamp,'twitch-eventsub-message-type':'notification','twitch-eventsub-message-signature':'sha256='+hmac2('sha256',secret).update(id3+stamp).update(raw).digest('hex')},raw).catch(()=>{});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(p.markets().length,1);
+  await new Promise(resolve=>setImmediate(resolve));
+ }finally{await rm2(directory,{recursive:true,force:true});}
+});
