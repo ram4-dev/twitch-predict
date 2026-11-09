@@ -41,6 +41,7 @@ export function auditHistoricalRefunds(points:Points):RefundAuditReport {
     account.set(entry.marketKey,(account.get(entry.marketKey)??0)+entry.delta);
     pools.set(entry.accountId,account);
   }
+  const originalPools=new Map([...pools].map(([id,markets])=>[id,new Map(markets)]));
   const pending:RefundAuditRow[]=[],conflicts:RefundAuditRow[]=[];
   const shortfallReported=new Set<string>();
   const rowOf=(bet:SnapshotBet):RefundAuditRow=>({betId:bet.id,accountId:bet.accountId,
@@ -63,13 +64,9 @@ export function auditHistoricalRefunds(points:Points):RefundAuditReport {
       if(pool>=bet.amount)consume(pools,bet.accountId,bet.marketKey,bet.amount);
       else if(!shortfallReported.has(`${bet.accountId}\u0000${bet.marketKey}`)){
         consume(pools,bet.accountId,bet.marketKey,pool);
-        if(poolOf(pools,bet.accountId,bet.marketKey)<=0&&pending.length>=0){
-          // Subsequent same-pool positions keep consuming zero; report the remaining shortfall once.
           shortfallReported.add(`${bet.accountId}\u0000${bet.marketKey}`);
-          // Compute the full shortfall across all refund-marked positions of this pool.
           const totalBetted=snapshot.bets.filter(b2=>b2.accountId===bet.accountId&&b2.marketKey===bet.marketKey&&b2.creditMethod==='refund').reduce((n,b2)=>n+b2.amount,0);
-          conflicts.push({...row,pending:Math.max(0,totalBetted-pool)});
-        }
+          conflicts.push({...row,pending:Math.max(0,totalBetted-poolOf(originalPools,bet.accountId,bet.marketKey))});
       }
       continue;
     }

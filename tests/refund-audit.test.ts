@@ -92,6 +92,7 @@ test('ordinary resolved, claim/distribution history, same-account aggregates: re
  const report2=auditHistoricalRefunds(loaded2);
  assert.equal(report2.pending.filter(r=>r.marketKey===m3.key).length,0);
  assert.equal(report2.conflicts.filter(r=>r.marketKey===m3.key).length,1);
+ assert.equal(report2.conflicts.find(r=>r.marketKey===m3.key)!.pending,100);
  // refund50 → even shorter: conflict.
  const raw3=JSON.parse(await readFile(`${dir}/points.json`,'utf8'));
  raw3.ledger=raw3.ledger.filter((l:{kind:string;marketKey:string})=>!(l.kind==='refund'&&l.marketKey===m3.key));
@@ -100,4 +101,5 @@ test('ordinary resolved, claim/distribution history, same-account aggregates: re
  const loaded3=new Points(dir);await loaded3.load();
  const report3=auditHistoricalRefunds(loaded3);
  assert.equal(report3.conflicts.filter(r=>r.marketKey===m3.key).length,1);
+ assert.equal(report3.conflicts.find(r=>r.marketKey===m3.key)!.pending,150);
 }));
