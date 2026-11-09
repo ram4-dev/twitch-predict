@@ -17,7 +17,10 @@ type SearchResult={login:string;displayName:string;live:boolean};
 
 const client=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async value=>localStorage.setItem('pointsToken',value)});
 const normalize=(value:string)=>value.trim().replace(/^@/,'').toLowerCase();
-const marketHref=(key:string)=>{const url=new URL(location.href);url.searchParams.set('market',key);return url.href;};
+const marketHref=(key:string)=>{
+ let url:URL;
+ try{url=new URL(location.href);}catch(e){throw new Error('No se pudo preparar el enlace del mercado',{cause:e});}
+ url.searchParams.set('market',key);return url.href;};
 function navigateMarket(event:React.MouseEvent<HTMLAnchorElement>,open:()=>void){if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();open();}
 
 function Glass({children,className='',...props}:React.HTMLAttributes<HTMLDivElement>){return <LiquidGlass {...props} refraction={0} blur={8} tint="var(--surface)" shadow={false} className={`phone-glass ${className}`}>{children}</LiquidGlass>;}
@@ -91,8 +94,11 @@ export function PhoneApp({theme='ember',demo=false,embedded=false,detailLayout='
  const chooseChannel=(channel:string)=>{setSelected(channel);if(!embedded&&!demo){const url=new URL(location.href);if(channel)url.searchParams.set('channel',channel);else url.searchParams.delete('channel');history.replaceState(null,'',url);}};
  const switchTab=(next:'active'|'own')=>{setTab(next);if(!embedded)history.replaceState(null,'',`${location.pathname}${location.search}#${next==='own'?'history':'markets'}`);};
  useEffect(()=>{
-  if(demo||embedded)return;const params=new URLSearchParams(location.search);if(!params.has('twitch_ticket')&&!params.has('twitch_error'))return;
-  const ticket=params.get('twitch_ticket'),cancelled=params.get('twitch_error')==='canceled';params.delete('twitch_ticket');params.delete('twitch_error');const query=params.toString();history.replaceState(null,'',`${location.pathname}${query?'?'+query:''}#profile`);setPage('profile');
+  if(demo||embedded)return;const params=new URLSearchParams(location.search);if(!params.has('twitch_ticket')&&!params.has('twitch_error')&&!params.has('google_ticket')&&!params.has('google_error'))return;
+ const googleTicket=params.get('google_ticket'),googleError=params.get('google_error');
+  const ticket=params.get('twitch_ticket'),cancelled=params.get('twitch_error')==='canceled';params.delete('twitch_ticket');params.delete('twitch_error');params.delete('google_ticket');params.delete('google_error');const query=params.toString();history.replaceState(null,'',`${location.pathname}${query?'?'+query:''}#profile`);setPage('profile');
+ if(googleError){setAuthError(googleError==='canceled'?'Cancelaste la conexión con Google.':'No se pudo completar la conexión con Google.');return;}
+ if(googleTicket){let activeG=true;void client.authRequest('/api/google/complete',{ticket:googleTicket}).then(()=>{if(activeG)void refresh();}).catch(error=>{if(activeG)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión con Google.');});return()=>{activeG=false;};}
   if(!ticket){setAuthError(cancelled?'Cancelaste la conexión con Twitch.':'No se pudo completar la conexión.');return;}
   let active=true;void client.authRequest('/api/twitch/complete',{ticket}).then(()=>{if(active)void refresh();}).catch(error=>{if(active)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión.');});return()=>{active=false;};
  },[demo,embedded,refresh]);
