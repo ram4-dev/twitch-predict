@@ -22,6 +22,24 @@ Rama: `apply-plan-02`; base: `504d3cb`; worktree: `/home/meeting/projects/twitch
 - a8eed97 feat(proposals): domain, limits, receipts and atomic acceptance service
 - 9f6aa86 feat(proposals): HTTP router and role-deciding create handler
 - 17c4de4 feat(ui): proposal inbox, my-proposals, market composer and styles
+- 90f0c97 docs(odd): plan-02 progress, interfaces and integration patch notes
+- 753f4ad test(e2e): proposals API checks and isolated plan-2 launcher on port 1362
+- e046c8d test(e2e): accept bridge-guard 401 before proposals router integration
+- 5589e3f test(e2e): reuse standard fixture paths in plan-2 launcher
+
+## Verificación
+
+- typecheck: limpio (tsc --noEmit).
+- lint: limpio (eslint proyecto completo, 0 errores en archivos nuevos).
+- unitarios: tests/proposals.test.ts 7/7, tests/proposals-ui.test.ts 4/4; suite completa `npm test`: 117 pass, 0 fail, 13 skipped (E2E).
+- build: `npm run build` OK (server + extensión Chrome).
+- E2E (launcher propio `scripts/e2e-server-plan2.ts`, puerto 1362, estado Portless aislado en TMPDIR; 1358 y previews intactos):
+  - tests/proposals.e2e.ts: 2/2 pass contra server real (guard de bridge 401 mientras el router no está montado; documentado).
+  - tests/points.e2e.ts: 1/3 pass. Las 2 fallas (MV3 extension polling, consumer UI) se repiten con `git stash` sobre la base e046c8d sin cambios de Plan 2: pre-existentes/ambientales en este worktree, no regresiones de Plan 2. Reportadas para el coordinador.
+
+## Estado del E2E servidor
+
+Launcher dejó de correr al finalizar (pkill e2e-server-plan2 tras las corridas); no hay proceso en 1362.
 
 ## Interfaces entregadas (para coordinador/sesión 1)
 
