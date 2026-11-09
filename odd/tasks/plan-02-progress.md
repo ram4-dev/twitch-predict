@@ -27,19 +27,34 @@ Rama: `apply-plan-02`; base: `504d3cb`; worktree: `/home/meeting/projects/twitch
 - e046c8d test(e2e): accept bridge-guard 401 before proposals router integration
 - 5589e3f test(e2e): reuse standard fixture paths in plan-2 launcher
 
-## Verificación
+## Integración real (e686b4d → c34b605 de sesión 1)
 
-- typecheck: limpio (tsc --noEmit).
-- lint: limpio (eslint proyecto completo, 0 errores en archivos nuevos).
-- unitarios: tests/proposals.test.ts 7/7, tests/proposals-ui.test.ts 4/4; suite completa `npm test`: 117 pass, 0 fail, 13 skipped (E2E).
-- build: `npm run build` OK (server + extensión Chrome).
-- E2E (launcher propio `scripts/e2e-server-plan2.ts`, puerto 1362, estado Portless aislado en TMPDIR; 1358 y previews intactos):
-  - tests/proposals.e2e.ts: 2/2 pass contra server real (guard de bridge 401 mientras el router no está montado; documentado).
-  - tests/points.e2e.ts: 1/3 pass. Las 2 fallas (MV3 extension polling, consumer UI) se repiten con `git stash` sobre la base e046c8d sin cambios de Plan 2: pre-existentes/ambientales en este worktree, no regresiones de Plan 2. Reportadas para el coordinador.
+- Merge de `apply-plan-01` (`e686b4d` + `eacab46` Google) en `apply-plan-02`: merge commits `fb3aa90`, `aaeb546`. `src/market-contract.ts` quedó byte-idéntico al de sesión 1.
+- Servicio reescrito sobre `Points.proposalTransaction`: `src/proposals-service.ts` ya no tiene gateway/store propios — propuestas y recibos viven en `draft.proposals` del MISMO aggregate points; aceptación = `draft.publishMarket` síncrono + transición en una sola escritura. `requestId` determinístico `proposal-accept:<id>:<version>` → id de mercado determinístico.
+- Router montado en `src/offchain-server.ts` (`/api/proposals/*`) con resolver server-side: actor desde `points.me(bearer)`, canal desde `state.streamers` (acepta twitchId o login), owner por `twitchId===channel.id`.
+- `Points.accountForTwitch()` (método público mínimo, 1 línea, mount de sesión 2 en archivo de sesión 1 — a revisar por coordinador).
+- Bot (`src/cloud/twitch-bot.ts`): `mountProposals()` opcional; viewer `!plot crear` (no-owner, no-mod) con cuenta vinculada → propuesta pendiente con recibo del evento; sin cuenta vinculada → pedido de vinculación; sin mount → comportamiento anterior. La evidencia de moderador firmada de sesión 1 (isModerator, sin commit aún) se inserta en esa rama cuando exista.
+- UI: `ProposalInbox` en `StreamerConsole`, `MyProposals` en `UserConsole` (`src/ui/consoles.tsx`).
 
-## Estado del E2E servidor
+## Verificación (actualizada)
 
-Launcher dejó de correr al finalizar (pkill e2e-server-plan2 tras las corridas); no hay proceso en 1362.
+- typecheck/lint: limpios en todo el proyecto.
+- Unit: suite completa `npm test` → 147 tests, 134 pass, 0 fail, 13 skipped (E2E). Propuestas: 9/9 dominio+servicio, 4/4 UI SSR.
+- E2E `tests/proposals.e2e.ts` (server REAL montado, launcher propio puerto fijo interno 14622 vía `--app-port`, sin proxy front — 1362 quedó libre de estados viejos): 2/2 en corridas repetidas — login Twitch-first fixture, submit viewer 201, bandeja owner-only, viewer-accept 403, owner-accept publica 1 mercado en el aggregate, double-accept replaya, withdraw y reject con motivo.
+- El launcher usa `portless twitch-predict --app-port 14622` + `AUTH_ORIGIN=http://twitch-predict.localhost:14622` y fixtures OAuth en `.e2e-fixtures/` (gitignored, inmune al wipe de test-results).
+
+## Commits de integración
+
+- fb3aa90 / aaeb546 merges de plan-01
+- 739413a servicio sobre proposalTransaction
+- 5543890 montaje server/bot/consola
+- 359260d chat mount + guard 403 + E2E puerto estable
+- f5dcea0 limpieza diagnóstico
+
+## Pendientes con sesión 1
+
+- Commit de su trabajo de moderadores (isModerator/badge evidence, bot.start wallet gate, TTL 10min, moderation:read) — cuando exista, re-merge y conectar el evidence en la rama del viewer-create.
+- `accountForTwitch` en points.ts: mount mínimo mío en su archivo — revisar en el merge final.
 
 ## Interfaces entregadas (para coordinador/sesión 1)
 
