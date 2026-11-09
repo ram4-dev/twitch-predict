@@ -161,6 +161,11 @@ export class Points {
   market(key:string) {const m=this.state.markets[key];if(!m)throw new Error('Mercado desconocido');return this.view(this.state,m);}
   channels() {return [...this.state.channels];}
   botChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled).map(a=>a.twitch!.login);}
+  /** Plan 2 mount (session 2): resolves the linked Plot account for a verified Twitch id; never trusts chat text. */
+  accountForTwitch(twitchId:string):{accountId:string;twitchId:string}|null{
+    const a=Object.values(this.state.accounts).find(acc=>acc.twitch?.id===twitchId);
+    return a?{accountId:a.id,twitchId}:null;
+  }
   enabledBotChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled&&a.botEpoch).map(a=>({id:a.twitch!.id,login:a.twitch!.login,epoch:a.botEpoch!}));}
   botState(token:string){const a=this.account(this.state,token);return {enabled:!!a.twitch&&!!a.botEnabled,twitch:a.twitch??null};}
   setBotEnabled(token:string,enabled:boolean,expected?:{accountId:string;twitchId:string}){return this.transaction(state=>{const a=this.account(state,token);if(!a.wallet||!a.twitch)throw new Error('Vinculá primero tu cuenta de Twitch');if(expected&&(a.id!==expected.accountId||a.twitch.id!==expected.twitchId))throw new Error('La cuenta cambió durante la conexión');if(enabled&&!a.botEnabled)a.botEpoch=randomUUID();a.botEnabled=enabled;return {enabled,channel:a.twitch.login};});}

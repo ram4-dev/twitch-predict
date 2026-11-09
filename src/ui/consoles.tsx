@@ -4,6 +4,8 @@ import {Button} from './components/button.js';
 import {Badge} from './components/badge.js';
 import {Check,ArrowUpRight,Wallet,LockKeyhole} from 'lucide-react';
 import type {Points} from '../points.js';
+import {ProposalInbox,MyProposals} from './proposals-ui.js';
+import {httpProposalsClient} from './proposals-client.js';
 
 type Account=ReturnType<Points['me']>;
 type Market=ReturnType<Points['market']>;
@@ -24,6 +26,7 @@ function UserConsole({account,markets,claim}:{account?:Account;markets:Market[];
   const credited=account.bets.filter(b=>b.claimed).reduce((n,b)=>n+b.payout,0);
   const collect=async(key:string)=>{setBusy(key);setMessage('');try{await claim(key);setMessage('Puntos acreditados a tu saldo.');}catch(e){setMessage((e as Error).message);}finally{setBusy(undefined);}};
   return <div className="user-console">
+    <MyProposals client={httpProposalsClient()}/>
     <div className="console-stats"><Stat label="En juego" value={`${fmt(inPlay)} pts`}/><Stat label="Para cobrar" value={`${fmt(account.claimable)} pts`}/><Stat label="Premios y reembolsos cobrados" value={`${fmt(credited)} pts`}/><Stat label="Apuestas registradas" value={fmt(account.bets.length)}/></div>
     <div className="console-section-title"><h2>Tus posiciones</h2><div className="console-tabs" aria-label="Filtrar apuestas">{[['all','Todas'],['active','En juego'],['pending','Por cobrar'],['done','Finalizadas']].map(([value,label])=><Button key={value} variant="ghost" aria-pressed={filter===value} onClick={()=>setFilter(value)}>{label}</Button>)}</div></div>
     {message&&<p role="status">{message}</p>}
@@ -41,6 +44,7 @@ function StreamerConsole({data}:{data?:Console}){
   const markets=data.markets.filter(m=>channel==='all'||m.prediction.channel===channel);
   return <div className="streamer-console"><div className="console-section-title"><div><h2>Tus mercados</h2><p>El estado y el resultado se actualizan desde Twitch.</p></div><label>Canal<select aria-label="Canal del streamer" value={channel} onChange={e=>setChannel(e.target.value)}><option value="all">Todos mis canales</option>{data.channels.map(c=><option key={c} value={c}>@{c}</option>)}</select></label></div>
     <div className="console-stats"><Stat label="Mercados" value={fmt(markets.length)}/><Stat label="Abiertos" value={fmt(markets.filter(m=>m.phase==='open').length)}/><Stat label="Esperando resultado" value={fmt(markets.filter(m=>m.phase==='locked').length)}/><Stat label="Finalizados" value={fmt(markets.filter(m=>['resolved','void'].includes(m.phase)).length)}/></div>
+    <ProposalInbox client={httpProposalsClient()} channelId={channel==='all'?data.channels[0]:channel}/>
     {markets.map(m=><StreamerMarket key={m.key} market={m}/>)}{!markets.length&&<p className="console-empty">Cuando Twitch abra una predicción en tu canal, el mercado aparecerá acá.</p>}
   </div>;
 }

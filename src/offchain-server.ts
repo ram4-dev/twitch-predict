@@ -18,6 +18,8 @@ import {TwitchAuth} from './twitch-auth.js';
 import {GoogleAuth} from './google-auth.js';
 import { Points } from './points.js';
 import { TwitchSource } from './twitch-source.js';
+import {proposalsRouter, type ProposalActorResolver} from './proposals-router.js';
+import {ProposalService} from './proposals-service.js';
 import { demoPrediction } from './mirror.js';
 import { predictionSchema } from './prediction.js';
 import {ByteTwitchMirror} from './byte-twitch.js';
@@ -34,6 +36,8 @@ const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BY
 const byteMirror=new ByteTwitchMirror(directory,byte,source,Date.now,undefined,()=>marketEvents.emit('markets'));await byteMirror.load();
 const channelSearch=new TwitchChannelSearch();
 const waitlist=new Waitlist(directory);await waitlist.load();
+// Plan 2 (session 2): proposal service over the shared Points aggregate; the bot derives viewer !plot crear here.
+const proposals=new ProposalService(points);
 
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
@@ -120,6 +124,14 @@ app.get('/api/twitch/search',async(req,res)=>{
  });
 app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
 const bot=new CloudTwitchBot(new LocalDocuments(directory),{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:twitchOrigin,webhookOrigin:process.env.TWITCH_BOT_WEBHOOK_ORIGIN},fetch,Date.now,points);
+const proposalsForBot={
+  submit:async(args:{channel:{id:string;login:string};actor:{accountId:string;twitchId:string};origin:'chat';intentId:string;input:{title:string;options:string[]}})=>{
+    const proposal=await proposals.submit({channel:args.channel,actor:args.actor,origin:'chat',intentId:args.intentId,input:args.input});
+    return {id:proposal.id,shortId:proposal.shortId,text:`Propuesta ${proposal.shortId} enviada al streamer; pendiente de aprobación.`};
+  },
+  accountForTwitch:async(twitchId:string)=>points.accountForTwitch(twitchId),
+};
+bot.mountProposals(proposalsForBot);
 const botCookieName='twitch_bot';
 const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
 app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
@@ -187,6 +199,24 @@ app.post('/api/auth/extension/complete',route(async(req,res)=>{
   res.json({...await auth.complete(i.flowId,i.state,i.code,i.extensionId),bridgeToken:token});
 }));
 app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Conectá Phantom para iniciar sesión'}));
+// Plan 2: proposals API (session 2). Mounted beside /api/points/me: same bearer session, identity resolved
+// server-side from the linked account; owner evidence via capabilities() inside the aggregate, never from the body.
+const proposalResolver:ProposalActorResolver={
+  actor:async req=>{try{const me=points.me(bearer(req));return {accountId:me.id,twitchId:me.twitch?.id};}catch{return null;}},
+  channel:async channelId=>{
+    // The channel identity is the broadcaster's Twitch id (digits); accept also the login for convenience.
+    if(!/^[a-zA-Z0-9_]{1,40}$/.test(channelId))return null;
+    // SAFETY: exportStateJson is this server's own valid JSON; a corrupt file fails closed to null.
+    let snapshot:{streamers:Record<string,{channel:string;twitchId?:string}>};
+    try{snapshot=JSON.parse(points.exportStateJson()) as {streamers:Record<string,{channel:string;twitchId?:string}>};}catch{return null;}
+    const byTwitchId=Object.values(snapshot.streamers??{}).find(s=>s.twitchId===channelId);
+    if(byTwitchId)return {id:channelId,login:byTwitchId.channel};
+    const byLogin=Object.values(snapshot.streamers??{}).find(s=>s.channel===channelId.toLowerCase());
+    return byLogin?.twitchId?{id:byLogin.twitchId,login:byLogin.channel}:null;
+  },
+  isChannelOwner:async (actor,channelId)=>actor.twitchId===channelId,
+};
+app.use('/api/proposals',proposalsRouter({service:proposals,resolver:proposalResolver}));
 app.get('/api/points/me',route((req,res)=>res.json(points.me(bearer(req)))));
 app.get('/api/streamer/console',route((req,res)=>res.json(points.streamerConsole(bearer(req)))));
 app.post('/api/streamer/preview',route((req,res)=>{

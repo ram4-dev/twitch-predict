@@ -26,7 +26,11 @@ export class CloudTwitchBot {
  private appToken?:{value:string;expires:number};
  private discovery?:Promise<void>;
  private nextDiscovery=0;
+ /** Plan 2 seam (session 2): viewer !plot crear derives here; actor comes from the linked Plot account, never from chat text. */
+ private proposals?:{submit(args:{channel:{id:string;login:string};actor:{accountId:string;twitchId:string};origin:'chat';intentId:string;input:{title:string;options:string[]}}):Promise<{id:string;shortId:string;text:string}>;accountForTwitch(twitchId:string):Promise<{accountId:string}|null>};
  constructor(private documents:Pick<Documents,'read'|'update'>,private config:Config,private request:typeof fetch=fetch,private now=Date.now,private localPoints?:Points){}
+ /** Mounts the session-2 proposal service (viewer !plot crear → pending proposal). */
+ mountProposals(handler:NonNullable<CloudTwitchBot['proposals']>){this.proposals=handler;}
  get configured(){return !!this.config.clientId&&!!this.config.clientSecret;}
  get callbackUrl(){return `${this.config.origin}/auth/twitch/bot/callback`;}
  get webhookUrl(){return `${this.config.webhookOrigin??this.config.origin}/api/twitch/bot/webhook`;}
@@ -115,8 +119,21 @@ export class CloudTwitchBot {
    await this.documents.update('twitch-bot-runtime',runtime,async s=>{
     this.prune(s);const id=headers['twitch-eventsub-message-id'],key=`command:${id}`;if(s.events[id])return;
     if(event.chatter_user_id!==channel.id){if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();}
-    let reply:string;
-    try{const command=parsePlotCommand(event.message.text);reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id)).text:plotChatHelp;}catch(e){reply=(e as Error).message;}
+     let reply:string;
+     try{const command=parsePlotCommand(event.message.text);
+      if(command&&command.kind==='create'&&!this.proposals){
+       // Proposal service not mounted (pre-integration): keep the owner/mod-only behavior.
+       reply=(await p.plotCommand(channel.id,event.chatter_user_id,command,id)).text;
+      }else if(command&&command.kind==='create'&&event.chatter_user_id!==channel.id&&this.proposals){
+       // Same !plot crear, viewer role: register a pending proposal for the linked Plot account.
+       const linked=await p.accountForTwitch(event.chatter_user_id);
+       if(!linked)reply='Iniciá sesión y vinculá tu Twitch con Plot para proponer predicciones.';
+       else{
+        const proposal=await this.proposals.submit({channel:{id:channel.id,login:channel.login},actor:{accountId:linked.accountId,twitchId:event.chatter_user_id},origin:'chat',intentId:id,input:{title:command.title,options:command.options}});
+        reply=proposal.text;
+       }
+      }else reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id)).text:plotChatHelp;
+     }catch(e){reply=(e as Error).message;}
     s.events[id]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`${reply.slice(0,499-this.channelUrl(channel.login).length)} ${this.channelUrl(channel.login)}`,createdAt:this.now(),status:'pending'};
    });
    return {status:204,body:''};
