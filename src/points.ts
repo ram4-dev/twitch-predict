@@ -321,6 +321,8 @@ export class Points {
   async unlinkTwitch(token:string){
     return this.transaction(state=>{const a=this.account(state,token);for(const [channel,s] of Object.entries(state.streamers))if(s.twitchId&&s.wallet===a.wallet)delete state.streamers[channel];delete a.twitch;delete a.botEnabled;delete a.botEpoch;return {ok:true};});
   }
+  /** Read-only JSON snapshot for auditors and repair tools; callers must never mutate it. */
+  exportStateJson():string {return JSON.stringify(this.state);}
   private streamer(state:State,token:string,key?:string){
     const a=this.account(state,token);if(!a.wallet)throw new Error('Conectá Phantom para usar la consola');
     const channels=Object.values(state.streamers).filter(s=>s.wallet===a.wallet&&(s.channel==='demo_streamer'||(s.twitchId&&s.twitchId===a.twitch?.id))).map(s=>s.channel);
