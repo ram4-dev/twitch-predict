@@ -12,11 +12,11 @@ type Flow={kind:'account'|'channel';cookieHash:string;expires:number;accountId?:
 type Pending=Flow&{twitchId:string};
 type AuthState={flows:Record<string,Flow>;pending:Record<string,Pending>;bot?:{id:string;login:string;clientId:string;authorizedAt:number}};
 type Delivery={id:string;channelId:string;epoch:string;text:string;createdAt:number;status:'pending'|'sending'|'sent'|'failed';error?:string};
-type Runtime={channels:Record<string,{phase:'connecting'|'connected'|'error';checkedAt:number;error?:string}>;events:Record<string,number>;cooldowns:Record<string,number>;outbox:Record<string,Delivery>;nextSendAt:number};
+type Runtime={channels:Record<string,{phase:'connecting'|'connected'|'error';checkedAt:number;error?:string}>;events:Record<string,number>;cooldowns:Record<string,number>;outbox:Record<string,Delivery>;nextSendAt:number;moderators:Record<string,{users:string[];checkedAt:number}>};
 type Channel={id:string;login:string;epoch:string};
 type Subscription={id:string;status:string;type:string;condition:{broadcaster_user_id?:string;user_id?:string};transport:{method:string;callback?:string}};
 const authState=():AuthState=>({flows:{},pending:{}});
-const runtime=():Runtime=>({channels:{},events:{},cooldowns:{},outbox:{},nextSendAt:0});
+const runtime=():Runtime=>({channels:{},events:{},cooldowns:{},outbox:{},nextSendAt:0,moderators:{}});
 const nonce=()=>randomBytes(32).toString('hex');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
@@ -64,10 +64,14 @@ export class CloudTwitchBot {
  async start(kind:Flow['kind'],token?:string){
   if(!this.configured)throw new Error('Twitch todavía no está configurado');
   let identity:Partial<Flow>={};
-  if(kind==='channel'){const p=await this.points(),a=p.me(token??'');if(!a.wallet||!a.twitch)throw new Error('Vinculá primero tu canal de Twitch');identity={accountId:a.id,wallet:a.wallet,twitchId:a.twitch.id};}
+  if(kind==='channel'){const p=await this.points(),a=p.me(token??'');if(!a.twitch)throw new Error('Vinculá primero tu canal de Twitch');identity={accountId:a.id,...(a.wallet?{wallet:a.wallet}:{}),twitchId:a.twitch.id};}
   const state=nonce(),cookie=nonce();
-  await this.documents.update('twitch-bot-auth',authState,s=>{for(const map of [s.flows,s.pending])for(const [key,value] of Object.entries(map))if(value.expires<=this.now())delete map[key];if(Object.keys(s.flows).length>=1000)throw new Error('Demasiadas conexiones pendientes');s.flows[state]={kind,cookieHash:hash(cookie),expires:this.now()+600_000,...identity};});
-  const url=new URL('https://id.twitch.tv/oauth2/authorize');url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:kind==='account'?botScopes.join(' '):'channel:bot',state,force_verify:'true'}).toString();return {url:url.href,cookie};
+  await this.documents.update('twitch-bot-auth',authState,s=>{s.flows??={};s.pending??={};for(const map of [s.flows,s.pending])for(const [key,value] of Object.entries(map))if(value.expires<=this.now())delete map[key];if(Object.keys(s.flows).length>=1000)throw new Error('Demasiadas conexiones pendientes');s.flows[state]={kind,cookieHash:hash(cookie),expires:this.now()+600_000,...identity};});
+  let url:URL;
+  try{url=new URL('https://id.twitch.tv/oauth2/authorize');}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}
+  // Get Moderators needs moderation:read granted by the broadcaster; request it on channel linking.
+  const scope=kind==='account'?botScopes.join(' '):'channel:bot moderation:read';
+  try{url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope,state,force_verify:'true'}).toString();}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}return {url:url.href,cookie};
  }
  async callback(state:string,cookie:string,code:string,denied=false){
   const {result:flow}=await this.documents.update('twitch-bot-auth',authState,s=>{const f=s.flows[state];if(!f||f.expires<=this.now()||!cookie||!equal(f.cookieHash,hash(cookie)))throw new Error('La conexión venció o pertenece a otro navegador');delete s.flows[state];return f;});
@@ -78,7 +82,7 @@ export class CloudTwitchBot {
   const validation=await this.request('https://id.twitch.tv/oauth2/validate',{headers:{Authorization:`OAuth ${tokens.access_token}`},signal:AbortSignal.timeout(10000)});
   if(!validation.ok)throw new Error('Twitch no pudo validar el permiso');
   const user=z.object({client_id:z.string(),user_id:z.string().regex(/^\d+$/),login:z.string(),scopes:z.array(z.string()),expires_in:z.number().positive()}).parse(await validation.json());
-  const scopes=flow.kind==='account'?botScopes:['channel:bot'];
+  const scopes=flow.kind==='account'?botScopes:['channel:bot','moderation:read'];
   if(user.client_id!==this.config.clientId||!scopes.every(scope=>user.scopes.includes(scope)))throw new Error('Twitch no otorgó los permisos necesarios');
   if(flow.kind==='account'){
    if(user.login.toLowerCase()!==(this.config.login??'plotfun').toLowerCase())throw new Error('Iniciá sesión con la cuenta plotfun para autorizar al bot');
@@ -93,7 +97,7 @@ export class CloudTwitchBot {
  }
  async complete(token:string,ticket:string,cookie:string){
   const p=await this.points(),a=p.me(token);
-  const {result}=await this.documents.update('twitch-bot-auth',authState,async s=>{const pending=s.pending[ticket];if(!pending||pending.expires<=this.now()||!equal(pending.cookieHash,hash(cookie))||a.id!==pending.accountId||a.wallet!==pending.wallet||a.twitch?.id!==pending.twitchId)throw new Error('La cuenta cambió durante la conexión');delete s.pending[ticket];return p.setBotEnabled(token,true,{accountId:pending.accountId!,twitchId:pending.twitchId});});
+  const {result}=await this.documents.update('twitch-bot-auth',authState,async s=>{const pending=s.pending[ticket];if(!pending||pending.expires<=this.now()||!equal(pending.cookieHash,hash(cookie))||a.id!==pending.accountId||(pending.wallet!==undefined&&a.wallet!==pending.wallet)||a.twitch?.id!==pending.twitchId)throw new Error('La cuenta cambió durante la conexión');delete s.pending[ticket];return p.setBotEnabled(token,true,{accountId:pending.accountId!,twitchId:pending.twitchId});});
   return result;
  }
  async disable(token:string){return (await this.points()).setBotEnabled(token,false);}
@@ -101,6 +105,41 @@ export class CloudTwitchBot {
   const id=headers['twitch-eventsub-message-id']??'',stamp=headers['twitch-eventsub-message-timestamp']??'',signature=headers['twitch-eventsub-message-signature']??'';
   if(!this.configured||!id||id.length>256||!Number.isFinite(Date.parse(stamp))||Math.abs(this.now()-Date.parse(stamp))>600_000)return false;
   const expected='sha256='+createHmac('sha256',this.secret).update(id+stamp).update(body).digest('hex');return equal(expected,signature);
+ }
+ /** Authoritative moderator check (P1-06): Twitch Get Moderators via the bot's app token,
+  * cached briefly in the runtime aggregate. Never accepts client-sent role claims.
+  * Called OUTSIDE any aggregate transaction: nested updates would deadlock the local queue.
+  * Legacy runtimes persisted before this feature lack `moderators` and are normalized here.
+  * Positive cache is short (30 s) so revocations apply within one creation window. */
+ private async isModerator(channel:Channel,chatterId:string):Promise<boolean>{
+  const state=await this.documents.read('twitch-bot-runtime',runtime);
+  // Legacy normalization: pre-existing runtime aggregates may not carry the moderators map.
+  const cached=(state.moderators??{})[channel.id];
+  if(cached&&this.now()-cached.checkedAt<30_000)return cached.users.includes(chatterId);
+  const fresh=await this.moderatorsOf(channel);
+  const users=fresh.ok?fresh.users:undefined;
+  if(!users)return false; // Twitch unavailable or unauthorized: deny without guessing; the owner path still works.
+  // Keep the Points capability evidence (HTTP/publication path) in sync with the authoritative list.
+  await this.points().then(p=>p.setChannelModerators(channel.id,users)).catch(()=>{});
+  await this.documents.update('twitch-bot-runtime',runtime,s=>{(s.moderators??={})[channel.id]={users,checkedAt:this.now()};});
+  return users.includes(chatterId);
+ }
+ /** Paginates Get Moderators fully; permission failures surface as typed unavailability. */
+ private async moderatorsOf(channel:Channel):Promise<{ok:boolean;users?:string[];error?:string}>{
+  const users:string[]=[];let after='';
+  try{
+   do{
+    const page=await this.api(`moderation/moderators?broadcaster_id=${encodeURIComponent(channel.id)}&first=100${after?`&after=${encodeURIComponent(after)}`:''}`);
+    const parsed=z.object({data:z.array(z.object({user_id:z.string()})).max(100),pagination:z.object({cursor:z.string().optional()}).optional()}).parse(page);
+    users.push(...parsed.data.map(m=>m.user_id));after=parsed.pagination?.cursor??'';
+    if(users.length>10000)throw new Error('Demasiados moderadores reportados por Twitch');
+   }while(after);
+   return {ok:true,users};
+  }catch(e){
+   const message=(e as Error).message;
+   // Missing moderation:read scope is a configuration problem, not an empty moderator list.
+   return {ok:false,error:/401|403/.test(message)?'Falta el permiso moderation:read para verificar moderadores':message};
+  }
  }
  async webhook(headers:Record<string,string>,body:Buffer){
   if(!this.verify(headers,body))return {status:403,body:'Firma inválida'};
@@ -116,23 +155,24 @@ export class CloudTwitchBot {
   if(!channel||!auth.bot||data.subscription.condition?.user_id!==auth.bot.id||event.chatter_user_id===auth.bot.id)return {status:204,body:''};
   const plotMatch=/^!plot(?:\s+([\s\S]*))?$/i.exec(event.message.text.trim());
   if(plotMatch?.[1]){
+   // External evidence and account resolution happen BEFORE the runtime update: nested documents.updates
+   // inside this callback deadlock the serial local queue and nest cloud transactions (root finding).
+   const verifiedModerator=event.chatter_user_id!==channel.id&&await this.isModerator(channel,event.chatter_user_id);
+   const linked=event.chatter_user_id!==channel.id&&!verifiedModerator?await p.accountForTwitch(event.chatter_user_id):null;
    await this.documents.update('twitch-bot-runtime',runtime,async s=>{
     this.prune(s);const id=headers['twitch-eventsub-message-id'],key=`command:${id}`;if(s.events[id])return;
     if(event.chatter_user_id!==channel.id){if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();}
      let reply:string;
      try{const command=parsePlotCommand(event.message.text);
-      if(command&&command.kind==='create'&&!this.proposals){
-       // Proposal service not mounted (pre-integration): keep the owner/mod-only behavior.
-       reply=(await p.plotCommand(channel.id,event.chatter_user_id,command,id)).text;
-      }else if(command&&command.kind==='create'&&event.chatter_user_id!==channel.id&&this.proposals){
+      if(command&&command.kind==='create'&&event.chatter_user_id!==channel.id&&!verifiedModerator&&this.proposals){
        // Same !plot crear, viewer role: register a pending proposal for the linked Plot account.
-       const linked=await p.accountForTwitch(event.chatter_user_id);
        if(!linked)reply='Iniciá sesión y vinculá tu Twitch con Plot para proponer predicciones.';
        else{
         const proposal=await this.proposals.submit({channel:{id:channel.id,login:channel.login},actor:{accountId:linked.accountId,twitchId:event.chatter_user_id},origin:'chat',intentId:id,input:{title:command.title,options:command.options}});
         reply=proposal.text;
        }
-      }else reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id)).text:plotChatHelp;
+      }else reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id,verifiedModerator)).text:plotChatHelp;
+
      }catch(e){reply=(e as Error).message;}
     s.events[id]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`${reply.slice(0,499-this.channelUrl(channel.login).length)} ${this.channelUrl(channel.login)}`,createdAt:this.now(),status:'pending'};
    });
