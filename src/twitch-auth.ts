@@ -22,7 +22,9 @@ export class TwitchAuth {
     let flow:Flow={cookieHash:'',expires:0};
     if(token){const a=this.points.me(token);if(!a.id)throw new Error('Iniciá sesión en Plot antes de vincular Twitch');flow={accountId:a.id,wallet:a.wallet??undefined,cookieHash:'',expires:0};}
     const state=nonce(),cookie=nonce();this.flows.set(state,{...flow,cookieHash:hash(cookie),expires:this.clock()+10*60_000});
-    const url=new URL('https://id.twitch.tv/oauth2/authorize');url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:'',state,force_verify:'true'}).toString();
+    let url:URL;
+    try{url=new URL('https://id.twitch.tv/oauth2/authorize');}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}
+    try{url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:'',state,force_verify:'true'}).toString();}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}
     return {url:url.href,cookie};
   }
   consume(state:string,cookie:string,code:string|undefined,denied=false){
