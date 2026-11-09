@@ -3,14 +3,12 @@ import {test} from 'node:test';
 import {mkdtemp, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ProposalDomain, ProposalError, freshProposalState, proposalShortId} from '../src/proposals.js';
+import {ProposalDomain, ProposalError, freshProposalState} from '../src/proposals.js';
 import {ProposalService, localProposalStore, type ProposalMarketGateway} from '../src/proposals-service.js';
 
 const actor=(accountId:string,twitchId?:string)=>({accountId,twitchId});
 const channel={id:'123',login:'demo_streamer'};
 const input={title:'¿Gana el equipo rojo?',options:['Sí','No'],durationSeconds:120};
-let seq=0;
-const nextIntent=()=>`intent-${++seq}`;
 
 test('proposal content validation: title, options, duplicates, duration',()=>{
   const state=freshProposalState();const domain=new ProposalDomain();
@@ -32,8 +30,8 @@ test('receipts: same event replay returns original proposal; changed payload rej
 
 test('limits: 3 pending per account/channel, 5 submissions per hour (sliding window)',()=>{
   const state=freshProposalState();const domain=new ProposalDomain({maxPendingPerAccount:3,maxSubmissionsPerHour:5});
-  let t=Date.now();const now=()=>new Date(t).toISOString();
-  const old=Date.now()-7_200_000;
+  const t=Date.now();const now=()=>new Date(t).toISOString();
+  const old=t-7_200_000;
   for(let i=0;i<3;i++){domain.create(state,{channelId:channel.id,author:actor('a1'),origin:'app',intentId:`p${i}`,input:{...input,title:`Q${i}`},now:()=>new Date(old).toISOString()});}
   assert.throws(()=>domain.create(state,{channelId:channel.id,author:actor('a1'),origin:'app',intentId:'p4',input:{...input,title:'Q4'},now}),
     (e:ProposalError)=>e.code==='PROPOSAL_LIMIT');
@@ -76,7 +74,7 @@ test('accept with edit preserves original input and records the edited version',
 test('service: double accept creates exactly one market (replayed receipt, same market id)',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'plot-prop-'));try{
     const receipts=new Map<string,{key:string;id:string}>();
-    const gateway:ProposalMarketGateway={publishMarket:async({requestId,input})=>{
+    const gateway:ProposalMarketGateway={publishMarket:async({requestId})=>{
       const existing=receipts.get(requestId);
       if(existing)return existing;
       const id=`m-${requestId.length}-${receipts.size}`;
@@ -105,8 +103,8 @@ test('service: accept concurrent with withdraw has a single transition winner an
       service.accept({token:'t',proposalId:id,actor:actor('owner','123'),isChannelOwner:true,intentId:'a1',channel}),
       service.withdraw({proposalId:id,actor:actor('a1'),intentId:'w1'}),
     ]);
-    const fulfilled=results.filter(r=>r.status==='fulfilled').map(r=>(r as PromiseFulfilledResult<any>).value);
-    const rejected=results.filter(r=>r.status==='rejected').map(r=>(r as PromiseRejectedResult<any>).reason);
+    const fulfilled=results.filter(r=>r.status==='fulfilled').map(r=>(r as {value:{status:string}}).value);
+    const rejected=results.filter(r=>r.status==='rejected').map(r=>(r as {reason:unknown}).reason);
     // Exactly one of the two actions wins; the loser sees the terminal state.
     assert.equal(fulfilled.length,1);
     const winner=fulfilled[0];

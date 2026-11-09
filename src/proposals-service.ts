@@ -2,7 +2,7 @@
 import {mkdir, readFile, writeFile, rename} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {type MarketActor, type MarketChannel, type CreateMarketInput} from './market-contract.js';
-import {ProposalDomain, ProposalError, freshProposalState, proposalReceiptId,
+import {ProposalDomain, ProposalError, freshProposalState,
   type Proposal, type ProposalLimits, type ProposalOrigin, type ProposalState} from './proposals.js';
 
 /** Session 2 owns this seam. The integration adapter wraps Plan 1 createMarket(token, channelId, input, requestId) with the owner's session token. */
@@ -44,9 +44,12 @@ export const cloudProposalStore=(documents:Pick<import('./cloud/documents.js').D
 export type ProposalView=Proposal;
 
 export class ProposalService {
-  private domain=new ProposalDomain(this.limits);
+  private readonly limits:ProposalLimits;
+  private domain:ProposalDomain;
   constructor(private readonly store:ProposalStore,private readonly gateway:ProposalMarketGateway,
-    private readonly limits:ProposalLimits={maxPendingPerAccount:3,maxSubmissionsPerHour:5}){}
+    limits:ProposalLimits={maxPendingPerAccount:3,maxSubmissionsPerHour:5}){
+    this.limits=limits;this.domain=new ProposalDomain(limits);
+  }
 
   /** Viewer or moderator submitting a proposal from app or chat. intentId: chat eventId or app requestId. */
   async submit(args:{channel:MarketChannel;actor:MarketActor;origin:ProposalOrigin;intentId:string;input:CreateMarketInput}){
@@ -66,6 +69,13 @@ export class ProposalService {
     const state=await this.store.read();
     return Object.values(state.proposals).filter(p=>p.channelId===channelId&&(!status||p.status===status))
       .sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(view);
+  }
+
+  async get(proposalId:string):Promise<Proposal>{
+    const state=await this.store.read();
+    const proposal=state.proposals[proposalId];
+    if(!proposal)throw new ProposalError('PROPOSAL_NOT_FOUND','Propuesta desconocida.');
+    return view(proposal);
   }
 
   async withdraw(args:{proposalId:string;actor:MarketActor;intentId:string}){

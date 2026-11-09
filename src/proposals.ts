@@ -1,5 +1,5 @@
 /** Plan 2 — proposals domain. Proposals never move balance or accept bets; publication happens only through the injected gateway. */
-import {type MarketActor, type MarketChannel, type CreateMarketInput} from './market-contract.js';
+import {type MarketActor, type CreateMarketInput} from './market-contract.js';
 
 export type ProposalStatus='pending'|'accepted'|'rejected'|'withdrawn';
 export type ProposalOrigin='app'|'chat';
