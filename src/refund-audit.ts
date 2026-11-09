@@ -16,7 +16,7 @@ type SnapshotLedger={accountId:string;kind:string;delta:number;marketKey?:string
 /** Reads the persisted Points snapshot without mutating it. */
 export function auditHistoricalRefunds(points:Points):RefundAuditReport {
   let parsed:unknown;
-  try{parsed=JSON.parse(points.exportStateJson());}catch(e){throw new Error(`No se pudo leer la instantánea para la auditoría: ${(e as Error).message}`);}
+  try{parsed=JSON.parse(points.exportStateJson());}catch(e){throw new Error(`No se pudo leer la instantánea para la auditoría: ${(e as Error).message}`,{cause:e});}
   const snapshot=parsed as {
     bets:SnapshotBet[];markets:Record<string,SnapshotMarket>;ledger:SnapshotLedger[];accounts:Record<string,{name:string}>;
   };

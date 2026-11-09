@@ -113,7 +113,10 @@ app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disa
 
 app.post('/api/twitch/start',route((req,res)=>{
   if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
-  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
+  // Without a session this is a Twitch-first login; with one it links the provider to the existing account.
+  const sessionToken=bearer(req)||undefined;
+  if(sessionToken)points.me(sessionToken);
+  const result=twitchAuth.start(sessionToken);res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
 }));
 app.get('/auth/twitch/callback',async(req,res)=>{
   if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
@@ -128,7 +131,8 @@ app.get('/auth/twitch/callback',async(req,res)=>{
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{
   const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
-  const result=await twitchAuth.complete(bearer(req),ticket,linkCookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.json(result);
+  // Login completions carry no session token; link completions must match the session that started the flow.
+  const result=await twitchAuth.complete(bearer(req)||undefined,ticket,linkCookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.json(result);
 }));
 app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await points.unlinkTwitch(bearer(req)))));
 app.get('/api/auth/config',(req,res)=>res.json({origin:process.env.AUTH_ORIGIN??appOrigin(req)}));

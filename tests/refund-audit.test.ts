@@ -25,7 +25,7 @@ test('audit reports pending historical refunds without writing anything; repeate
  for(const bet of raw.bets){bet.claimed=false;bet.creditedAt=undefined;bet.creditMethod=undefined;bet.payout=bet.amount;}
  raw.ledger=raw.ledger.filter((l:{kind:string})=>l.kind!=='refund');
  await writeFile(`${dir}/points.json`,JSON.stringify(raw));
- const loaded=await new Promise<Points>(async resolve=>{const q=new Points(dir);await q.load();resolve(q);});
+ const loaded=new Points(dir);await loaded.load();
  const report=auditHistoricalRefunds(loaded);
  assert.equal(report.pending.reduce((n,r)=>n+r.amount,0),1000);
  assert.equal(report.conflicts.length,0);
