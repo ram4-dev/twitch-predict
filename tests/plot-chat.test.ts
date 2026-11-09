@@ -27,6 +27,10 @@ test('Plot command syntax supports defaults, custom options and rejects invalid 
  for(const text of ['!plot crear','!plot crear A, Sí','!plot crear A, Sí, sí','!plot crear A, | No','!plot resolver 0','!plot cerrar %','!plot cancelar "abierto','!plot crear A, 1, 2, 3, 4, 5, 6, 7','!plot apostar'])assert.throws(()=>parsePlotCommand(text));
  assert.deepEqual(parsePlotCommand('!plot mercados'),{kind:'list'});
  assert.deepEqual(parsePlotCommand('!plot crear "¿Gano, de verdad?", "Sí, claro", No'),{kind:'create',title:'¿Gano, de verdad?',options:['Sí, claro','No']});
+ // Legacy pipe separator still splits options; quoted commas and pipes are preserved.
+ assert.deepEqual(parsePlotCommand('!plot crear ¿Gano? | Rojo | Azul'),{kind:'create',title:'¿Gano?',options:['Rojo','Azul']});
+ assert.deepEqual(parsePlotCommand('!plot crear "¿Gano | pierdo?", "Sí | claro", No'),{kind:'create',title:'¿Gano | pierdo?',options:['Sí | claro','No']});
+ assert.deepEqual(parsePlotCommand('!plot crear ¿Gano?, "Rojo, fuerte" | Azul'),{kind:'create',title:'¿Gano?',options:['Rojo, fuerte','Azul']});
  assert.deepEqual(parsePlotCommand('!plot cerrar M7K2'),{kind:'lock',id:'M7K2'});
  assert.deepEqual(parsePlotCommand('!plot resolver m7k2, 2'),{kind:'resolve',id:'M7K2',option:2});
  assert.deepEqual(parsePlotCommand('!plot apostar M7K2, 1'),{kind:'bet',id:'M7K2',option:1});

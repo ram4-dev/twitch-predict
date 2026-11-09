@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {Points} from '../src/points.js';
 import {parsePlotCommand} from '../src/plot-chat.js';
 
-async function fixture(work:(v:{p:Points;viewer:string})=>Promise<void>){
+async function fixture(work:(v:{p:Points;viewer:string;owner:string})=>Promise<void>){
  const {mkdtemp}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
  const directory=await mkdtemp(join(tmpdir(),'plot-extra-'));
  try{
@@ -11,7 +11,7 @@ async function fixture(work:(v:{p:Points;viewer:string})=>Promise<void>){
   const identity=(id:string,login:string)=>({id,login,displayName:login,linkedAt:new Date().toISOString()});
   const owner=await p.walletLogin('owner-wallet');await p.linkTwitch(owner.token,identity('123','owner'));await p.setBotEnabled(owner.token,true);
   const viewerAccount=await p.createAccount();await p.linkTwitch(viewerAccount.token,identity('456','viewer'));
-  await work({p,viewer:viewerAccount.token});
+  await work({p,viewer:viewerAccount.token,owner:owner.token});
  }finally{await import('node:fs/promises').then(fs=>fs.rm(directory,{recursive:true,force:true}));}
 }
 test('multiple simultaneous markets: ids, listing, ambiguity guard and isolated cancellation',()=>fixture(async({p,viewer})=>{
@@ -50,4 +50,41 @@ test('moderator may create but never close, resolve or cancel; new chat event be
  await p.chatBet('456',key,'1','bet-2');
  assert.equal(p.me(viewer).balance,9800);
  await assert.rejects(p.plotCommand('123','456',{kind:'cancel',id:p.markets()[0].shortId},'mod-cancel'),/dueño/);
+}));
+test('viewers with a linked Twitch identity can bet and list via plotCommand; owner-only admin holds',()=>fixture(async({p,viewer})=>{
+ await p.plotCommand('123','123',parsePlotCommand('!plot crear ¿Viewer apuesta?, Sí, No')!,'create-1');
+ // Viewer lists markets directly through plotCommand (not chatBet).
+ const listed=await p.plotCommand('123','456',{kind:'list'},'viewer-list');
+ assert.match(listed.text,/¿Viewer apuesta\?/);
+ // Viewer bets directly through plotCommand.
+ const market=p.markets()[0];
+ await p.plotCommand('123','456',{kind:'bet',id:market.shortId,option:1},'viewer-bet');
+ assert.equal(p.me(viewer).balance,9900);
+ // A viewer without admin rights still cannot lock/resolve/cancel.
+ await assert.rejects(p.plotCommand('123','456',{kind:'lock',id:market.shortId},'viewer-lock'),/dueño/);
+ await assert.rejects(p.plotCommand('123','456',{kind:'cancel',id:market.shortId},'viewer-cancel'),/dueño/);
+ // Unlinked chatter (no identity) cannot bet or list.
+ await assert.rejects(p.plotCommand('123','999',{kind:'bet',id:market.shortId,option:1},'unlinked-bet'),/Vinculá tu cuenta de Twitch/);
+}));
+
+test('publication replay: same requestId+payload returns the same receipt; changed payload rejected; replay after bet+cancel does not double refund',()=>fixture(async({p,owner,viewer})=>{
+ const actor={accountId:p.me(owner).id,twitchId:'123'};
+ const channel={id:'123',login:'owner'};
+ const input={title:'¿Replay?',options:['Sí','No']};
+ const first=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
+ const replay=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
+ assert.deepEqual(replay,first);assert.equal(p.markets().filter(m=>m.source==='plot').length,1);
+ await assert.rejects(p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input:{title:'Distinta',options:['Sí','No']},requestId:'req-1'})),/reutilizado/);
+ // Viewer bets, owner cancels (automatic refund): replay must not reopen nor re-credit.
+ await p.chatBet('456',first.key,'1','bet-before-cancel');
+ assert.equal(p.me(viewer).balance,9900);
+ await p.plotCommand('123','123',{kind:'cancel',id:first.shortId},'cancel-1');
+ assert.equal(p.me(viewer).balance,10000); // Refunded exactly once.
+ assert.equal(p.me(viewer).ledger.filter(l=>l.kind==='refund'&&l.marketKey===first.key).length,1);
+ const replay2=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
+ assert.deepEqual(replay2,first);
+ assert.equal(p.markets().find(m=>m.key===first.key)!.phase,'void');
+ assert.equal(p.markets().filter(m=>m.source==='plot').length,1);
+ assert.equal(p.me(viewer).balance,10000); // Still exactly one refund after the replay.
+ assert.equal(p.me(viewer).ledger.filter(l=>l.kind==='refund'&&l.marketKey===first.key).length,1);
 }));
