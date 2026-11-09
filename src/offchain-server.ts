@@ -167,9 +167,9 @@ app.post('/api/streamer/action',route(async(req,res)=>{
   res.json(await points.streamerAction(bearer(req),i));
 }));
 const betInput=z.object({key:z.string().min(1).max(300),outcomeId:z.string().min(1).max(128),amount:z.number().int().positive().max(1_000_000),requestId:z.string().uuid()});
-app.post('/api/points/bet',route(async(req,res)=>{if(!points.me(bearer(req)).wallet)throw new Error('Conectá Phantom para apostar');const i=betInput.parse(req.body);res.json(await points.bet(bearer(req),i.key,i.outcomeId,i.amount,i.requestId));}));
+app.post('/api/points/bet',route(async(req,res)=>{const i=betInput.parse(req.body);res.json(await points.bet(bearer(req),i.key,i.outcomeId,i.amount,i.requestId));}));
 const claimInput=z.object({key:z.string().min(1).max(300),requestId:z.string().uuid()});
-app.post('/api/points/claim',route(async(req,res)=>{if(!points.me(bearer(req)).wallet)throw new Error('Conectá Phantom para cobrar');const i=claimInput.parse(req.body);res.json(await points.claim(bearer(req),i.key,i.requestId));}));
+app.post('/api/points/claim',route(async(req,res)=>{const i=claimInput.parse(req.body);res.json(await points.claim(bearer(req),i.key,i.requestId));}));
 const extensionManifest=JSON.parse(await readFile(`${root}/extension/manifest.json`,'utf8'));
 const extensionId=[...createHash('sha256').update(Buffer.from(extensionManifest.key,'base64')).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 app.use('/api/byte',byteRouter(byte,points,token,process.env,extensionId,byteMirror));
