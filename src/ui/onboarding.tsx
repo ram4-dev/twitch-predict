@@ -81,7 +81,7 @@ function Onboarding(){
         {googleConfigured===false&&<p className="auth-secondary" aria-disabled="true">Google todavía no está disponible.</p>}
       </div>}
       {flowId?(installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={false}/><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>)
-      :installed&&<Button variant="outline" disabled={phase!=='ready'} onClick={()=>void connect()}>Entrar con Phantom</Button>}
+      :installed&&<Button variant="outline" disabled={phase!=='ready'} onClick={()=>void connect()}>Conectar Phantom</Button>}
       {error&&<p className="auth-error" role="alert">{error}</p>}<BettingModeNotice mode={mode}/></AuthLayout>;
 }
 createRoot(document.getElementById('onboarding-root')!).render(new URLSearchParams(location.search).has('streamer')?<StreamerOnboarding/>:<Onboarding/>);
