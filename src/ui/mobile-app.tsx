@@ -98,9 +98,13 @@ export function PhoneApp({theme='ember',demo=false,embedded=false,detailLayout='
  const googleTicket=params.get('google_ticket'),googleError=params.get('google_error');
   const ticket=params.get('twitch_ticket'),cancelled=params.get('twitch_error')==='canceled';params.delete('twitch_ticket');params.delete('twitch_error');params.delete('google_ticket');params.delete('google_error');const query=params.toString();history.replaceState(null,'',`${location.pathname}${query?'?'+query:''}#profile`);setPage('profile');
  if(googleError){setAuthError(googleError==='canceled'?'Cancelaste la conexión con Google.':'No se pudo completar la conexión con Google.');return;}
- if(googleTicket){let activeG=true;void client.authRequest('/api/google/complete',{ticket:googleTicket}).then(()=>{if(activeG)void refresh();}).catch(error=>{if(activeG)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión con Google.');});return()=>{activeG=false;};}
+ if(googleTicket){let activeG=true;void client.request<{token:string}>('/api/google/complete',{ticket:googleTicket}).then(result=>{if(!activeG)return;if(result?.token)localStorage.setItem('pointsToken',result.token);void refresh();}).catch(error=>{if(activeG)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión con Google.');});return()=>{activeG=false;};}
   if(!ticket){setAuthError(cancelled?'Cancelaste la conexión con Twitch.':'No se pudo completar la conexión.');return;}
-  let active=true;void client.authRequest('/api/twitch/complete',{ticket}).then(()=>{if(active)void refresh();}).catch(error=>{if(active)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión.');});return()=>{active=false;};
+  let active=true;void client.request<{token:string}>('/api/twitch/complete',{ticket}).then(result=>{if(!active)return;
+   // Social-first logins create a brand-new session: persist the returned token before refreshing.
+   if(result?.token)localStorage.setItem('pointsToken',result.token);
+   void refresh();
+  }).catch(error=>{if(active)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión.');});return()=>{active=false;};
  },[demo,embedded,refresh]);
  const go=(next:'bets'|'profile')=>{setDetailKey('');if(!embedded){const url=new URL(location.href);url.searchParams.delete('market');history.replaceState(null,'',url);}setPage(next);if(next==='bets')setTab('active');setMessage('');content.current?.scrollTo({top:0});if(!embedded)history.replaceState(null,'',`${location.pathname}${location.search}#${next==='profile'?'profile':'markets'}`);};
  const q=normalize(query);const visible=snapshot.markets.filter(m=>['open','locked'].includes(m.phase)&&(selected?m.prediction.channel===selected:q?m.prediction.channel.includes(q):snapshot.followed.includes(m.prediction.channel))).sort((a,b)=>Number(b.canBet)-Number(a.canBet));
