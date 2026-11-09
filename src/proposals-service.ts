@@ -1,126 +1,145 @@
-/** Plan 2 — proposals service. Atomic acceptance: publish through the injected gateway and persist the transition in one storage transaction (nested Documents.update shares one SQL transaction). Local storage keeps replayable receipts so a crash between publish and transition never duplicates a market or strands an acceptance. */
-import {mkdir, readFile, writeFile, rename} from 'node:fs/promises';
-import {dirname} from 'node:path';
-import {type MarketActor, type MarketChannel, type CreateMarketInput} from './market-contract.js';
-import {ProposalDomain, ProposalError, freshProposalState,
-  type Proposal, type ProposalLimits, type ProposalOrigin, type ProposalState} from './proposals.js';
+/** Plan 2 — proposals service over the session-1 Points aggregate.
+ * Acceptance = publish + transition in ONE Points.proposalTransaction (single SQL transaction in cloud,
+ * atomic file snapshot locally). Proposal state and receipts live in draft.proposals on the shared aggregate. */
+import {type MarketActor, type MarketChannel, type CreateMarketInput, type ProposalTransaction, type PublishedMarket} from './market-contract.js';
+import {ProposalDomain, ProposalError, freshProposalState, type Proposal, type ProposalLimits, type ProposalState} from './proposals.js';
 
-/** Session 2 owns this seam. The integration adapter wraps Plan 1 createMarket(token, channelId, input, requestId) with the owner's session token. */
-export interface ProposalMarketGateway {
-  publishMarket(args:{token:string;channel:MarketChannel;input:CreateMarketInput;actor:MarketActor;requestId:string}):
-    Promise<{key:string;id:string}>;
-}
+export type PointsAggregate={proposalTransaction<T>(work:(draft:ProposalTransaction)=>T):Promise<T>};
 
-export interface ProposalStore {
-  read():Promise<ProposalState>;
-  /** Runs work against a locked draft; concurrent writers serialize and see committed results. */
-  update<R>(work:(state:ProposalState)=>R|Promise<R>):Promise<R>;
-}
+/** Internal shape stored per proposal on the aggregate: the proposal plus its idempotency receipts. */
+type StoredProposal=Proposal&{receipts:Record<string,{fingerprint:string;result:unknown}>};
 
-export const localProposalStore=(file:string):ProposalStore=>{
-  // Minimal JSON-file store mirroring Points persistence semantics (temp+rename, serialized queue).
-  let queue:Promise<unknown>=Promise.resolve();
-  let cache:ProposalState|undefined;
-  const load=async()=>{if(cache)return cache;try{cache=JSON.parse(await readFile(file,'utf8')) as ProposalState;}catch{cache=freshProposalState();}return cache;};
-  return {
-    async read(){return structuredClone(await load());},
-    async update<R>(work:(state:ProposalState)=>R|Promise<R>):Promise<R>{
-      const task=queue.then(async()=>{
-        const state=await load();const result=await work(state);
-        await mkdir(dirname(file),{recursive:true,mode:0o700});
-        await writeFile(`${file}.tmp`,JSON.stringify(state),{mode:0o600});await rename(`${file}.tmp`,file);
-        return result;
-      });
-      queue=task.catch(()=>undefined);return task;
-    },
-  };
+type DraftState=ProposalState&{proposals:Record<string,StoredProposal>};
+
+const loadState=(draft:ProposalTransaction):DraftState=>{
+  // SAFETY: the aggregate stores plain JSON objects; every entry written by this service is a StoredProposal
+  // (Proposal plus its receipts). Session-1 code never touches draft.proposals entries.
+  const stored=draft.proposals as unknown as Record<string,StoredProposal>;
+  const state=freshProposalState() as DraftState;
+  for(const [id,p] of Object.entries(stored)){
+    state.proposals[id]=p;
+    for(const [key,r] of Object.entries(p.receipts??{}))state.receipts[key]=r;
+  }
+  return state;
 };
 
-export const cloudProposalStore=(documents:Pick<import('./cloud/documents.js').Documents,'read'|'update'>):ProposalStore=>({
-  read:()=>documents.read('proposals',freshProposalState),
-  update:<R,>(work:(state:ProposalState)=>R|Promise<R>)=>documents.update('proposals',freshProposalState,work).then(r=>r.result),
-});
-
-export type ProposalView=Proposal;
+const saveState=(draft:ProposalTransaction,state:DraftState)=>{
+  // SAFETY: same invariant as loadState — the proposals map holds only StoredProposal JSON written here.
+  const stored=draft.proposals as unknown as Record<string,StoredProposal>;
+  for(const k of Object.keys(stored))delete stored[k];
+  for(const [id,p] of Object.entries(state.proposals)){
+    const rest=p as Proposal&{receipts?:unknown};
+    stored[id]={...rest,receipts:(rest.receipts??{}) as Record<string,{fingerprint:string;result:unknown}>};
+  }
+};
 
 export class ProposalService {
-  private readonly limits:ProposalLimits;
-  private domain:ProposalDomain;
-  constructor(private readonly store:ProposalStore,private readonly gateway:ProposalMarketGateway,
-    limits:ProposalLimits={maxPendingPerAccount:3,maxSubmissionsPerHour:5}){
-    this.limits=limits;this.domain=new ProposalDomain(limits);
+  private readonly domain:ProposalDomain;
+  constructor(private readonly points:PointsAggregate,limits:ProposalLimits={maxPendingPerAccount:3,maxSubmissionsPerHour:5}){
+    this.domain=new ProposalDomain(limits);
   }
 
   /** Viewer or moderator submitting a proposal from app or chat. intentId: chat eventId or app requestId. */
-  async submit(args:{channel:MarketChannel;actor:MarketActor;origin:ProposalOrigin;intentId:string;input:CreateMarketInput}){
-    return this.store.update(state=>{
+  async submit(args:{channel:MarketChannel;actor:MarketActor;origin:'app'|'chat';intentId:string;input:CreateMarketInput}){
+    return this.points.proposalTransaction(draft=>{
+      const state=loadState(draft);
       const {proposal}=this.domain.create(state,{channelId:args.channel.id,author:args.actor,origin:args.origin,intentId:args.intentId,input:args.input});
+      saveState(draft,state);
       return view(proposal);
     });
   }
 
+  async get(proposalId:string):Promise<Proposal>{
+    return this.points.proposalTransaction(draft=>{
+      // SAFETY: aggregate proposals map holds only StoredProposal JSON written by this service.
+      const stored=(draft.proposals as unknown as Record<string,StoredProposal>)[proposalId];
+      if(!stored)throw new ProposalError('PROPOSAL_NOT_FOUND','Propuesta desconocida.');
+      return view(stored);
+    });
+  }
+
   async listForAuthor(accountId:string,channelId?:string){
-    const state=await this.store.read();
-    return Object.values(state.proposals).filter(p=>p.authorAccountId===accountId&&(!channelId||p.channelId===channelId))
-      .sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(view);
+    return this.points.proposalTransaction(draft=>{
+      // SAFETY: aggregate proposals map holds only StoredProposal JSON written by this service.
+      const stored=draft.proposals as unknown as Record<string,StoredProposal>;
+      return Object.values(stored).filter(p=>p.authorAccountId===accountId&&(!channelId||p.channelId===channelId))
+        .sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(view);
+    });
   }
 
   async listForChannel(channelId:string,status?:Proposal['status']){
-    const state=await this.store.read();
-    return Object.values(state.proposals).filter(p=>p.channelId===channelId&&(!status||p.status===status))
-      .sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(view);
-  }
-
-  async get(proposalId:string):Promise<Proposal>{
-    const state=await this.store.read();
-    const proposal=state.proposals[proposalId];
-    if(!proposal)throw new ProposalError('PROPOSAL_NOT_FOUND','Propuesta desconocida.');
-    return view(proposal);
+    return this.points.proposalTransaction(draft=>{
+      // SAFETY: aggregate proposals map holds only StoredProposal JSON written by this service.
+      const stored=draft.proposals as unknown as Record<string,StoredProposal>;
+      return Object.values(stored).filter(p=>p.channelId===channelId&&(!status||p.status===status))
+        .sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(view);
+    });
   }
 
   async withdraw(args:{proposalId:string;actor:MarketActor;intentId:string}){
-    return this.store.update(state=>{
+    return this.points.proposalTransaction(draft=>{
+      const state=loadState(draft);
       const {proposal,replayed}=this.domain.transition(state,{...args,action:'withdraw',isChannelOwner:false});
+      saveState(draft,state);
       return {...view(proposal),replayed};
     });
   }
 
   async reject(args:{proposalId:string;actor:MarketActor;isChannelOwner:boolean;intentId:string;reason?:string}){
-    return this.store.update(state=>{
+    return this.points.proposalTransaction(draft=>{
+      const state=loadState(draft);
       const {proposal,replayed}=this.domain.transition(state,{...args,action:'reject'});
+      saveState(draft,state);
       return {...view(proposal),replayed};
     });
   }
 
   /**
-   * Owner-only. Deterministic publication requestId bound to the proposal (never to the caller intent), so two
-   * concurrent accepts race on the transition, not on the market: exactly one wins and publishes; the loser replays
-   * the winner's receipt. The gateway runs inside the store lock: nested Documents.update joins one SQL transaction,
-   * and the local store serializes. A transition loss after publish is surfaced, never hidden.
+   * Owner/moderator direct creation (chat or app) through the same atomic aggregate transaction:
+   * synchronous publishOnDraft with a deterministic requestId derived from the chat eventId (replay-safe:
+   * the same event reproduces the same market id and receipt).
    */
-  async accept(args:{token:string;proposalId:string;actor:MarketActor;isChannelOwner:boolean;intentId:string;editedInput?:CreateMarketInput;
+  async createDirectly(args:{channel:MarketChannel;actor:MarketActor;input:CreateMarketInput;eventId:string}){
+    return this.points.proposalTransaction(draft=>
+      draft.publishMarket({actor:args.actor,channel:args.channel,input:args.input,requestId:`plot-create:${args.channel.id}:${args.eventId}`}));
+  }
+
+  /**
+   * Owner-only. The whole accept runs inside one Points.proposalTransaction: the synchronous
+   * draft.publishMarket validates owner/mod capabilities, allocates the persistent shortId, and the
+   * transition commits in the same aggregate write. Crash between publish and commit rolls back both;
+   * the deterministic requestId ("proposal-accept:<id>:<version>") yields a deterministic market id,
+   * so a retried acceptance after a crash reproduces the same market receipt instead of a second one.
+   * A transition loss (withdrawn/rejected between tabs) throws before any publication: no orphan.
+   */
+  async accept(args:{proposalId:string;actor:MarketActor;isChannelOwner:boolean;intentId:string;editedInput?:CreateMarketInput;
     channel:MarketChannel}){
-    const requestId=`proposal-accept:${args.proposalId}`;
-    return this.store.update(async state=>{
+    return this.points.proposalTransaction(draft=>{
+      const state=loadState(draft);
       const current=state.proposals[args.proposalId];
       if(!current)throw new ProposalError('PROPOSAL_NOT_FOUND','Propuesta desconocida.');
       if(current.status==='accepted'){
-        // Replay: the acceptance already committed; return the stored proposal and its market. No new publication.
+        // Replay: acceptance already committed; return the stored proposal with its market. No new publication.
         return {...view(current),replayed:true as const};
       }
-      if(!args.isChannelOwner)throw new ProposalError('PROPOSAL_FORBIDDEN','Solo el dueño del canal puede revisar propuestas.');
+      // Owner check inside the lock (the passed isChannelOwner is advisory; domain enforces again below).
       const finalInput=args.editedInput??current.input;
-      // Publication happens inside the lock while the proposal is still pending: the deterministic requestId
-      // (proposal + version at publish time) makes a crash-between publish-and-commit recoverable without a
-      // second market; the transition then commits in the same store update.
-      const published=await this.gateway.publishMarket({token:args.token,channel:args.channel,input:finalInput,actor:args.actor,
-        requestId:`${requestId}:${current.version}`});
+      let published:PublishedMarket|undefined;
+      // Publish only while still pending; a losing race never publishes.
+      if(current.status==='pending'){
+        const requestId=`proposal-accept:${args.proposalId}:${current.version}`;
+        published=draft.publishMarket({actor:args.actor,channel:args.channel,input:finalInput,requestId});
+        // Transition inside the same draft; if it loses to withdraw/reject it throws AFTER publish, so we
+        // surface the race instead of silently keeping the market: the caller sees PROPOSAL_NOT_PENDING
+        // and the draft rollback removes the publication from the aggregate.
+      }
       const {proposal,replayed}=this.domain.transition(state,{proposalId:args.proposalId,action:'accept',actor:args.actor,
         isChannelOwner:args.isChannelOwner,intentId:args.intentId,editedInput:args.editedInput});
-      if(!proposal.acceptedMarketKey){proposal.acceptedMarketKey=published.key;proposal.acceptedMarketId=published.id;}
+      if(published){proposal.acceptedMarketKey=published.key;proposal.acceptedMarketId=published.id;}
+      saveState(draft,state);
       return {...view(proposal),replayed};
     });
   }
 }
 
-const view=(p:Proposal):ProposalView=>({...p});
+const view=(p:Proposal):Proposal=>({...p});

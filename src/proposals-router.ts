@@ -1,6 +1,6 @@
 /** Plan 2 — HTTP router for proposals. Express factory mirroring byte-router.ts conventions.
- * Actor identity and channel-owner evidence come from the injected resolver (Plan 1 owns identity/auth);
- * frontend-supplied roles are never trusted. */
+ * Actor identity comes from the injected resolver (Plan 1 owns identity/auth); frontend-supplied roles
+ * are never trusted. Owner/mod authorization inside publishMarket uses the same capabilities() policy. */
 import express from 'express';
 import {z} from 'zod';
 import {type MarketActor, type MarketChannel} from './market-contract.js';
@@ -9,13 +9,11 @@ import {ProposalService} from './proposals-service.js';
 
 /** Server-side actor/role evidence: how the request binds to an account and to channel roles. */
 export interface ProposalActorResolver {
-  /** Returns the authenticated account actor, or null for an anonymous request. */
+  /** Returns the authenticated account actor with twitchId from the linked session, or null when anonymous. */
   actor(req:express.Request):Promise<MarketActor|null>;
-  /** Returns the session token the publication gateway needs (Plan 1 createMarket), or null when anonymous. */
-  token(req:express.Request):Promise<string|null>;
-  /** Channel context for the request's channel id (server-resolved, not from the payload), or null when unknown. */
+  /** Channel context for the request's channel id (server-resolved, never from the payload), or null when unknown. */
   channel(channelId:string):Promise<MarketChannel|null>;
-  /** Verified owner evidence for the actor on that channel (never from the client). */
+  /** Verified owner evidence for the actor on that channel (advisory; publishMarket re-validates). */
   isChannelOwner(actor:MarketActor,channelId:string):Promise<boolean>;
 }
 
@@ -38,8 +36,12 @@ export function proposalsRouter({service,resolver}:ProposalRouteDeps){
         code:e instanceof ProposalError?e.code:undefined});
     }
   };
-  const requireActor=async(req:express.Request)=>{const actor=await resolver.actor(req);if(!actor)throw new ProposalError('PROPOSAL_FORBIDDEN','Iniciá sesión para operar con propuestas.');return actor;};
-
+  const requireActor=async(req:express.Request)=>{
+    const actor=await resolver.actor(req);
+    if(!actor)throw new ProposalError('PROPOSAL_FORBIDDEN','Iniciá sesión para operar con propuestas.');
+    return actor;
+  };
+  const intent=(req:express.Request)=>z.string().min(8).max(120).parse(reqBody(req).intentId);
   router.get('/me',route(async(req,res)=>{
     const actor=await resolver.actor(req);if(!actor)return res.json({proposals:[]});
     res.json({proposals:await service.listForAuthor(actor.accountId)});
@@ -57,22 +59,20 @@ export function proposalsRouter({service,resolver}:ProposalRouteDeps){
     const actor=await requireActor(req);
     const channel=await resolver.channel(String(req.params.channelId));
     if(!channel)throw new ProposalError('PROPOSAL_NOT_FOUND','Canal desconocido.');
-    const input=createInput.parse(req.body);
-    const intentId=z.string().min(8).max(120).parse(req.body?.intentId);
+    const input=createInput.parse(reqBody(req));
+    const intentId=intent(req);
     res.status(201).json(await service.submit({channel,actor,origin:'app',intentId,input}));
   }));
   router.post('/:proposalId/withdraw',route(async(req,res)=>{
     const actor=await requireActor(req);
-    const intentId=z.string().min(8).max(120).parse(req.body?.intentId);
-    res.json(await service.withdraw({proposalId:String(req.params.proposalId),actor,intentId}));
+    res.json(await service.withdraw({proposalId:String(req.params.proposalId),actor,intentId:intent(req)}));
   }));
   router.post('/:proposalId/reject',route(async(req,res)=>{
     const actor=await requireActor(req);
-    const channelOf=await service.get(String(req.params.proposalId));
-    const isOwner=await resolver.isChannelOwner(actor,channelOf.channelId);
-    const intentId=z.string().min(8).max(120).parse(req.body?.intentId);
-    const reason=z.string().max(280).optional().parse(req.body?.reason);
-    res.json(await service.reject({proposalId:String(req.params.proposalId),actor,isChannelOwner:isOwner,intentId,reason}));
+    const proposal=await service.get(String(req.params.proposalId));
+    const isOwner=await resolver.isChannelOwner(actor,proposal.channelId);
+    const reason=z.string().max(280).optional().parse(reqBody(req).reason);
+    res.json(await service.reject({proposalId:proposal.id,actor,isChannelOwner:isOwner,intentId:intent(req),reason}));
   }));
   router.post('/:proposalId/accept',route(async(req,res)=>{
     const actor=await requireActor(req);
@@ -80,10 +80,11 @@ export function proposalsRouter({service,resolver}:ProposalRouteDeps){
     const channel=await resolver.channel(proposal.channelId);
     if(!channel)throw new ProposalError('PROPOSAL_NOT_FOUND','Canal desconocido.');
     const isOwner=await resolver.isChannelOwner(actor,channel.id);
-    const token=await resolver.token(req);
-    if(!token)throw new ProposalError('PROPOSAL_FORBIDDEN','Se requiere sesión del dueño del canal para publicar.');
-    const i=acceptInput.parse(req.body);
-    res.json(await service.accept({token,proposalId:proposal.id,actor,isChannelOwner:isOwner,intentId:i.intentId,editedInput:i.editedInput,channel}));
+    const i=acceptInput.parse(reqBody(req));
+    res.json(await service.accept({proposalId:proposal.id,actor,isChannelOwner:isOwner,intentId:i.intentId,editedInput:i.editedInput,channel}));
   }));
   return router;
 }
+
+// SAFETY: express.json() guarantees a parsed object body for POST routes mounted after it.
+const reqBody=(req:express.Request):Record<string,unknown>=>(req.body??{}) as Record<string,unknown>;
