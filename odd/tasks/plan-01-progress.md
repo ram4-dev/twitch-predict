@@ -67,6 +67,19 @@ Rama `apply-plan-01`, base `504d3cb`, worktree `/home/meeting/projects/twitch-pr
 - **Perfil sin wallet y gates sociales: revisados y corregidos** (`bb26106`, `5349566`): el nombre visible ya no depende de wallet (Twitch → Google → wallet → genérico); setBotEnabled y la consola del streamer autorizan por identidad Twitch vinculada (el canal demo_streamer conserva su wallet asignada); bet/claim de puntos sin wallet desde el commit `9115446`; completación Google desde el perfil móvil.
 - **Claim de premios ganadores**: mantiene la política actual de cobro manual, según defaults aprobados.
 
+## Incremental 2 — recorridos señalados por el coordinador (2026-11-09, HEAD 3a9d7fc)
+
+| Commit | Corrección |
+|---|---|
+| `fb4f107` | Bundles regenerados (candidato previo sin revisión nativa: el proveedor detuvo el intento por presupuesto de contexto sobre bundles minificados; política documentada: regenerar al integrar) |
+| `116d6e5` | **Onboarding Twitch-first**: "Continuar con Twitch" como acceso primario, Google solo si el servidor lo tiene configurado (else "todavía no disponible", nunca botón roto), Phantom como opción secundaria; completions de twitch_ticket/google_ticket al volver |
+| `18ea5ca` | **Sesión social en /app**: la completación con ticket persiste el token nuevo (antes authRequest exigía sesión existente y el login social llegaba a /app sin sesión — falla encontrada por el E2E nuevo) |
+| `4f2714e` | **Bot sin wallet**: start('channel') ya no exige wallet; cuentas sociales Twitch-only agregan el bot a su canal (Flow.wallet opcional, comparación condicional en complete) |
+| `77c57e6` | **isModerator**: normalización de runtime legacy sin mapa `moderators`; caché positiva reducida a 30 s (revocaciones aplican dentro de una ventana de creación); Get Moderators paginado completo (after cursor); sincronización a `Points.setChannelModerators` para la evidencia de capacidades HTTP/publicación |
+| `8253969` | **Scope moderation:read**: se solicita en el link del canal, se exige en callback (falla explícita, no silenciosa); 403 de la API se reporta; test de alcance y de denegación explícita |
+
+E2E nuevos: `tests/social-entry.e2e.ts` (2) — primera entrada Twitch-only desde navegador limpio sin Phantom hasta /app con balance 10000 y twitch.id correcto; Google no configurado muestra notice y cero botones. Suite completa: 126 unit/0 fail + typecheck/lint/build verdes + 20 E2E re-verificados con launcher propio (social-entry 2, twitch-auth 3, twitch-plot-chat 1, points 11, mobile/responsive/landing/live 6; 2 skipped por modo). Puerto 1368 liberado tras cada corrida.
+
 ## Cómo verificar esta entrega
 
 ```sh
