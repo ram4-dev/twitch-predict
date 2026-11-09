@@ -17,7 +17,7 @@ type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolv
 type Receipt = { fingerprint:string; result:unknown };
 type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
-type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer> };
+type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,string[]> };
 export type StreamerAction = { key:string; action:'lock'|'resolve'|'cancel'|'distribute'; winnerId?:string; requestId:string };
 const fresh = ():State => ({version:1,accounts:{},markets:{},bets:[],receipts:{},ledger:[],channels:[],sessions:{},streamers:{}});
 const hash = (token:string) => createHash('sha256').update(token).digest('hex');
@@ -83,8 +83,13 @@ export class Points {
   /** Moderator evidence comes only from the signed chat event via the adapter, never from HTTP payloads. */
   private verifiedModeratorOf(state:State,channel:MarketChannel,actor:MarketActor):boolean {
     if(!actor.twitchId)return false;
-    const moderators=(state as State&{channelModerators?:Record<string,string[]>}).channelModerators?.[channel.id];
+    const moderators=state.channelModerators?.[channel.id];
     return !!moderators?.includes(actor.twitchId);
+  }
+  /** Syncs the authoritative moderator list for a channel (called by the bot adapter after its Twitch query). */
+  async setChannelModerators(channelId:string,userIds:string[]):Promise<{count:number}>{
+    if(!/^\d+$/.test(channelId))throw new Error('Canal inválido');
+    return this.transaction(state=>{state.channelModerators??={};state.channelModerators[channelId]=userIds.filter(id=>/^\d+$/.test(id));return {count:state.channelModerators[channelId]!.length};});
   }
   /** Shared debit used by chat bets and API bets on an open draft; receipts guard replay. */
   private betOnDraft(state:State,account:Account,m:Market,outcomeId:string,amount:number) {

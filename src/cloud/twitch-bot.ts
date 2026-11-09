@@ -100,17 +100,38 @@ export class CloudTwitchBot {
  }
  /** Authoritative moderator check (P1-06): Twitch Get Moderators via the bot's app token,
   * cached briefly in the runtime aggregate. Never accepts client-sent role claims.
-  * Called OUTSIDE any aggregate transaction: nested updates would deadlock the local queue. */
+  * Called OUTSIDE any aggregate transaction: nested updates would deadlock the local queue.
+  * Legacy runtimes persisted before this feature lack `moderators` and are normalized here.
+  * Positive cache is short (30 s) so revocations apply within one creation window. */
  private async isModerator(channel:Channel,chatterId:string):Promise<boolean>{
   const state=await this.documents.read('twitch-bot-runtime',runtime);
-  const cached=state.moderators[channel.id];
-  if(cached&&this.now()-cached.checkedAt<10*60_000)return cached.users.includes(chatterId);
-  const fresh=await this.api(`moderation/moderators?broadcaster_id=${encodeURIComponent(channel.id)}&first=100`)
-   .then(r=>z.object({data:z.array(z.object({user_id:z.string()})).max(1000)}).parse(r).data.map(m=>m.user_id))
-   .catch(()=>null);
-  if(!fresh)return false; // Twitch unavailable: deny without guessing; the owner path still works.
-  await this.documents.update('twitch-bot-runtime',runtime,s=>{s.moderators[channel.id]={users:fresh,checkedAt:this.now()};});
-  return fresh.includes(chatterId);
+  // Legacy normalization: pre-existing runtime aggregates may not carry the moderators map.
+  const cached=(state.moderators??{})[channel.id];
+  if(cached&&this.now()-cached.checkedAt<30_000)return cached.users.includes(chatterId);
+  const fresh=await this.moderatorsOf(channel);
+  const users=fresh.ok?fresh.users:undefined;
+  if(!users)return false; // Twitch unavailable or unauthorized: deny without guessing; the owner path still works.
+  // Keep the Points capability evidence (HTTP/publication path) in sync with the authoritative list.
+  await this.points().then(p=>p.setChannelModerators(channel.id,users)).catch(()=>{});
+  await this.documents.update('twitch-bot-runtime',runtime,s=>{(s.moderators??={})[channel.id]={users,checkedAt:this.now()};});
+  return users.includes(chatterId);
+ }
+ /** Paginates Get Moderators fully; permission failures surface as typed unavailability. */
+ private async moderatorsOf(channel:Channel):Promise<{ok:boolean;users?:string[];error?:string}>{
+  const users:string[]=[];let after='';
+  try{
+   do{
+    const page=await this.api(`moderation/moderators?broadcaster_id=${encodeURIComponent(channel.id)}&first=100${after?`&after=${encodeURIComponent(after)}`:''}`);
+    const parsed=z.object({data:z.array(z.object({user_id:z.string()})).max(100),pagination:z.object({cursor:z.string().optional()}).optional()}).parse(page);
+    users.push(...parsed.data.map(m=>m.user_id));after=parsed.pagination?.cursor??'';
+    if(users.length>10000)throw new Error('Demasiados moderadores reportados por Twitch');
+   }while(after);
+   return {ok:true,users};
+  }catch(e){
+   const message=(e as Error).message;
+   // Missing moderation:read scope is a configuration problem, not an empty moderator list.
+   return {ok:false,error:/401|403/.test(message)?'Falta el permiso moderation:read para verificar moderadores':message};
+  }
  }
  async webhook(headers:Record<string,string>,body:Buffer){
   if(!this.verify(headers,body))return {status:403,body:'Firma inválida'};

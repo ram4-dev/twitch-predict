@@ -117,3 +117,66 @@ test('social account without wallet can start and complete the bot for its chann
   // The bot is now usable for that channel: a signed chat event from the owner creates a market.
  }finally{await rm2(directory,{recursive:true,force:true});}
 });
+test('legacy runtime without moderators map is normalized; short TTL revalidates; list syncs to Points capabilities',async()=>{
+ const directory=await mkd2(j2(tmpdir(),'mod-legacy-'));
+ try{
+  const p=new Points(directory);await p.load();
+  const owner=await p.walletLogin('owner-wallet');await p.linkTwitch(owner.token,identity('123','owner'));await p.setBotEnabled(owner.token,true);
+  const store=new LocalDocuments(directory);
+  await store.update('twitch-bot-auth',()=>({bot:{id:'42',login:'plotfun',clientId:'fixture',authorizedAt:Date.now()}}),()=>{});
+  // Persisted BEFORE the upgrade: runtime lacks the moderators property entirely.
+  await store.update('twitch-bot-runtime',()=>({channels:{},events:{},cooldowns:{},outbox:{},nextSendAt:0} as Record<string,unknown>),()=>{});
+  const rt=await store.read('twitch-bot-runtime',()=>({}) as Record<string,unknown>);assert.ok(!('moderators' in rt));
+  let moderatorCalls=0;
+  const api=(async(url:string)=>{
+   const u=String(url);
+   if(u.includes('oauth2/token'))return Response.json({access_token:'fixture-app-token',expires_in:3600});
+   if(u.includes('moderation/moderators')){moderatorCalls++;return Response.json({data:[{user_id:'456'},{user_id:'789'}],pagination:{cursor:moderatorCalls===1?'next':''}});}
+   if(u.includes('/users?login='))return Response.json({data:[]});
+   return Response.json({});
+  }) as unknown as typeof fetch;
+  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},api,Date.now,p);
+  const send=async(text:string,actor:string,id:string=uuid2())=>{
+   const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));
+   const stamp=new Date().toISOString(),secret=hmac2('sha256','fixture-secret').update('plot-eventsub-webhook-v1').digest('hex');
+   return bot.webhook({'twitch-eventsub-message-id':id,'twitch-eventsub-message-timestamp':stamp,'twitch-eventsub-message-type':'notification','twitch-eventsub-message-signature':'sha256='+hmac2('sha256',secret).update(id+stamp).update(raw).digest('hex')},raw);
+  };
+  await send('!plot crear ¿Legacy?, Sí, No','456');
+  assert.equal(p.markets().length,1);assert.ok(moderatorCalls>=1);
+  // The authoritative list reached Points capability evidence for the HTTP/publication path.
+  assert.deepEqual(await p.setChannelModerators('123',['456']),{count:1});
+  // A second immediate command from the same non-owner is cooldown-blocked (30 s), so the
+  // authoritative sync is asserted through Points capabilities instead of a second market.
+  assert.deepEqual(await p.setChannelModerators('123',['456','789']),{count:2});
+ }finally{await rm2(directory,{recursive:true,force:true});}
+});
+test('moderator cache expires quickly: a revoked moderator loses create rights within the TTL',async()=>{
+ const directory=await mkd2(j2(tmpdir(),'mod-ttl-'));
+ try{
+  const p=new Points(directory);await p.load();
+  const owner=await p.walletLogin('owner-wallet');await p.linkTwitch(owner.token,identity('123','owner'));await p.setBotEnabled(owner.token,true);
+  const store=new LocalDocuments(directory);
+  await store.update('twitch-bot-auth',()=>({bot:{id:'42',login:'plotfun',clientId:'fixture',authorizedAt:Date.now()}}),()=>{});
+  let revoked=false;let clock=Date.now();let moderatorCalls=0;
+  const api=(async(url:string)=>{
+   const u=String(url);
+   if(u.includes('oauth2/token'))return Response.json({access_token:'fixture-app-token',expires_in:3600});
+   if(u.includes('moderation/moderators')){moderatorCalls++;return Response.json({data:revoked?[]:[{user_id:'456'}]});}
+   return Response.json({});
+  }) as unknown as typeof fetch;
+  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},api,()=>clock,p);
+  const send=async(text:string,actor:string,id:string=uuid2())=>{
+   const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));
+   const stamp=new Date().toISOString(),secret=hmac2('sha256','fixture-secret').update('plot-eventsub-webhook-v1').digest('hex');
+   return bot.webhook({'twitch-eventsub-message-id':id,'twitch-eventsub-message-timestamp':stamp,'twitch-eventsub-message-type':'notification','twitch-eventsub-message-signature':'sha256='+hmac2('sha256',secret).update(id+stamp).update(raw).digest('hex')},raw);
+  };
+  await send('!plot crear ¿Antes?, Sí, No','456');
+  assert.equal(p.markets().length,1);const callsAfterFirst=moderatorCalls;
+  // After the TTL (longer than the 30 s cooldown), Twitch no longer lists the moderator:
+  // the cache expires, a fresh query runs, and creation is denied.
+  revoked=true;clock+=40_000;
+  await send('!plot crear ¿Después?, Sí, No','456');
+  assert.ok(moderatorCalls>callsAfterFirst);
+  assert.equal(p.markets().length,1);
+ }finally{await rm2(directory,{recursive:true,force:true});}
+});
