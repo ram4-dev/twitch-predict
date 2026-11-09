@@ -111,13 +111,13 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  });
  app.post('/api/twitch/bot/complete',route(async(req,res)=>{const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const result=await bot.complete(bearer(req),ticket,botCookie(req));res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).json(result);}));
  app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disable(bearer(req)))));
- app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req));res.cookie(cookieName,r.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:r.url});}));
+ app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req)||undefined);res.cookie(cookieName,r.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:r.url});}));
  app.get('/auth/twitch/callback',async(req,res)=>{
   const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
   try{const ticket=await context(res).twitch.callback(typeof req.query.state==='string'?req.query.state:'',cookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);res.redirect(onboarding?`${config.origin}/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`${config.origin}/app?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);}
   catch{res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/app?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#streamer`);}
  });
- app.post('/api/twitch/complete',route(async(req,res)=>{const i=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const r=await context(res).twitch.complete(bearer(req),i.ticket,cookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).json(r);}));
+ app.post('/api/twitch/complete',route(async(req,res)=>{const i=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const r=await context(res).twitch.complete(bearer(req)||undefined,i.ticket,cookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).json(r);}));
  app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await context(res).points.unlinkTwitch(bearer(req)))));
  app.get('/api/points/me',route((req,res)=>res.json(context(res).points.me(bearer(req)))));
  app.get('/api/streamer/console',route((req,res)=>res.json(context(res).points.streamerConsole(bearer(req)))));

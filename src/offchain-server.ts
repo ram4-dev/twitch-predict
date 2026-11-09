@@ -113,7 +113,10 @@ app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disa
 
 app.post('/api/twitch/start',route((req,res)=>{
   if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
-  const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
+  // Without a session this is a Twitch-first login; with one it links the provider to the existing account.
+  const sessionToken=bearer(req)||undefined;
+  if(sessionToken)points.me(sessionToken);
+  const result=twitchAuth.start(sessionToken);res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
 }));
 app.get('/auth/twitch/callback',async(req,res)=>{
   if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
@@ -128,7 +131,8 @@ app.get('/auth/twitch/callback',async(req,res)=>{
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{
   const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
-  const result=await twitchAuth.complete(bearer(req),ticket,linkCookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.json(result);
+  // Login completions carry no session token; link completions must match the session that started the flow.
+  const result=await twitchAuth.complete(bearer(req)||undefined,ticket,linkCookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});res.json(result);
 }));
 app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await points.unlinkTwitch(bearer(req)))));
 app.get('/api/auth/config',(req,res)=>res.json({origin:process.env.AUTH_ORIGIN??appOrigin(req)}));
@@ -167,9 +171,9 @@ app.post('/api/streamer/action',route(async(req,res)=>{
   res.json(await points.streamerAction(bearer(req),i));
 }));
 const betInput=z.object({key:z.string().min(1).max(300),outcomeId:z.string().min(1).max(128),amount:z.number().int().positive().max(1_000_000),requestId:z.string().uuid()});
-app.post('/api/points/bet',route(async(req,res)=>{if(!points.me(bearer(req)).wallet)throw new Error('Conectá Phantom para apostar');const i=betInput.parse(req.body);res.json(await points.bet(bearer(req),i.key,i.outcomeId,i.amount,i.requestId));}));
+app.post('/api/points/bet',route(async(req,res)=>{const i=betInput.parse(req.body);res.json(await points.bet(bearer(req),i.key,i.outcomeId,i.amount,i.requestId));}));
 const claimInput=z.object({key:z.string().min(1).max(300),requestId:z.string().uuid()});
-app.post('/api/points/claim',route(async(req,res)=>{if(!points.me(bearer(req)).wallet)throw new Error('Conectá Phantom para cobrar');const i=claimInput.parse(req.body);res.json(await points.claim(bearer(req),i.key,i.requestId));}));
+app.post('/api/points/claim',route(async(req,res)=>{const i=claimInput.parse(req.body);res.json(await points.claim(bearer(req),i.key,i.requestId));}));
 const extensionManifest=JSON.parse(await readFile(`${root}/extension/manifest.json`,'utf8'));
 const extensionId=[...createHash('sha256').update(Buffer.from(extensionManifest.key,'base64')).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 app.use('/api/byte',byteRouter(byte,points,token,process.env,extensionId,byteMirror));

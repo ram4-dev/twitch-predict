@@ -24,14 +24,21 @@ const create=()=>parsePlotCommand('!plot crear ¿Gano la partida?')!;
 test('Plot command syntax supports defaults, custom options and rejects invalid questions and actions',()=>{
  assert.deepEqual(create(),{kind:'create',title:'¿Gano la partida?',options:['Sí','No']});
  assert.deepEqual(parsePlotCommand('!PLOT crear Ganador, Rojo, Azul, Verde'),{kind:'create',title:'Ganador',options:['Rojo','Azul','Verde']});
- for(const text of ['!plot crear','!plot crear A, Sí','!plot crear A, Sí, sí','!plot crear A, | No','!plot resolver 0','!plot cerrar 1','!plot cancelar extra','!plot crear A, 1, 2, 3, 4, 5, 6, 7'])assert.throws(()=>parsePlotCommand(text));
+ for(const text of ['!plot crear','!plot crear A, Sí','!plot crear A, Sí, sí','!plot crear A, | No','!plot resolver 0','!plot cerrar %','!plot cancelar "abierto','!plot crear A, 1, 2, 3, 4, 5, 6, 7','!plot apostar'])assert.throws(()=>parsePlotCommand(text));
+ assert.deepEqual(parsePlotCommand('!plot mercados'),{kind:'list'});
+ assert.deepEqual(parsePlotCommand('!plot crear "¿Gano, de verdad?", "Sí, claro", No'),{kind:'create',title:'¿Gano, de verdad?',options:['Sí, claro','No']});
+ assert.deepEqual(parsePlotCommand('!plot cerrar M7K2'),{kind:'lock',id:'M7K2'});
+ assert.deepEqual(parsePlotCommand('!plot resolver m7k2, 2'),{kind:'resolve',id:'M7K2',option:2});
+ assert.deepEqual(parsePlotCommand('!plot apostar M7K2, 1'),{kind:'bet',id:'M7K2',option:1});
+ assert.deepEqual(parsePlotCommand('!plot apostar 2'),{kind:'bet',option:2});
+ assert.deepEqual(parsePlotCommand('!plot resolver 1'),{kind:'resolve',option:1});
  assert.equal(parsePlotCommand('!plot ayuda'),undefined);assert.equal(parsePlotCommand('!plot'),undefined);
 });
 test('native markets persist, stay independent of Twitch freshness, and creation replays are idempotent',()=>fixture(async({p,directory})=>{
  const results=await Promise.all(Array.from({length:4},()=>p.plotCommand('123','123',create(),'same-event')));
  assert.equal(new Set(results.map(r=>r.key)).size,1);assert.equal(p.markets().length,1);
  const market=p.market(results[0].key);assert.equal(market.source,'plot');assert.equal(market.demo,false);assert.equal(market.canBet,true);assert.deepEqual(p.pendingSources(),[]);
- await assert.rejects(p.plotCommand('123','123',create(),'other-event'),/pendiente/);
+ const second=await p.plotCommand('123','123',create(),'other-event');assert.equal(p.markets().length,2);assert.notEqual(second.key,results[0].key);
  await assert.rejects(p.plotCommand('123','123',{kind:'cancel'},'same-event'),/reutilizado/);
  const state=JSON.parse(await readFile(join(directory,'points.json'),'utf8'));state.markets[market.key].sourceCheckedAt='2000-01-01T00:00:00.000Z';await writeFile(join(directory,'points.json'),JSON.stringify(state));
  const restored=new Points(directory);await restored.load();assert.equal(restored.market(market.key).canBet,true);assert.deepEqual(restored.pendingSources(),[]);
@@ -57,9 +64,10 @@ test('native chat bets settle and claim with existing point conservation and rec
  await p.plotCommand('123','123',{kind:'resolve',option:1},'resolve');
  await assert.rejects(p.plotCommand('123','123',{kind:'resolve',option:2},'change-winner'),/No hay/);
 }));
-test('canceling a native market returns the existing stake through claim',()=>fixture(async({p,viewer})=>{
+test('canceling a native market auto-refunds the stake without a claim',()=>fixture(async({p,viewer})=>{
  const {key}=await p.plotCommand('123','123',create(),'create');await p.chatBet('456',key,'2','bet');
- await p.plotCommand('123','123',{kind:'cancel'},'cancel');assert.equal(p.market(key).phase,'void');assert.equal((await p.claim(viewer,key,'claim') as {paid:number}).paid,100);assert.equal(p.me(viewer).balance,10000);
+ await p.plotCommand('123','123',{kind:'cancel'},'cancel');assert.equal(p.market(key).phase,'void');assert.equal(p.me(viewer).balance,10000);assert.equal(p.me(viewer).claimable,0);
+ await assert.rejects(p.claim(viewer,key,'claim'),/pendientes/);assert.equal(p.me(viewer).ledger.filter(l=>l.kind==='refund').length,1);
 }));
 function message(text:string,actor='123',id:string=randomUUID()){
  const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));

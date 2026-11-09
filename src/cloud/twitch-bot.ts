@@ -124,7 +124,7 @@ export class CloudTwitchBot {
   // Chat bets: !yes/!no/!1..!6 from a viewer with a linked Twitch account (S19a).
   const chatMatch=/^!(yes|no|[1-6])\s*$/i.exec(event.message.text.trim());
   if(chatMatch){
-   const outcome=chatMatch[1].toLowerCase(),reply=await this.chatBet(p,channel,event.chatter_user_id,outcome);
+   const outcome=chatMatch[1].toLowerCase(),reply=await this.chatBet(p,channel,event.chatter_user_id,outcome,headers['twitch-eventsub-message-id']??'');
    await this.documents.update('twitch-bot-runtime',runtime,s=>{this.prune(s);const key=`chat:${headers['twitch-eventsub-message-id']}`;if(s.events[key])return;s.events[key]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`@${event.chatter_user_id}: ${reply}`.slice(0,500),createdAt:this.now(),status:'pending'};});
    return {status:204,body:''};
   }
@@ -139,7 +139,7 @@ export class CloudTwitchBot {
  private prune(s:Runtime){for(const [key,at] of Object.entries(s.events))if(at<this.now()-600_000)delete s.events[key];const events=Object.entries(s.events).sort((a,b)=>b[1]-a[1]);for(const [key] of events.slice(5000))delete s.events[key];for(const [key,job] of Object.entries(s.outbox))if(!key.startsWith('welcome:')&&job.createdAt<this.now()-86400_000)delete s.outbox[key];}
  private channelUrl(login:string){return `${this.config.origin}${joinPath('twitch',login)}`;}
  /** Resolves the channel's open prediction and places the internal-balance bet for a linked viewer. */
- private async chatBet(p:Points,channel:Channel,chatterId:string,outcome:string):Promise<string>{
+ private async chatBet(p:Points,channel:Channel,chatterId:string,outcome:string,messageId:string):Promise<string>{
   try{
    const own=p.markets().filter(m=>m.source==='plot'&&m.prediction.channel===channel.login&&!['resolved','void'].includes(m.phase));
    if(own.length&&!own[0].canBet)return 'Las apuestas de esta predicción ya están cerradas.';
@@ -153,7 +153,8 @@ export class CloudTwitchBot {
    if(!chosen)return `Esa opción no existe. Las opciones son: ${open.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}.`;
    const key=own.find(m=>m.prediction.id===open.id)?.key??`offchain:${channel.login}:${open.id}`;
    if(!own.length)await p.accept(open);
-   await p.chatBet(chatterId,key,chosen.id,`chat:${chatterId}:${open.id}:${chosen.id}`);
+   // Each new intentional chat event is a new bet; a replayed EventSub message hits the same receipt and does not double-debit.
+   await p.chatBet(chatterId,key,chosen.id,`chat:${messageId}:${chatterId}:${open.id}:${chosen.id}`);
    return `Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}". Revisá tus predicciones en ${this.channelUrl(channel.login)}.`;
   }catch(e){return (e as Error).message.slice(0,300);}
  }

@@ -5,7 +5,7 @@ const nonce=()=>randomBytes(32).toString('hex');
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
 type Config={clientId:string;clientSecret:string;origin:string};
-type Flow={accountId:string;wallet?:string;cookieHash:string;expires:number};
+type Flow={accountId?:string;wallet?:string;cookieHash:string;expires:number};
 type Pending=Flow&{identity:TwitchIdentity};
 export class TwitchAuth {
   private flows=new Map<string,Flow>();private pending=new Map<string,Pending>();
@@ -15,12 +15,16 @@ export class TwitchAuth {
   get configured(){return !!this.config.clientId&&!!this.config.clientSecret;}
   get callbackUrl(){return `${this.config.origin}/auth/twitch/callback`;}
   private prune(){for(const map of [this.flows,this.pending])for(const [key,f] of map)if(f.expires<=this.clock())map.delete(key);}
-  start(token:string){
+  /** Login (no token) creates the session at complete time; linking keeps the existing account. */
+  start(token?:string){
     if(!this.configured)throw new Error('Falta configurar la app de Twitch en el servidor');
-    const a=this.points.me(token);if(!a.id)throw new Error('Iniciá sesión en Plot antes de vincular Twitch');
     this.prune();if(this.flows.size+this.pending.size>=1000)throw new Error('Demasiadas conexiones pendientes');
-    const state=nonce(),cookie=nonce();this.flows.set(state,{accountId:a.id,wallet:a.wallet??undefined,cookieHash:hash(cookie),expires:this.clock()+10*60_000});
-    const url=new URL('https://id.twitch.tv/oauth2/authorize');url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:'',state,force_verify:'true'}).toString();
+    let flow:Flow={cookieHash:'',expires:0};
+    if(token){const a=this.points.me(token);if(!a.id)throw new Error('Iniciá sesión en Plot antes de vincular Twitch');flow={accountId:a.id,wallet:a.wallet??undefined,cookieHash:'',expires:0};}
+    const state=nonce(),cookie=nonce();this.flows.set(state,{...flow,cookieHash:hash(cookie),expires:this.clock()+10*60_000});
+    let url:URL;
+    try{url=new URL('https://id.twitch.tv/oauth2/authorize');}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}
+    try{url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:'',state,force_verify:'true'}).toString();}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}
     return {url:url.href,cookie};
   }
   consume(state:string,cookie:string,code:string|undefined,denied=false){
@@ -51,9 +55,18 @@ export class TwitchAuth {
       try{await this.request('https://id.twitch.tv/oauth2/revoke',{method:'POST',body:new URLSearchParams({client_id:this.config.clientId,token:tokens.access_token}),signal:AbortSignal.timeout(5000)});}catch{/* The short-lived token is discarded even when Twitch revocation is unavailable. */}
     }
   }
-  async complete(token:string,ticket:string,cookie:string){
-    this.prune();const p=this.pending.get(ticket),a=this.points.me(token);
-    if(!p||!cookie||!equal(p.cookieHash,hash(cookie))||a.id!==p.accountId||(p.wallet&&a.wallet!==p.wallet))throw new Error('La cuenta cambió durante la conexión. Volvé a conectar Twitch.');
-    this.pending.delete(ticket);return this.points.linkTwitch(token,p.identity);
+  async complete(token:string|undefined,ticket:string,cookie:string){
+    this.prune();const p=this.pending.get(ticket);
+    // The old combined guard kept one message for expired, replayed or mismatched link completions.
+    if(!p||!cookie||!equal(p.cookieHash,hash(cookie)))throw new Error('La cuenta cambió durante la conexión. Volvé a conectar Twitch.');
+    // Login flow: the Twitch identity itself opens (or resumes) the Plot account.
+    if(!p.accountId){
+      this.pending.delete(ticket);
+      const resumed=await this.points.loginWithTwitch(p.identity);
+      return {token:resumed.token,account:resumed.account,created:resumed.created,twitch:p.identity};
+    }
+    const a=this.points.me(token??'');
+    if(a.id!==p.accountId||(p.wallet&&a.wallet!==p.wallet))throw new Error('La cuenta cambió durante la conexión. Volvé a conectar Twitch.');
+    this.pending.delete(ticket);return this.points.linkTwitch(token!,p.identity);
   }
 }

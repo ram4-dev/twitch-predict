@@ -10,7 +10,7 @@ export class CloudTwitchAuth {
  private async update<T>(fn:(auth:TwitchAuth)=>T|Promise<T>){
   const {result}=await this.documents.update('twitch-auth',():State=>({flows:{},pending:{}}),async state=>{const auth=this.instance(state);const result=await fn(auth);Object.assign(state,auth.exportState());return result;});return result;
  }
- start(token:string){return this.update(auth=>auth.start(token));}
+ start(token?:string){return this.update(auth=>auth.start(token));}
  async callback(...args:Parameters<TwitchAuth['callback']>){
   // Errors after consumption must not roll back consumption (denial/code validation is done after commit).
   const [state,cookie,code,denied]=args;
