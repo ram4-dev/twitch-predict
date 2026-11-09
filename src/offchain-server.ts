@@ -120,6 +120,9 @@ app.get('/api/twitch/search',async(req,res)=>{
  });
 app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
 const bot=new CloudTwitchBot(new LocalDocuments(directory),{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:twitchOrigin,webhookOrigin:process.env.TWITCH_BOT_WEBHOOK_ORIGIN},fetch,Date.now,points);
+// HTTP publication revalidates moderator evidence authoritatively before opening the Points
+// transaction: a fresh Twitch query runs outside the row lock, outage denies moderator publish.
+points.moderatorRevalidator=(channel)=>bot.freshModerators(channel.id,channel.login);
 const botCookieName='twitch_bot';
 const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
 app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
