@@ -27,3 +27,9 @@
 @media (prefers-reduced-motion:reduce){
   .proposal-card,.market-composer,.proposal-list{transition:none;animation:none}
 }
+
+.market-admin-actions{display:grid;gap:8px;margin-top:8px}
+.market-admin-actions .admin-winner{display:grid;gap:4px;font-size:.9rem}
+.market-admin-actions select{background:var(--background,#0a0a0a);color:var(--foreground,#ededed);border:1px solid var(--border,#2a2a2a);border-radius:8px;padding:8px 10px}
+.settlement-preview{display:grid;gap:4px;border-top:1px solid var(--border,#2a2a2a);padding-top:8px;font-size:.85rem}
+.settlement-preview [role=row]{display:flex;gap:12px;justify-content:space-between;flex-wrap:wrap}

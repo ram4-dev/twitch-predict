@@ -226,7 +226,12 @@ app.get('/api/points/me',route((req,res)=>res.json(points.me(bearer(req)))));
 app.get('/api/streamer/console',route((req,res)=>res.json(points.streamerConsole(bearer(req)))));
 // Plan 2 (contract POST /api/streamer/markets): owner/mod direct creation through the same aggregate
 // transaction as acceptance. eventId comes from the client intent id; capabilities re-validated inside.
-app.post('/api/streamer/markets',route(async(req,res)=>{
+const proposalRoute=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){
+  if(e instanceof ProposalError){res.status(e.code==='PROPOSAL_FORBIDDEN'?403:e.code==='PROPOSAL_NOT_FOUND'?404:400).json({error:e.message,code:e.code});return;}
+  if(e instanceof z.ZodError){res.status(400).json({error:'Datos de la operación inválidos'});return;}
+  res.status(500).json({error:(e as Error).message});
+}};
+app.post('/api/streamer/markets',proposalRoute(async(req,res)=>{
   const me=points.me(bearer(req));
   const i=z.object({channelLogin:z.string().regex(/^[a-zA-Z0-9_]{1,40}$/),title:z.string().min(1).max(140),options:z.array(z.string().min(1).max(60)).min(2).max(6),durationSeconds:z.number().int().min(30).max(86400).optional(),intentId:z.string().min(8).max(120)}).parse(req.body);
   // SAFETY: exportStateJson is this server's own valid JSON; a corrupt read fails closed to null.

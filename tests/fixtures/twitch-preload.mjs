@@ -12,6 +12,16 @@ globalThis.fetch=async(input,options)=>{
     if(url.endsWith('/users'))return Response.json({data:[user]});
     return new Response(null,{status:200});
   }
+  // Get Moderators fixture: mode file takes precedence (E2E flips it between steps), then the env var.
+  // 'deny' → empty list; 'outage' → network failure; JSON array → list of user ids.
+  if(url.startsWith('https://api.twitch.tv/helix/moderation/moderators')){
+    let mode='';try{mode=(await readFile(new URL('../../.e2e-fixtures/moderators-mode',import.meta.url).pathname,'utf8')).trim();}catch{/* No mode file: fall back to the env var (default deny). */}
+    if(!mode)mode=process.env.TWITCH_MODERATORS_FIXTURE??'';
+    if(mode==='outage')throw new TypeError('fetch failed: fixture network outage');
+    if(mode==='deny')return Response.json({data:[]});
+    let users=[];try{users=JSON.parse(mode);}catch{/* mode is not a JSON list: treat as an empty deny list. */}
+    return Response.json({data:users.map(id=>({user_id:String(id)}))});
+  }
   if(url!=='https://gql.twitch.tv/gql')return original(input,options);
   const fixtures=JSON.parse(await readFile(process.env.TWITCH_FIXTURE_FILE,'utf8'));
   const {query,variables}=JSON.parse(options.body);

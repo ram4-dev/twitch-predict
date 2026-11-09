@@ -4,7 +4,7 @@ import {Button} from './components/button.js';
 import {Badge} from './components/badge.js';
 import {Check,ArrowUpRight,Wallet,LockKeyhole} from 'lucide-react';
 import type {Points} from '../points.js';
-import {ProposalInbox,MyProposals} from './proposals-ui.js';
+import {ProposalInbox,MyProposals,MarketComposer} from './proposals-ui.js';
 import {httpProposalsClient} from './proposals-client.js';
 
 type Account=ReturnType<Points['me']>;
@@ -42,9 +42,15 @@ function StreamerConsole({data}:{data?:Console}){
   const [channel,setChannel]=useState('all');
   if(!data?.channels.length)return <div className="console-empty"><LockKeyhole size={28}/><h2>Consola del streamer</h2><p>Los mercados de tu canal aparecen acá cuando se vincula tu cuenta de Twitch.</p><a href="#channels">Ver canales →</a></div>;
   const markets=data.markets.filter(m=>channel==='all'||m.prediction.channel===channel);
+  const target=channel==='all'?data.channels[0]:channel;
   return <div className="streamer-console"><div className="console-section-title"><div><h2>Tus mercados</h2><p>El estado y el resultado se actualizan desde Twitch.</p></div><label>Canal<select aria-label="Canal del streamer" value={channel} onChange={e=>setChannel(e.target.value)}><option value="all">Todos mis canales</option>{data.channels.map(c=><option key={c} value={c}>@{c}</option>)}</select></label></div>
+    <MarketComposer mode="create" channelLabel={`@${target}`} onSubmit={async input=>{
+      const response=await fetch('/api/streamer/markets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...input,channelLogin:target,intentId:`console-${Date.now()}-${Math.random().toString(36).slice(2,10)}`})});
+      const body=await response.json();if(!response.ok)throw new Error((body as {error?:string}).error??'No se pudo publicar el mercado.');
+      return {id:(body as {id?:string}).id};
+    }}/>
     <div className="console-stats"><Stat label="Mercados" value={fmt(markets.length)}/><Stat label="Abiertos" value={fmt(markets.filter(m=>m.phase==='open').length)}/><Stat label="Esperando resultado" value={fmt(markets.filter(m=>m.phase==='locked').length)}/><Stat label="Finalizados" value={fmt(markets.filter(m=>['resolved','void'].includes(m.phase)).length)}/></div>
-    <ProposalInbox client={httpProposalsClient()} channelId={channel==='all'?data.channels[0]:channel}/>
+    <ProposalInbox client={httpProposalsClient()} channelId={target}/>
     {markets.map(m=><StreamerMarket key={m.key} market={m}/>)}{!markets.length&&<p className="console-empty">Cuando Twitch abra una predicción en tu canal, el mercado aparecerá acá.</p>}
   </div>;
 }
@@ -54,5 +60,44 @@ function StreamerMarket({market:m}:{market:ManagedMarket}){
     {m.phase==='void'&&<p className="console-winner">Predicción cancelada · Reembolso</p>}
     {m.phase==='resolved'&&<p className="console-winner">Ganó {m.outcomes.find(o=>o.id===m.winnerId)?.title}</p>}
     {m.settlement&&<p className="fine">{m.settlement.source==='twitch'?'Confirmado por Twitch':m.settlement.source==='demo'?'Resultado del ejemplo':'Resultado registrado'} · {time(m.settlement.at)}</p>}
+    <MarketAdminActions market={m}/>
   </article>;
+}
+
+async function streamerPost(path:string,body:Record<string,unknown>){
+  const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error((data as {error?:string}).error??'No se pudo completar la operación.');
+  return data;
+}
+/** Owner console actions: close, resolve (with settlement preview) and cancel — server-authoritative via /api/streamer/*, never color-only feedback. */
+function MarketAdminActions({market:m}:{market:ManagedMarket}){
+  const [busy,setBusy]=useState<string>();const [message,setMessage]=useState('');
+  const [winner,setWinner]=useState<string>();const [preview,setPreview]=useState<{pool:number;bets:{accountId:string;wallet:string|null;outcome:string;amount:number;payout:number;claimed:boolean}[]}|null>(null);
+  if(['resolved','void'].includes(m.phase))return null;
+  const run=async(action:'lock'|'resolve'|'cancel',winnerId?:string)=>{
+    setBusy(action);setMessage('');
+    try{await streamerPost('/api/streamer/action',{key:m.key,action,winnerId,requestId:crypto.randomUUID()});
+      setMessage(action==='lock'?'Apuestas cerradas.':action==='resolve'?'Mercado resuelto; los ganadores pueden cobrar.':'Mercado cancelado; reembolso automático enviado.');}
+    catch(e){setMessage((e as Error).message);}finally{setBusy(undefined);}
+  };
+  const loadPreview=async()=>{
+    setBusy('preview');setMessage('');
+    try{const winnerId=winner??m.outcomes[0]?.id;const data=await streamerPost('/api/streamer/preview',{key:m.key,winnerId:winnerId??null}) as {pool:number;bets:{accountId:string;amount:number;payout:number;claimed:boolean;outcome:string;wallet:string|null}[]};setPreview(data);}
+    catch(e){setMessage((e as Error).message);}finally{setBusy(undefined);}
+  };
+  return <div className="market-admin-actions" data-admin-key={m.key}>
+    {m.phase==='open'&&<Button variant="secondary" disabled={!!busy} onClick={()=>void run('lock')}>{busy==='lock'?'Cerrando…':'Cerrar apuestas'}</Button>}
+    {m.phase==='locked'&&<>
+      <label className="admin-winner">Ganador<select aria-label={`Ganador de ${m.prediction.title}`} value={winner??''} onChange={e=>{setWinner(e.target.value);setPreview(null);}}><option value="">Elegí una opción</option>{m.outcomes.map(o=><option key={o.id} value={o.id}>{o.title}</option>)}</select></label>
+      <Button variant="secondary" disabled={!!busy} onClick={()=>void loadPreview()}>{busy==='preview'?'Calculando…':'Previsualizar liquidación'}</Button>
+      <Button className="console-primary" disabled={!!busy||!winner} onClick={()=>void run('resolve',winner)}>{busy==='resolve'?'Resolviendo…':'Resolver mercado'}</Button>
+      {preview&&<div className="settlement-preview" role="table" aria-label="Vista previa de liquidación">
+        <span className="fine">Pozo: {fmt(preview.pool)} pts · {preview.bets.length} apuestas</span>
+        {preview.bets.slice(0,20).map((b,i)=><div key={i} role="row"><span role="cell">{b.wallet?`${b.wallet.slice(0,4)}…${b.wallet.slice(-4)}`:'Cuenta interna'}</span><span role="cell">{b.outcome}</span><span role="cell">apostó {fmt(b.amount)} pts</span><span role="cell">{b.claimed?`cobrado ${fmt(b.payout)}`:b.payout>0?`cobre ${fmt(b.payout)} pts`:'sin premio'}</span></div>)}
+      </div>}
+    </>}
+    <Button variant="ghost" disabled={!!busy} onClick={()=>void run('cancel')}>{busy==='cancel'?'Cancelando…':'Cancelar y reembolsar'}</Button>
+    {message&&<p role={/No se pudo|Solo|Primero/.test(message)?'alert':'status'}>{message}</p>}
+  </div>;
 }

@@ -4,7 +4,7 @@
 import {type MarketActor, type MarketChannel, type CreateMarketInput, type ProposalTransaction, type PublishedMarket} from './market-contract.js';
 import {ProposalDomain, ProposalError, freshProposalState, type Proposal, type ProposalLimits, type ProposalState} from './proposals.js';
 
-export type PointsAggregate={proposalTransaction<T>(work:(draft:ProposalTransaction)=>T):Promise<T>};
+export type PointsAggregate={proposalTransaction<T>(work:(draft:ProposalTransaction)=>T):Promise<T>;proposalTransactionWithRevalidation?<T>(work:(draft:ProposalTransaction)=>Promise<T>|T,channel:MarketChannel):Promise<T>};
 
 /** Internal shape stored per proposal on the aggregate: the proposal plus its idempotency receipts. */
 type StoredProposal=Proposal&{receipts:Record<string,{fingerprint:string;result:unknown}>};
@@ -114,7 +114,13 @@ export class ProposalService {
    */
   async accept(args:{proposalId:string;actor:MarketActor;isChannelOwner:boolean;intentId:string;editedInput?:CreateMarketInput;
     channel:MarketChannel}){
-    return this.points.proposalTransaction(draft=>{
+    // Confirm-time publication revalidates moderator evidence authoritatively (adapter refresh, TTL-checked,
+    // outage denies) when the aggregate supports it; owner evidence is age-independent inside the draft.
+    const run=async<R,>(work:(draft:ProposalTransaction)=>Promise<R>|R):Promise<R>=>
+      this.points.proposalTransactionWithRevalidation
+        ?await this.points.proposalTransactionWithRevalidation(work,args.channel)
+        :this.points.proposalTransaction(work);
+    return run(async draft=>{
       const state=loadState(draft);
       const current=state.proposals[args.proposalId];
       if(!current)throw new ProposalError('PROPOSAL_NOT_FOUND','Propuesta desconocida.');
