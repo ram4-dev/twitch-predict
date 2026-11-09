@@ -39,21 +39,24 @@ export class Points {
     catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
   }
   /** Session-scoped transaction over the Points aggregate: proposals and market publication commit together. */
-  /** Authoritative revalidation hook for HTTP publication: session 2 (or the coordinator's
-   * integration) injects a fresh Twitch moderators query here; returning users refreshes the
-   * dated evidence inside the same proposal transaction window. Absent or failing → the dated
-   * evidence inside MODERATOR_EVIDENCE_TTL_MS decides (outage/expiry deny). */
+  /** Authoritative revalidation hook for HTTP publication: the coordinator's integration injects
+   * a fresh Twitch moderators query here. It runs BEFORE any transaction opens so the network
+   * never holds the Points row or serial queue. Failure (null/throw) does NOT refresh evidence:
+   * a moderator with only expired evidence then loses publish rights (deny on outage), while the
+   * owner stays independent. Fresh user ids are applied as dated evidence in the short transaction. */
   public moderatorRevalidator:((channel:MarketChannel)=>Promise<string[]|null>)|null=null;
-  /** Publication transaction with optional authoritative revalidation of moderator evidence. */
+  /** Publication transaction with authoritative revalidation done outside the row lock. */
   async proposalTransactionWithRevalidation<T>(work:(draft:ProposalTransaction)=>Promise<T>|T,channel:MarketChannel):Promise<T>{
+    // Revalidation runs BEFORE the transaction so the network never holds the row/queue.
+    const fresh=this.moderatorRevalidator?await this.moderatorRevalidator(channel).catch(()=>null):null;
+    // Authoritative failure denies moderator publication for this attempt even with a fresh
+    // cached snapshot; the owner path stays independent of this evidence.
+    const moderatorEvidenceOverride:{granted:boolean;users?:string[]}|null=this.moderatorRevalidator?(fresh?{granted:true,users:fresh}:{granted:false}):null;
     return this.transaction(async state=>{
-      if(this.moderatorRevalidator){
-        const fresh=await this.moderatorRevalidator(channel).catch(()=>null);
-        if(fresh){state.channelModerators??={};state.channelModerators[channel.id]={users:fresh.filter(id=>/^\d+$/.test(id)),verifiedAt:new Date(this.evidenceClock()).toISOString()};}
-      }
+      if(fresh){state.channelModerators??={};state.channelModerators[channel.id]={users:fresh.filter(id=>/^\d+$/.test(id)),verifiedAt:new Date(this.evidenceClock()).toISOString()};}
       return work({
         proposals:(state as State&{proposals?:Record<string,unknown>}).proposals??=((state as State&{proposals?:Record<string,unknown>}).proposals={}),
-        publishMarket:(input:PublishMarketInput)=>this.publishOnDraft(state,input)
+        publishMarket:(input:PublishMarketInput)=>this.publishOnDraft(state,input,moderatorEvidenceOverride)
       });
     });
   }
@@ -64,10 +67,14 @@ export class Points {
     }));
   }
   /** Publishes on an open draft: owner/mod only, persistent shortId, version-stamped receipt. */
-  private publishOnDraft(state:State,input:PublishMarketInput):PublishedMarket {
+  private publishOnDraft(state:State,input:PublishMarketInput,revalidatedModerator:{granted:boolean;users?:string[]}|null=null):PublishedMarket {
     const account=state.accounts[input.actor.accountId];
     if(!account)throw new Error('Cuenta desconocida');
-    const moderator=this.verifiedModeratorOf(state,input.channel,input.actor,()=>this.evidenceClock());
+    // When HTTP revalidation ran, its verdict overrides cached evidence: granted=false denies
+    // the moderator (outage or revocation), granted=true uses the fresh list. Owner unaffected.
+    const moderator=revalidatedModerator
+      ?revalidatedModerator.granted&&!!input.actor.twitchId&&!!revalidatedModerator.users?.includes(input.actor.twitchId)
+      :this.verifiedModeratorOf(state,input.channel,input.actor,()=>this.evidenceClock());
     const caps=capabilities({accountId:input.actor.accountId,twitchId:input.actor.twitchId},{id:input.channel.id,login:input.channel.login},moderator);
     if(!caps.create)throw new Error('Solo el dueño del canal o un moderador puede publicar predicciones.');
     const stamp=now();

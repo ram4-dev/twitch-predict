@@ -19,6 +19,7 @@ Rama `apply-plan-01`, base `504d3cb`, worktree `/home/meeting/projects/twitch-pr
 | `eacab46` | Google OIDC: adaptador seguro con validación server-side + UI provider-aware |
 | `bb26106` | Moderador real autoritativo (Get Moderators con caché 10 min) y gates sociales |
 | `5349566` | Flujo de completación Google en perfil móvil |
+| `7437006` | **Evidencia de moderadores con fecha** (hallazgo del coordinador): `channelModerators` ahora es `Record<string,{users,verifiedAt}>` con TTL 30 s; `verifiedModeratorOf` deniega evidencia legacy, vencida o en outage; `proposalTransactionWithRevalidation` revalida autoritativamente al confirmar publicación HTTP (hook `moderatorRevalidator` inyectable); dueño independiente de la evidencia |
 
 ## Interfaces nuevas para sesión 2
 

@@ -134,12 +134,9 @@ const proposalsForBot={
   accountForTwitch:async(twitchId:string)=>points.accountForTwitch(twitchId),
 };
 bot.mountProposals(proposalsForBot);
-// Authoritative moderator revalidation for HTTP publication: wired to the bot's fresh Get Moderators query
-// when the adapter exposes it (session 1 owns that method's promotion to public); absent → evidence TTL decides.
-type RevalidatingBot={revalidateModerators?(channelId:string):Promise<string[]|null>};
-points.moderatorRevalidator=(bot as RevalidatingBot).revalidateModerators
-  ?(channel)=>((bot as RevalidatingBot).revalidateModerators!(channel.id))
-  :null;
+// HTTP publication revalidates moderator evidence authoritatively before opening the Points
+// transaction: a fresh Twitch query runs outside the row lock, outage denies moderator publish.
+points.moderatorRevalidator=(channel)=>bot.freshModerators(channel.id,channel.login);
 const botCookieName='twitch_bot';
 const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
 app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
