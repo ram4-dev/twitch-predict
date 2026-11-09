@@ -51,21 +51,19 @@ Rama: `apply-plan-02`; base: `504d3cb`; worktree: `/home/meeting/projects/twitch
 - 359260d chat mount + guard 403 + E2E puerto estable
 - f5dcea0 limpieza diagnóstico
 
-## Pendientes con sesión 1
+## Estado de integración (actualizado, HEAD 2700508+db50951)
 
-- Commit de su trabajo de moderadores (isModerator/badge evidence, bot.start wallet gate, TTL 10min, moderation:read) — cuando exista, re-merge y conectar el evidence en la rama del viewer-create.
-- `accountForTwitch` en points.ts: mount mínimo mío en su archivo — revisar en el merge final.
+- Merges de session-1 completos: e686b4d, eacab46 (Google), 5f680a6 (mods), a451b99+3542b9e (evidencia con fecha, revalidación fuera de la transacción, veredicto override, freshModerators). Último merge: 2700508.
+- Revalidator HTTP conectado DIRECTO: `points.moderatorRevalidator=channel=>bot.freshModerators(channel.id,channel.login)` en offchain-server (sin fallback null) y en CADA Points del contexto cloud (`src/cloud/app.ts`, por-request).
+- PENDIENTES ANTIGUOS RETIRADOS (ya resueltos): gateway createMarket (sustituido por proposalTransaction), resolver de canal/dueño (montado), montaje de ProposalInbox (hecho). La sección histórica de interfaces conserva `ProposalMarketGateway` solo como referencia — YA NO se usa.
+- `Points.accountForTwitch()` (points.ts:165): mount aditivo de 1 línea, para revisión de session 1 en el merge final.
 
-## Interfaces entregadas (para coordinador/sesión 1)
+## E2E reales ejecutados (server montado, puerto interno fijo 14622)
 
-- `ProposalService.submit/withdraw/reject/accept/listForAuthor/listForChannel/get` (`src/proposals-service.ts`).
-- `ProposalMarketGateway.publishMarket({token,channel,input,actor,requestId}) → {key,id}`: seam que el integrador conecta a `createMarket` del Plan 1 con recibo idempotente por `requestId`.
-- `proposalsRouter({service,resolver})` con `ProposalActorResolver` (`src/proposals-router.ts`): monta `/api/proposals/*`; identidad y dueño vía resolver inyectado.
-- `handleProposalCreate(deps,{actor,channel,input,eventId,verifiedModerator})` (`src/proposals-create-handler.ts`): contrato `ProposalCreateHandler` del Plan 1; devuelve `{kind:'market'|'proposal',...}`.
-- UI: `ProposalInbox`, `MyProposals`, `MarketComposer`, `ProposalCard`, `httpProposalsClient` (`src/ui/proposals-ui.tsx`, `src/ui/proposals-client.ts`).
+- `tests/moderator-evidence.e2e.ts` (2/2): webhook EventSub firmado real → Get Moderators fixture por archivo de modo: cache positiva publica; revocación sin chat intermedio + TTL 30s RECHAZA; outage RECHAZA sin guessing; owner publica por HTTP independiente de la edad de evidencia; viewer siempre 403.
+- `tests/proposals.e2e.ts` (2/2): login Twitch-first fixture; viewer propone 201; bandeja owner-only; viewer-accept 403; owner-accept publica 1 mercado en el aggregate; double-accept replaya; withdraw; reject con motivo visible en Mis propuestas.
+- `npm test`: 158 tests, 145 pass, 0 fail; typecheck/lint limpios; bundles regenerados.
 
-## Pendientes de integración (blockers materiales)
+## Pendiente (blocker material)
 
-- Gateway real hacia `createMarket` compartiendo `Documents` (transacción SQL única) — patch en `odd/tasks/plan-02-integration.patch.md`.
-- Resolver de canal/dueño conectado a identidad final de sesión 1.
-- Montaje de `ProposalInbox` en consola con `channelIdFor` desde `GET /api/channels/:id/capabilities`.
+- Sesión 1: la creación directa de moderador por HTTP (`/api/streamer/markets` como MODERADOR — el owner ya funciona) usa la revalidación fresh; el wiring existe, falta su verificación E2E cuando el revalidator consulte la lista real (el fixture cubre el camino server-side; la consulta autoritativa ya corre fuera de la transacción por su corrección 3542b9e).
