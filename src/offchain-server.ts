@@ -164,8 +164,7 @@ app.get('/auth/twitch/callback',async(req,res)=>{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
     res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/app?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
-  }catch(e){
-    console.error('twitch callback failed:',(e as Error).message); // temporary integration diagnostic
+  }catch{
     res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';res.redirect(onboarding?`/onboarding?streamer=1&twitch_error=${error}`:`/app?twitch_error=${error}#streamer`);
   }
 });
