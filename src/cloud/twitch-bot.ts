@@ -60,7 +60,7 @@ export class CloudTwitchBot {
  async start(kind:Flow['kind'],token?:string){
   if(!this.configured)throw new Error('Twitch todavía no está configurado');
   let identity:Partial<Flow>={};
-  if(kind==='channel'){const p=await this.points(),a=p.me(token??'');if(!a.wallet||!a.twitch)throw new Error('Vinculá primero tu canal de Twitch');identity={accountId:a.id,wallet:a.wallet,twitchId:a.twitch.id};}
+  if(kind==='channel'){const p=await this.points(),a=p.me(token??'');if(!a.twitch)throw new Error('Vinculá primero tu canal de Twitch');identity={accountId:a.id,...(a.wallet?{wallet:a.wallet}:{}),twitchId:a.twitch.id};}
   const state=nonce(),cookie=nonce();
   await this.documents.update('twitch-bot-auth',authState,s=>{for(const map of [s.flows,s.pending])for(const [key,value] of Object.entries(map))if(value.expires<=this.now())delete map[key];if(Object.keys(s.flows).length>=1000)throw new Error('Demasiadas conexiones pendientes');s.flows[state]={kind,cookieHash:hash(cookie),expires:this.now()+600_000,...identity};});
   const url=new URL('https://id.twitch.tv/oauth2/authorize');url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:kind==='account'?botScopes.join(' '):'channel:bot',state,force_verify:'true'}).toString();return {url:url.href,cookie};
@@ -89,7 +89,7 @@ export class CloudTwitchBot {
  }
  async complete(token:string,ticket:string,cookie:string){
   const p=await this.points(),a=p.me(token);
-  const {result}=await this.documents.update('twitch-bot-auth',authState,async s=>{const pending=s.pending[ticket];if(!pending||pending.expires<=this.now()||!equal(pending.cookieHash,hash(cookie))||a.id!==pending.accountId||a.wallet!==pending.wallet||a.twitch?.id!==pending.twitchId)throw new Error('La cuenta cambió durante la conexión');delete s.pending[ticket];return p.setBotEnabled(token,true,{accountId:pending.accountId!,twitchId:pending.twitchId});});
+  const {result}=await this.documents.update('twitch-bot-auth',authState,async s=>{const pending=s.pending[ticket];if(!pending||pending.expires<=this.now()||!equal(pending.cookieHash,hash(cookie))||a.id!==pending.accountId||(pending.wallet!==undefined&&a.wallet!==pending.wallet)||a.twitch?.id!==pending.twitchId)throw new Error('La cuenta cambió durante la conexión');delete s.pending[ticket];return p.setBotEnabled(token,true,{accountId:pending.accountId!,twitchId:pending.twitchId});});
   return result;
  }
  async disable(token:string){return (await this.points()).setBotEnabled(token,false);}

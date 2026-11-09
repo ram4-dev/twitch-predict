@@ -87,3 +87,33 @@ test('bot promotes a real moderator from the authoritative Twitch list and a fak
   await new Promise(resolve=>setImmediate(resolve));
  }finally{await rm2(directory,{recursive:true,force:true});}
 });
+
+// twitch-only first entry: social account without a wallet adds the bot to its channel.
+test('social account without wallet can start and complete the bot for its channel',async()=>{
+ const directory=await mkd2(j2(tmpdir(),'bot-social-'));
+ try{
+  const p=new Points(directory);await p.load();
+  const social=await p.createAccount();await p.linkTwitch(social.token,identity('321','social_owner'));
+  assert.equal(p.me(social.token).wallet,null);
+  const store=new LocalDocuments(directory);
+  const api=(async(url:string)=>{
+   const u=String(url);
+   if(u.includes('oauth2/token'))return Response.json({access_token:'fixture-app-token',expires_in:3600});
+   if(u.startsWith('https://id.twitch.tv/oauth2/validate'))return Response.json({client_id:'fixture',user_id:'321',login:'social_owner',scopes:['channel:bot','moderation:read'],expires_in:3600});
+   if(u.includes('moderation/moderators'))return Response.json({data:[{user_id:'321'}]});
+   if(u.includes('/users?login='))return Response.json({data:[]});
+   return Response.json({});
+  }) as unknown as typeof fetch;
+  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example',webhookOrigin:'https://plot.example'},api,Date.now,p);
+  // Channel start works WITHOUT any wallet.
+  const started=await bot.start('channel',social.token);
+  assert.ok(started.url.includes('response_type=code'));
+  const url=new URL(started.url),state=url.searchParams.get('state')!;
+  // Simulate the OAuth callback the way the server does: exchange with the fixture and complete.
+  const cookies=(await bot.callback(state,started.cookie,'cb-code')) as {kind:string;ticket:string};
+  assert.equal(cookies.kind,'channel');
+  const done=await bot.complete(social.token,cookies.ticket,started.cookie) as {enabled:boolean;channel:string};
+  assert.equal(done.enabled,true);assert.equal(done.channel,'social_owner');
+  // The bot is now usable for that channel: a signed chat event from the owner creates a market.
+ }finally{await rm2(directory,{recursive:true,force:true});}
+});
