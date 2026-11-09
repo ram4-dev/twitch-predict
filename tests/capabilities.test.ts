@@ -144,10 +144,10 @@ test('legacy runtime without moderators map is normalized; short TTL revalidates
   await send('!plot crear ¿Legacy?, Sí, No','456');
   assert.equal(p.markets().length,1);assert.ok(moderatorCalls>=1);
   // The authoritative list reached Points capability evidence for the HTTP/publication path.
-  assert.deepEqual(await p.setChannelModerators('123',['456']),{count:1});
+  const synced=await p.setChannelModerators('123',['456']);assert.equal(synced.count,1);assert.ok(synced.verifiedAt);
   // A second immediate command from the same non-owner is cooldown-blocked (30 s), so the
   // authoritative sync is asserted through Points capabilities instead of a second market.
-  assert.deepEqual(await p.setChannelModerators('123',['456','789']),{count:2});
+  assert.equal((await p.setChannelModerators('123',['456','789'])).count,2);
  }finally{await rm2(directory,{recursive:true,force:true});}
 });
 test('moderator cache expires quickly: a revoked moderator loses create rights within the TTL',async()=>{
