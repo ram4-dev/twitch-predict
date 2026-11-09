@@ -3,16 +3,17 @@ import type {Documents} from './cloud/documents.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { closesAt, predictionSchema, type Prediction } from './prediction.js';
+import { capabilities, type MarketActor, type MarketChannel, type PublishMarketInput, type ProposalTransaction, type PublishedMarket } from './market-contract.js';
 
 export const STARTING_POINTS = 10_000;
 /** Fixed stake for chat bets (!yes/!no/!N); the internal-funds model is still being defined. */
 export const CHAT_BET_POINTS = 100;
 export const SOURCE_MAX_AGE = 30_000;
-export type TwitchIdentity = {id:string;login:string;displayName:string;linkedAt:string};
+export type TwitchIdentity={id:string;login:string;displayName:string;linkedAt:string};
 type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
-type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; creatorTwitchId?:string; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
+type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
 type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
@@ -33,6 +34,39 @@ export class Points {
     }
     catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
   }
+  /** Session-scoped transaction over the Points aggregate: proposals and market publication commit together. */
+  async proposalTransaction<T>(work:(draft:ProposalTransaction)=>T):Promise<T> {
+    return this.transaction(state=>work({
+      proposals:(state as State&{proposals?:Record<string,unknown>}).proposals??=((state as State&{proposals?:Record<string,unknown>}).proposals={}),
+      publishMarket:(input:PublishMarketInput)=>this.publishOnDraft(state,input)
+    }));
+  }
+  /** Publishes on an open draft: owner/mod only, persistent shortId, version-stamped receipt. */
+  private publishOnDraft(state:State,input:PublishMarketInput):PublishedMarket {
+    const account=state.accounts[input.actor.accountId];
+    if(!account)throw new Error('Cuenta desconocida');
+    const moderator=this.verifiedModeratorOf(state,input.channel,input.actor);
+    const caps=capabilities({accountId:input.actor.accountId,twitchId:input.actor.twitchId},{id:input.channel.id,login:input.channel.login},moderator);
+    if(!caps.create)throw new Error('Solo el dueño del canal o un moderador puede publicar predicciones.');
+    const open=Object.values(state.markets).filter(m=>m.source==='plot'&&m.prediction.channel===input.channel.login&&!['resolved','void'].includes(m.phase));
+    if(open.length)throw new Error('Ya hay una predicción de Plot pendiente en este canal.');
+    const stamp=now();
+    const id=`plot-${createHash('sha256').update(input.channel.id+':'+input.requestId).digest('hex').slice(0,32)}`;
+    const prediction=predictionSchema.parse({id,channel:input.channel.login,title:input.input.title,status:'ACTIVE',createdAt:stamp,predictionWindowSeconds:input.input.durationSeconds??120,outcomes:input.input.options.map((title,i)=>({id:String(i+1),title}))});
+    const shortId=this.nextShortId(state,input.channel.login);
+    const market:Market={key:`plot:${input.channel.login}:${id}`,prediction,phase:'open',demo:false,source:'plot',ownerTwitchId:input.channel.id,creatorTwitchId:input.actor.twitchId,shortId,version:1,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
+    state.markets[market.key]=market;
+    return {kind:'market',id,key:market.key,shortId,text:`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · 100 puntos por apuesta. Abierta 2 minutos.`};
+  }
+  /** Persistent per-channel codes: never reused, survive restarts, allocated inside the aggregate transaction. */
+  private nextShortId(state:State,channel:string):string {
+    const used=new Set(Object.values(state.markets).filter(m=>m.source==='plot'&&m.prediction.channel===channel).map(m=>m.shortId!));
+    for(let attempt=0;attempt<64;attempt++) {
+      const code=Array.from(randomBytes(2)).map(b=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b%32]).join('');
+      if(!used.has(code))return code;
+    }
+    throw new Error('No hay códigos disponibles para este canal');
+  }
   // Every operation commits one atomic snapshot; failed persistence never updates the live state.
   private transaction<T>(work:(draft:State)=>T):Promise<T> {
     const task=this.queue.then(async()=>{
@@ -47,6 +81,12 @@ export class Points {
   private account(state:State, token:string) {
     const digest=hash(token);const account=state.accounts[state.sessions[digest]]??Object.values(state.accounts).find(a=>!a.wallet&&a.tokenHash===digest);
     if(!account) throw new Error('Sesión inválida. Volvé a conectar tu cuenta.');return account;
+  }
+  /** Moderator evidence comes only from the signed chat event via the adapter, never from HTTP payloads. */
+  private verifiedModeratorOf(state:State,channel:MarketChannel,actor:MarketActor):boolean {
+    if(!actor.twitchId)return false;
+    const moderators=(state as State&{channelModerators?:Record<string,string[]>}).channelModerators?.[channel.id];
+    return !!moderators?.includes(actor.twitchId);
   }
   private ledger(state:State, account:Account, kind:LedgerEntry['kind'], delta:number, marketKey?:string) {
     if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new Error('Saldo insuficiente');
@@ -115,7 +155,7 @@ export class Points {
         const id=`plot-${createHash('sha256').update(channelId+':'+eventId).digest('hex').slice(0,32)}`,stamp=now();
         const prediction=predictionSchema.parse({id,channel,title:command.title,status:'ACTIVE',createdAt:stamp,predictionWindowSeconds:120,outcomes:command.options.map((title,i)=>({id:String(i+1),title}))});
         if(new Set(prediction.outcomes.map(o=>o.title.toLocaleLowerCase())).size!==prediction.outcomes.length||prediction.outcomes.length>6)throw new Error('Ingresá entre 2 y 6 opciones distintas.');
-        market={key:`plot:${channel}:${id}`,prediction,phase:'open',demo:false,source:'plot',creatorTwitchId:channelId,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
+        market={key:`plot:${channel}:${id}`,prediction,phase:'open',demo:false,source:'plot',ownerTwitchId:channelId,creatorTwitchId:channelId,shortId:this.nextShortId(state,channel),version:1,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
         state.markets[market.key]=market;
         text=`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · 100 puntos por apuesta. Abierta 2 minutos.`;
       }else{
@@ -149,7 +189,7 @@ export class Points {
         if(original.status==='RESOLVED'&&p.winningOutcomeId!==original.winningOutcomeId)throw new Error('Twitch informó otro ganador para un mercado liquidado');
       } else {
         if(p.status!=='ACTIVE'||closesAt(p)<=Date.now()||Date.parse(p.createdAt)>Date.now()+30_000)throw new Error('La predicción no está abierta');
-        m={key,prediction:p,phase:'open',demo,createdAt:now(),updatedAt:now(),sourceCheckedAt:now()};state.markets[key]=m;
+        m={key,prediction:p,phase:'open',demo,version:1,createdAt:now(),updatedAt:now(),sourceCheckedAt:now()};state.markets[key]=m;
       }
       m.prediction=p;m.updatedAt=now();m.sourceCheckedAt=now();
       if(!['resolved','void'].includes(m.phase)) {
