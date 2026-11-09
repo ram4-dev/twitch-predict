@@ -1,5 +1,4 @@
 import {PhantomHandoff} from './components/phantom-handoff.js';
-import {mobileBrowser} from './lib/phantom-browser.js';
 import {AuthLayout} from './components/auth-layout.js';
 import {useBettingMode,BettingModeNotice} from './components/betting-mode.js';
 import {useEffect,useRef,useState} from 'react';
@@ -16,6 +15,34 @@ async function request<T>(path:string,body?:unknown):Promise<T>{const token=loca
 function Onboarding(){
   const mode=useBettingMode();
   const [phase,setPhase]=useState('ready'),[error,setError]=useState(''),[installed,setInstalled]=useState(!!provider()?.isPhantom),[login,setLogin]=useState<Login>(),[flowReady,setFlowReady]=useState(!flowId);
+  // Social-first entry: Twitch is the primary access, Google appears only when the server has it configured.
+  const [googleConfigured,setGoogleConfigured]=useState<boolean|null>(null);
+  useEffect(()=>{let active=true;void request<{configured:boolean}>('/api/google/config').then(c=>{if(active)setGoogleConfigured(c.configured);}).catch(()=>{if(active)setGoogleConfigured(false);});return()=>{active=false;};},[]);
+  const social=async(provider:'twitch'|'google')=>{
+    setError('');setPhase('connecting');
+    try{
+      const result=await request<{url:string}>(`/api/${provider}/start`,{});
+      location.assign(result.url);
+    }catch(e){setError((e as Error).message);setPhase('ready');}
+  };
+  // Returning from the provider callback: consume the ticket and open the panel.
+  useEffect(()=>{
+    const params=new URLSearchParams(location.search);const ticket=params.get('twitch_ticket')??params.get('google_ticket');const oauthError=params.get('twitch_error')??params.get('google_error');
+    const provider=params.has('google_ticket')?'google':'twitch';
+    if(!ticket&&!oauthError)return;
+    params.delete('twitch_ticket');params.delete('twitch_error');params.delete('google_ticket');params.delete('google_error');
+    const query=params.toString();history.replaceState(null,'',`${location.pathname}${query?'?'+query:''}${location.hash}`);
+    let active=true;
+    (async()=>{
+      if(oauthError){if(active)setError(oauthError==='canceled'?'Cancelaste la conexión. Podés volver a intentar.':'No se pudo completar la conexión. Volvé a intentar.');return;}
+      try{
+        const result=await request<Login & {token:string}>(`/api/${provider}/complete`,{ticket});
+        const previous=localStorage.getItem('pointsToken');if(previous&&previous!==result.token)localStorage.setItem('previousPointsToken',previous);
+        localStorage.setItem('pointsToken',result.token);setPhase('done');location.replace('/app#markets');
+      }catch(e){if(active)setError((e as Error).message);}
+    })();
+    return()=>{active=false;};
+  },[]);
   useEffect(()=>{let active=true;const timer=setInterval(()=>setInstalled(!!provider()?.isPhantom),500);if(flowId)void request('/api/auth/flow/'+encodeURIComponent(flowId)).then(()=>{if(active)setFlowReady(true);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;clearInterval(timer);};},[]);
   const finish=async(result:Login)=>{
     if(result.handoff){
@@ -47,8 +74,14 @@ function Onboarding(){
   useEffect(()=>{if(flowReady&&installed&&new URLSearchParams(location.search).has('extension')&&!autoStarted.current){autoStarted.current=true;void connect();}},[flowReady,installed]);
   const busy=phase!=='ready';
   const labels:Record<string,string>={ready:login?'Reintentar vinculación':'Conectar Phantom',connecting:'Conectá tu wallet en Phantom…',signing:'Confirmá el inicio de sesión en Phantom…',linking:'Vinculando tu extensión…',done:'Abriendo tu panel…'};
-  return <AuthLayout footer="Al terminar, abrimos tu panel y la extensión queda conectada."><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><PlotMascot/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Conectá Phantom para tener tus puntos y apuestas en la extensión y en el panel.</p><div className="auth-benefits"><span>Una misma cuenta en ambos lugares</span><span>Tu saldo e historial se conservan</span><span>Solo una firma de acceso, sin comisión</span></div>
-      {installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={!flowId}/><p className="auth-secondary">{!flowId&&mobileBrowser()?'Continuá dentro de Phantom para conectar tu wallet.':'Después de instalarla, volvé acá para conectar tu wallet.'}</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>}
+  return <AuthLayout footer="Al terminar, abrimos tu panel y la extensión queda conectada."><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><PlotMascot/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Entrá con Twitch para tener tus puntos y apuestas desde el chat, la extensión y el panel.</p><div className="auth-benefits"><span>Una misma cuenta en todos lados</span><span>Tu saldo e historial se conservan</span><span>Wallet opcional: solo para BYTE</span></div>
+      {!flowId&&<div className="auth-social" role="group" aria-label="Formas de entrar">
+        <Button className="auth-primary" disabled={phase!=='ready'} onClick={()=>void social('twitch')}>{phase==='connecting'?'Abriendo Twitch…':'Continuar con Twitch'}{phase==='connecting'?<Loader2 size={16} className="animate-spin"/>:<ArrowRight size={16}/>}</Button>
+        {googleConfigured!==false&&<Button variant="outline" disabled={phase!=='ready'||googleConfigured===null} onClick={()=>void social('google')}>{googleConfigured===null?'Google…':'Continuar con Google'}</Button>}
+        {googleConfigured===false&&<p className="auth-secondary" aria-disabled="true">Google todavía no está disponible.</p>}
+      </div>}
+      {flowId?(installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={false}/><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>)
+      :installed&&<Button variant="outline" disabled={phase!=='ready'} onClick={()=>void connect()}>Entrar con Phantom</Button>}
       {error&&<p className="auth-error" role="alert">{error}</p>}<BettingModeNotice mode={mode}/></AuthLayout>;
 }
 createRoot(document.getElementById('onboarding-root')!).render(new URLSearchParams(location.search).has('streamer')?<StreamerOnboarding/>:<Onboarding/>);
