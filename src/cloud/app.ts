@@ -74,6 +74,8 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
    const points=new Points('',documents);await points.load();
    const byte=new ByteService('',env.BYTE_API_KEY??'',env.BYTE_BASE_URL||undefined,fetch,documents);await byte.load();
    const mirror=new ByteTwitchMirror('',byte,new TwitchSource(points),Date.now,documents);await mirror.load();
+   // Plan 2: every request Points gets the authoritative moderator revalidator (fresh query, outside locks).
+   points.moderatorRevalidator=channel=>bot.freshModerators(channel.id,channel.login);
    res.locals.context={points,byte,mirror,auth:new CloudAuth(points,documents),twitch:new CloudTwitchAuth(points,documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin})};next();
   }catch{res.status(503).json({error:'La base de Plot no está disponible'});}
  });
