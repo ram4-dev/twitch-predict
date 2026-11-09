@@ -15,6 +15,7 @@ import { z } from 'zod';
 import {Auth} from './auth.js';
 import {Waitlist} from './waitlist.js';
 import {TwitchAuth} from './twitch-auth.js';
+import {GoogleAuth} from './google-auth.js';
 import { Points } from './points.js';
 import { TwitchSource } from './twitch-source.js';
 import { demoPrediction } from './mirror.js';
@@ -86,6 +87,32 @@ const twitchAuth=new TwitchAuth(points,{clientId:process.env.TWITCH_CLIENT_ID??'
 const cookieName='twitch_link';
 const linkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${cookieName}=`))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
 const cookieOptions={httpOnly:true,secure:new URL(twitchOrigin).protocol==='https:',sameSite:'lax' as const,path:'/',maxAge:10*60_000};
+const googleAuth=new GoogleAuth(points,{clientId:process.env.GOOGLE_CLIENT_ID??'',clientSecret:process.env.GOOGLE_CLIENT_SECRET,origin:twitchOrigin});
+const googleCookieName='google_link';
+const googleLinkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${googleCookieName}=`))?.slice(googleCookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
+app.get('/api/google/config',(_req,res)=>res.json({configured:googleAuth.configured}));
+app.post('/api/google/start',route((req,res)=>{
+  if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Google');
+  const sessionToken=bearer(req)||undefined;
+  if(sessionToken)points.me(sessionToken);
+  const result=googleAuth.start(sessionToken);res.cookie(googleCookieName,result.cookie,cookieOptions);res.json({url:result.url});
+}));
+app.get('/auth/google/callback',async(req,res)=>{
+  if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
+  try{
+    const state=typeof req.query.state==='string'?req.query.state:'';
+    const ticket=await googleAuth.callback(state,googleLinkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,req.query.error==='access_denied');
+    res.redirect(`/app?google_ticket=${encodeURIComponent(ticket)}`);
+  }catch{
+    res.clearCookie(googleCookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';
+    res.redirect(`/app?google_error=${error}`);
+  }
+});
+app.post('/api/google/complete',route(async(req,res)=>{
+  const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);
+  const result=await googleAuth.complete(bearer(req)||undefined,ticket,googleLinkCookie(req));res.clearCookie(googleCookieName,{...cookieOptions,maxAge:undefined});res.json(result);
+}));
+app.post('/api/google/disconnect',route(async(req,res)=>res.json(await points.unlinkGoogle(bearer(req)))));
 app.get('/api/twitch/search',async(req,res)=>{
   const query=typeof req.query.q==='string'?req.query.q:'';
   if(!/^[a-zA-Z0-9_]{2,40}$/.test(query)){res.status(400).json({error:'Ingresá al menos dos caracteres del usuario de Twitch.'});return;}

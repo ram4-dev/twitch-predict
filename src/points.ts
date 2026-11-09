@@ -10,7 +10,7 @@ export const STARTING_POINTS = 10_000;
 export const CHAT_BET_POINTS = 100;
 export const SOURCE_MAX_AGE = 30_000;
 export type TwitchIdentity={id:string;login:string;displayName:string;linkedAt:string};
-type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
+type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; google?:{id:string;email?:string;displayName:string;linkedAt:string}; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'|'refund'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
 type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
@@ -110,6 +110,18 @@ export class Points {
       return {token,account:{id,name:account.name,balance:account.balance},created:true};
     });
   }
+  /** Google OIDC: stable subject is `sub`; email never merges or claims accounts. */
+  async loginWithGoogle(identity:{id:string;email?:string;displayName:string;linkedAt:string}):Promise<{token:string;account:{id:string;name:string;balance:number};created:boolean}>{
+    if(!/^[0-9A-Za-z_-]{1,128}$/.test(identity.id))throw new Error('Identidad de Google inválida');
+    const token=randomBytes(32).toString('hex');
+    return this.transaction(state=>{
+      const existing=Object.values(state.accounts).find(a=>a.google?.id===identity.id);
+      if(existing){state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
+      const id=randomUUID();const account:Account={id,name:identity.displayName,tokenHash:hash(token),balance:0,createdAt:now(),google:identity};
+      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.ledger(state,account,'welcome',STARTING_POINTS);
+      return {token,account:{id,name:account.name,balance:account.balance},created:true};
+    });
+  }
   async createAccount() {
     const token=randomBytes(32).toString('hex');
     return this.transaction(state=>{
@@ -132,7 +144,7 @@ export class Points {
   me(token:string) {
     const account=this.account(this.state,token);
     const bets=this.state.bets.filter(b=>b.accountId===account.id);
-    return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,balance:account.balance,startingPoints:STARTING_POINTS,
+    return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,google:account.google??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,channel:this.state.markets[b.marketKey].prediction.channel,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-100).reverse().map(l=>({...l,title:l.marketKey?this.state.markets[l.marketKey]?.prediction.title:undefined})),
       streamerChannels:Object.values(this.state.streamers).filter(s=>s.wallet===account.wallet&&((s.twitchId&&s.twitchId===account.twitch?.id)||s.channel==='demo_streamer')).map(s=>s.channel)};
@@ -332,6 +344,21 @@ export class Points {
   }
   async unlinkTwitch(token:string){
     return this.transaction(state=>{const a=this.account(state,token);for(const [channel,s] of Object.entries(state.streamers))if(s.twitchId&&s.wallet===a.wallet)delete state.streamers[channel];delete a.twitch;delete a.botEnabled;delete a.botEpoch;return {ok:true};});
+  }
+  /** Linking Google keeps the accountId and balance; a Google identity owned by another account is a conflict, never a merge. */
+  async linkGoogle(token:string,identity:{id:string;email?:string;displayName:string;linkedAt:string}){
+    if(!/^[0-9A-Za-z_-]{1,128}$/.test(identity.id))throw new Error('Identidad de Google inválida');
+    return this.transaction(state=>{
+      const a=this.account(state,token);
+      if(a.google&&a.google.id!==identity.id)throw new Error('Esta cuenta ya tiene otra cuenta de Google conectada. Desconectala primero.');
+      const previousOwner=Object.values(state.accounts).find(other=>other.id!==a.id&&other.google?.id===identity.id);
+      if(previousOwner)throw new Error('Esta cuenta de Google ya está vinculada a otra cuenta de Plot');
+      a.google={...identity};
+      return {google:a.google};
+    });
+  }
+  async unlinkGoogle(token:string){
+    return this.transaction(state=>{const a=this.account(state,token);if(!a.twitch&&!a.wallet)throw new Error('No podés desconectar tu único método de acceso');delete a.google;return {ok:true};});
   }
   /** Read-only JSON snapshot for auditors and repair tools; callers must never mutate it. */
   exportStateJson():string {return JSON.stringify(this.state);}
