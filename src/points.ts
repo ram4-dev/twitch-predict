@@ -17,7 +17,11 @@ type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolv
 type Receipt = { fingerprint:string; result:unknown };
 type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
-type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,string[]> };
+type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
+/** Dated moderator evidence: the bot adapter refreshes it; HTTP publication revalidates inside its window. */
+export type ChannelModeratorEvidence={users:string[];verifiedAt:string};
+/** Positive moderator evidence lives this long; expiry denies rather than trusting a stale list. */
+export const MODERATOR_EVIDENCE_TTL_MS=30_000;
 export type StreamerAction = { key:string; action:'lock'|'resolve'|'cancel'|'distribute'; winnerId?:string; requestId:string };
 const fresh = ():State => ({version:1,accounts:{},markets:{},bets:[],receipts:{},ledger:[],channels:[],sessions:{},streamers:{}});
 const hash = (token:string) => createHash('sha256').update(token).digest('hex');
@@ -25,7 +29,7 @@ const now = () => new Date().toISOString();
 export class Points {
   private state:State = fresh();
   private queue:Promise<unknown> = Promise.resolve();
-  constructor(readonly directory:string,private readonly documents?:Pick<Documents,'read'|'update'>) {}
+  constructor(readonly directory:string,private readonly documents?:Pick<Documents,'read'|'update'>,public evidenceClock:()=>number=Date.now) {}
   async load() {
     if(this.documents){this.state=await this.documents.read('points',fresh);return;}
     await mkdir(this.directory,{recursive:true,mode:0o700});
@@ -35,6 +39,24 @@ export class Points {
     catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT') throw e; }
   }
   /** Session-scoped transaction over the Points aggregate: proposals and market publication commit together. */
+  /** Authoritative revalidation hook for HTTP publication: session 2 (or the coordinator's
+   * integration) injects a fresh Twitch moderators query here; returning users refreshes the
+   * dated evidence inside the same proposal transaction window. Absent or failing → the dated
+   * evidence inside MODERATOR_EVIDENCE_TTL_MS decides (outage/expiry deny). */
+  public moderatorRevalidator:((channel:MarketChannel)=>Promise<string[]|null>)|null=null;
+  /** Publication transaction with optional authoritative revalidation of moderator evidence. */
+  async proposalTransactionWithRevalidation<T>(work:(draft:ProposalTransaction)=>Promise<T>|T,channel:MarketChannel):Promise<T>{
+    return this.transaction(async state=>{
+      if(this.moderatorRevalidator){
+        const fresh=await this.moderatorRevalidator(channel).catch(()=>null);
+        if(fresh){state.channelModerators??={};state.channelModerators[channel.id]={users:fresh.filter(id=>/^\d+$/.test(id)),verifiedAt:new Date(this.evidenceClock()).toISOString()};}
+      }
+      return work({
+        proposals:(state as State&{proposals?:Record<string,unknown>}).proposals??=((state as State&{proposals?:Record<string,unknown>}).proposals={}),
+        publishMarket:(input:PublishMarketInput)=>this.publishOnDraft(state,input)
+      });
+    });
+  }
   async proposalTransaction<T>(work:(draft:ProposalTransaction)=>T):Promise<T> {
     return this.transaction(state=>work({
       proposals:(state as State&{proposals?:Record<string,unknown>}).proposals??=((state as State&{proposals?:Record<string,unknown>}).proposals={}),
@@ -45,7 +67,7 @@ export class Points {
   private publishOnDraft(state:State,input:PublishMarketInput):PublishedMarket {
     const account=state.accounts[input.actor.accountId];
     if(!account)throw new Error('Cuenta desconocida');
-    const moderator=this.verifiedModeratorOf(state,input.channel,input.actor);
+    const moderator=this.verifiedModeratorOf(state,input.channel,input.actor,()=>this.evidenceClock());
     const caps=capabilities({accountId:input.actor.accountId,twitchId:input.actor.twitchId},{id:input.channel.id,login:input.channel.login},moderator);
     if(!caps.create)throw new Error('Solo el dueño del canal o un moderador puede publicar predicciones.');
     const stamp=now();
@@ -69,7 +91,7 @@ export class Points {
   private transaction<T>(work:(draft:State)=>T):Promise<T> {
     const task=this.queue.then(async()=>{
       if(this.documents){const committed=await this.documents.update('points',fresh,work);this.state=committed.state;return committed.result;}
-      const draft=structuredClone(this.state);const result=work(draft);
+      const draft=structuredClone(this.state);const result=await work(draft);
       const file=`${this.directory}/points.json`;
       await writeFile(`${file}.tmp`,JSON.stringify(draft),{mode:0o600});await rename(`${file}.tmp`,file);
       this.state=draft;return result;
@@ -81,15 +103,24 @@ export class Points {
     if(!account) throw new Error('Sesión inválida. Volvé a conectar tu cuenta.');return account;
   }
   /** Moderator evidence comes only from the signed chat event via the adapter, never from HTTP payloads. */
-  private verifiedModeratorOf(state:State,channel:MarketChannel,actor:MarketActor):boolean {
+  private verifiedModeratorOf(state:State,channel:MarketChannel,actor:MarketActor,clock:()=>number=Date.now):boolean {
     if(!actor.twitchId)return false;
-    const moderators=state.channelModerators?.[channel.id];
-    return !!moderators?.includes(actor.twitchId);
+    const evidence=state.channelModerators?.[channel.id];
+    if(!evidence)return false;
+    // Legacy format (string[]) or expired evidence: both deny until the adapter refreshes.
+    const verifiedAt=typeof evidence==='object'&&'verifiedAt' in evidence?Date.parse((evidence as ChannelModeratorEvidence).verifiedAt):NaN;
+    if(!Number.isFinite(verifiedAt)||clock()-verifiedAt>MODERATOR_EVIDENCE_TTL_MS)return false;
+    return !!(evidence as ChannelModeratorEvidence).users?.includes(actor.twitchId);
   }
   /** Syncs the authoritative moderator list for a channel (called by the bot adapter after its Twitch query). */
-  async setChannelModerators(channelId:string,userIds:string[]):Promise<{count:number}>{
+  async setChannelModerators(channelId:string,userIds:string[]):Promise<{count:number;verifiedAt:string}>{
     if(!/^\d+$/.test(channelId))throw new Error('Canal inválido');
-    return this.transaction(state=>{state.channelModerators??={};state.channelModerators[channelId]=userIds.filter(id=>/^\d+$/.test(id));return {count:state.channelModerators[channelId]!.length};});
+    return this.transaction(state=>{
+      state.channelModerators??={};
+      const evidence:ChannelModeratorEvidence={users:userIds.filter(id=>/^\d+$/.test(id)),verifiedAt:new Date(this.evidenceClock()).toISOString()};
+      state.channelModerators[channelId]=evidence;
+      return {count:evidence.users.length,verifiedAt:evidence.verifiedAt};
+    });
   }
   /** Shared debit used by chat bets and API bets on an open draft; receipts guard replay. */
   private betOnDraft(state:State,account:Account,m:Market,outcomeId:string,amount:number) {
