@@ -16,6 +16,9 @@ Rama `apply-plan-01`, base `504d3cb`, worktree `/home/meeting/projects/twitch-pr
 | `df44f42` | Login Twitch-first: start/complete con sesión opcional (login vs link) |
 | `4d7a24f` | UI: sección cuentas conectadas en perfil móvil, "Conectá Twitch" |
 | `c96cde1` | Launcher E2E aislado de sesión (puerto 1368) y completions cloud |
+| `eacab46` | Google OIDC: adaptador seguro con validación server-side + UI provider-aware |
+| `bb26106` | Moderador real autoritativo (Get Moderators con caché 10 min) y gates sociales |
+| `5349566` | Flujo de completación Google en perfil móvil |
 
 ## Interfaces nuevas para sesión 2
 
@@ -40,8 +43,8 @@ Rama `apply-plan-01`, base `504d3cb`, worktree `/home/meeting/projects/twitch-pr
 
 ## Verificación ejecutada (real)
 
-- `npm run check` completo: typecheck 0 errores, lint 0, unit/integración 117 pass / 0 fail, build ok (servidor + extensión).
-- E2E con launcher aislado de sesión (`scripts/e2e-server-01.ts`, proxy portless propio puerto **1368**, host `twitch-predict-p1.localhost`, DATA_DIR temporal): 33 tests pasando, incluyendo:
+- `npm run check` completo: typecheck 0 errores, lint 0, unit/integración 122 pass / 0 fail, build ok (servidor + extensión).
+- E2E con launcher aislado de sesión (`scripts/e2e-server-01.ts`, proxy portless propio puerto **1368**, host `twitch-predict-p1.localhost`, DATA_DIR temporal): 33 tests pasando, y tras los incrementales (Google OIDC + moderador real + gates sociales) re-verifiqué 14 E2E clave (twitch-auth 3, twitch-plot-chat 1, points 11) con el mismo launcher: **14 passed**.
   - `twitch-auth.e2e.ts` (3): link OAuth conserva cuenta/saldo, cancel/forged no otorgan acceso, seguimiento de mercados.
   - `twitch-plot-chat.e2e.ts` (1): streamer crea por chat, viewer apuesta desde página pública, streamer cierra/resuelve, viewer cobra (100 pts, saldo 9900→10000).
   - `points.e2e.ts` + `mobile-app-v2.e2e.ts` (11): dos cuentas comparten pozo, ganador cobra, perdedor no, reembolso persiste; flujo MV3; canales.
@@ -58,15 +61,16 @@ Rama `apply-plan-01`, base `504d3cb`, worktree `/home/meeting/projects/twitch-pr
 
 ## Pendientes / decisiones externas
 
-- **Google OAuth**: sin app OAuth configurada (no verifiqué secretos por nombres externos). El plan exige proveedor sin configurar no presentarse como botón funcional; el flujo actual no agrega botón Google. Bloqueo externo exacto: se necesitan `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` en el entorno (vault-env) para implementar P1-09.
+- **Google OAuth — evidencia corregida**: verifiqué el Secret Vault por NOMBRES (sin leer valores): **no existen** `GOOGLE_CLIENT_ID` ni `GOOGLE_CLIENT_SECRET` (existen TWITCH_CLIENT_ID/TWITCH_SECRET_TOKEN y otras claves no relacionadas). Corrección de mi informe anterior: dije "no verifiqué" y era incorrecto; la verificación hecha confirma que faltan. El adaptador Google OIDC **está implementado y probado con fixtures** (firma RS256 real vía WebCrypto, iss/aud/exp/nonce, sub estable, email nunca fusiona, login/link dual, UI "No disponible · Próximamente" sin config). Lo que queda bloqueado externamente es **solo la validación OAuth REAL** contra accounts.google.com; con las credenciales configuradas en vault-env el flujo funciona sin cambios de código.
 - **Reparación histórica**: auditoría lista (dry-run/report); la escritura de reparación queda supeditada a revisión del reporte sobre datos reales, según plan.
-- **Panel de moderadores en chat**: la evidencia `verifiedModerator` espera la integración del bot con la lista de mods (Get Moderators) que maneja el coordinador/Plan 2; el parámetro ya existe y el flujo completo está probado con evidencia firmada en fixtures.
+- **Moderadores reales en chat: implementado** (`bb26106`): `CloudTwitchBot.isModerator` consulta `moderation/moderators` de Twitch con el app token del bot, caché de 10 minutos en el runtime aggregate, sin aceptar claims del cliente; Twitch caído → denegar sin adivinar (dueño sigue funcionando). Corregido además un deadlock real: la consulta sale fuera de la transacción del runtime document (LocalDocuments en cola serial; cloud reusa el cliente anidado). El parámetro `verifiedModerator` ya llega a plotCommand desde evidencia autoritativa. Sesión 2 no necesita tocar estos archivos.
+- **Perfil sin wallet y gates sociales: revisados y corregidos** (`bb26106`, `5349566`): el nombre visible ya no depende de wallet (Twitch → Google → wallet → genérico); setBotEnabled y la consola del streamer autorizan por identidad Twitch vinculada (el canal demo_streamer conserva su wallet asignada); bet/claim de puntos sin wallet desde el commit `9115446`; completación Google desde el perfil móvil.
 - **Claim de premios ganadores**: mantiene la política actual de cobro manual, según defaults aprobados.
 
 ## Cómo verificar esta entrega
 
 ```sh
-npm run check   # typecheck + lint + 117 tests + build
+npm run check   # typecheck + lint + 122 tests + build
 # E2E aislado de sesión (no colisiona con 1356/1358 ni con sesión 2):
 npx tsx scripts/e2e-server-01.ts &   # proxy 1368
 APP_URL=http://twitch-predict-p1.localhost:1368 npx playwright test tests/twitch-plot-chat.e2e.ts
