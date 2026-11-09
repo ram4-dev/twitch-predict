@@ -180,3 +180,47 @@ test('moderator cache expires quickly: a revoked moderator loses create rights w
   assert.equal(p.markets().length,1);
  }finally{await rm2(directory,{recursive:true,force:true});}
 });
+test('channel start requests moderation:read and a missing scope fails explicitly, never silently',async()=>{
+ const directory=await mkd2(j2(tmpdir(),'mod-scope-'));
+ try{
+  const p=new Points(directory);await p.load();
+  const owner=await p.walletLogin('owner-wallet');await p.linkTwitch(owner.token,identity('123','owner'));await p.setBotEnabled(owner.token,true);
+  const store=new LocalDocuments(directory);
+  await store.update('twitch-bot-auth',()=>({bot:{id:'42',login:'plotfun',clientId:'fixture',authorizedAt:Date.now()}}),()=>{});
+  const api=(async(url:string)=>{
+   const u=String(url);
+   if(u.includes('oauth2/token'))return Response.json({access_token:'fixture-app-token',expires_in:3600});
+   if(u.includes('moderation/moderators'))return new Response(null,{status:403});
+   if(u.includes('/users?login='))return Response.json({data:[]});
+   return Response.json({});
+  }) as unknown as typeof fetch;
+  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},api,Date.now,p);
+  // The authorize URL must request moderation:read alongside channel:bot.
+  const started=await bot.start('channel',owner.token);
+  assert.ok(new URL(started.url).searchParams.get('scope')!.includes('moderation:read'));
+  // Twitch grants less than requested: linking fails with an explicit message (not silent denial).
+  const url=new URL(started.url),state=url.searchParams.get('state')!;
+  // Simulate a grant without moderation:read: the validate fixture must reflect it.
+  const scopedApi=(async(u2:string)=>{
+   const u=String(u2);
+   if(u.includes('oauth2/token'))return Response.json({access_token:'fixture-app-token',expires_in:3600});
+   if(u.startsWith('https://id.twitch.tv/oauth2/validate'))return Response.json({client_id:'fixture',user_id:'123',login:'owner',scopes:['channel:bot'],expires_in:3600});
+   return Response.json({});
+  }) as unknown as typeof fetch;
+  const strictBot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},scopedApi,Date.now,p);
+  await assert.rejects(strictBot.callback(state,started.cookie,'cb-code'),/permisos/);
+  // A 403 from Get Moderators denies moderation but tells the chat why (no silent viewer downgrade).
+  const outboxBot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},api,Date.now,p);
+  const send=async(text:string,actor:string,id:string=uuid2())=>{
+   const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));
+   const stamp=new Date().toISOString(),secret=hmac2('sha256','fixture-secret').update('plot-eventsub-webhook-v1').digest('hex');
+   return outboxBot.webhook({'twitch-eventsub-message-id':id,'twitch-eventsub-message-timestamp':stamp,'twitch-eventsub-message-type':'notification','twitch-eventsub-message-signature':'sha256='+hmac2('sha256',secret).update(id+stamp).update(raw).digest('hex')},raw);
+  };
+  await send('!plot crear ¿Sin permiso?, Sí, No','456');
+  const runtime=await store.read('twitch-bot-runtime',()=>({outbox:{} as Record<string,{text:string}>}));
+  const reply=Object.values(runtime.outbox).map(o=>o.text).join(' ');
+  // Without moderator evidence the create is refused as owner-only; the reply surfaces the permission problem.
+  assert.match(reply,/dueño|moderation:read/);
+  assert.equal(p.markets().length,0);
+ }finally{await rm2(directory,{recursive:true,force:true});}
+});

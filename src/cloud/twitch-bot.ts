@@ -62,8 +62,12 @@ export class CloudTwitchBot {
   let identity:Partial<Flow>={};
   if(kind==='channel'){const p=await this.points(),a=p.me(token??'');if(!a.twitch)throw new Error('Vinculá primero tu canal de Twitch');identity={accountId:a.id,...(a.wallet?{wallet:a.wallet}:{}),twitchId:a.twitch.id};}
   const state=nonce(),cookie=nonce();
-  await this.documents.update('twitch-bot-auth',authState,s=>{for(const map of [s.flows,s.pending])for(const [key,value] of Object.entries(map))if(value.expires<=this.now())delete map[key];if(Object.keys(s.flows).length>=1000)throw new Error('Demasiadas conexiones pendientes');s.flows[state]={kind,cookieHash:hash(cookie),expires:this.now()+600_000,...identity};});
-  const url=new URL('https://id.twitch.tv/oauth2/authorize');url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope:kind==='account'?botScopes.join(' '):'channel:bot',state,force_verify:'true'}).toString();return {url:url.href,cookie};
+  await this.documents.update('twitch-bot-auth',authState,s=>{s.flows??={};s.pending??={};for(const map of [s.flows,s.pending])for(const [key,value] of Object.entries(map))if(value.expires<=this.now())delete map[key];if(Object.keys(s.flows).length>=1000)throw new Error('Demasiadas conexiones pendientes');s.flows[state]={kind,cookieHash:hash(cookie),expires:this.now()+600_000,...identity};});
+  let url:URL;
+  try{url=new URL('https://id.twitch.tv/oauth2/authorize');}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}
+  // Get Moderators needs moderation:read granted by the broadcaster; request it on channel linking.
+  const scope=kind==='account'?botScopes.join(' '):'channel:bot moderation:read';
+  try{url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:this.callbackUrl,response_type:'code',scope,state,force_verify:'true'}).toString();}catch(e){throw new Error('No se pudo armar la URL de Twitch',{cause:e});}return {url:url.href,cookie};
  }
  async callback(state:string,cookie:string,code:string,denied=false){
   const {result:flow}=await this.documents.update('twitch-bot-auth',authState,s=>{const f=s.flows[state];if(!f||f.expires<=this.now()||!cookie||!equal(f.cookieHash,hash(cookie)))throw new Error('La conexión venció o pertenece a otro navegador');delete s.flows[state];return f;});
@@ -74,7 +78,7 @@ export class CloudTwitchBot {
   const validation=await this.request('https://id.twitch.tv/oauth2/validate',{headers:{Authorization:`OAuth ${tokens.access_token}`},signal:AbortSignal.timeout(10000)});
   if(!validation.ok)throw new Error('Twitch no pudo validar el permiso');
   const user=z.object({client_id:z.string(),user_id:z.string().regex(/^\d+$/),login:z.string(),scopes:z.array(z.string()),expires_in:z.number().positive()}).parse(await validation.json());
-  const scopes=flow.kind==='account'?botScopes:['channel:bot'];
+  const scopes=flow.kind==='account'?botScopes:['channel:bot','moderation:read'];
   if(user.client_id!==this.config.clientId||!scopes.every(scope=>user.scopes.includes(scope)))throw new Error('Twitch no otorgó los permisos necesarios');
   if(flow.kind==='account'){
    if(user.login.toLowerCase()!==(this.config.login??'plotfun').toLowerCase())throw new Error('Iniciá sesión con la cuenta plotfun para autorizar al bot');
