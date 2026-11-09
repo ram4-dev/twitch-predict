@@ -121,6 +121,13 @@ export class CloudTwitchBot {
   return users.includes(chatterId);
  }
  /** Paginates Get Moderators fully; permission failures surface as typed unavailability. */
+ /** Public fresh query for HTTP publication revalidation (coordinator wiring): authoritative
+  * Get Moderators, fully paginated. Returns null on outage or missing moderation:read so the
+  * caller denies moderator publication without trusting stale evidence. */
+ async freshModerators(channelId:string,login:string):Promise<string[]|null>{
+  const fresh=await this.moderatorsOf({id:channelId,login,epoch:''});
+  return fresh.ok?fresh.users??null:null;
+ }
  private async moderatorsOf(channel:Channel):Promise<{ok:boolean;users?:string[];error?:string}>{
   const users:string[]=[];let after='';
   try{
