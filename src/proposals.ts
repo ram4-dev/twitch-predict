@@ -71,7 +71,7 @@ export class ProposalDomain {
     const stamp=(args.now??(()=>new Date().toISOString()))();
     // Limits: per account and channel, sliding one-hour window over submission receipts.
     const pending=Object.values(state.proposals).filter(p=>p.channelId===channelId&&p.authorAccountId===author.accountId&&p.status==='pending');
-    if(pending.length>=this.limits.maxPendingPerAccount)throw new ProposalError('PROPOSAL_LIMIT',`Ya tenés ${this.limits.maxPendingPerAccount} propuestas pendientes en este canal.`);
+    if(pending.length>=this.limits.maxPendingPerAccount){console.error('PROPOSAL_LIMIT_HIT',JSON.stringify({channelId,author:author.accountId,pending:pending.map(p=>({id:p.id,channel:p.channelId,author:p.authorAccountId,status:p.status}))}));throw new ProposalError('PROPOSAL_LIMIT',`Ya tenés ${this.limits.maxPendingPerAccount} propuestas pendientes en este canal.`);}
     const hourAgo=Date.parse(stamp)-3_600_000;
     const recent=Object.entries(state.receipts).filter(([id,r])=>{
       if(!id.startsWith('proposal:')||id.startsWith('proposal-action:'))return false; // submissions only, never action receipts

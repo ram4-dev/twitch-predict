@@ -127,6 +127,9 @@ export class ProposalService {
       let published:PublishedMarket|undefined;
       // Publish only while still pending; a losing race never publishes.
       if(current.status==='pending'){
+        // Authorization BEFORE publication: a non-owner never reaches publishOnDraft (its own capability
+        // check stays as defense in depth). Surface a typed 403 instead of a 500.
+        if(!args.isChannelOwner)throw new ProposalError('PROPOSAL_FORBIDDEN','Solo el dueño del canal puede aceptar propuestas.');
         const requestId=`proposal-accept:${args.proposalId}:${current.version}`;
         published=draft.publishMarket({actor:args.actor,channel:args.channel,input:finalInput,requestId});
         // Transition inside the same draft; if it loses to withdraw/reject it throws AFTER publish, so we
