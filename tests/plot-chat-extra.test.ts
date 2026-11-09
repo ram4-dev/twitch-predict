@@ -67,40 +67,24 @@ test('viewers with a linked Twitch identity can bet and list via plotCommand; ow
  await assert.rejects(p.plotCommand('123','999',{kind:'bet',id:market.shortId,option:1},'unlinked-bet'),/Vinculá tu cuenta de Twitch/);
 }));
 
-test('publication replay: same requestId+payload returns the same receipt; changed payload rejected; replay after bet+cancel does not double refund',()=>fixture(async({p,owner})=>{
+test('publication replay: same requestId+payload returns the same receipt; changed payload rejected; replay after bet+cancel does not double refund',()=>fixture(async({p,owner,viewer})=>{
  const actor={accountId:p.me(owner).id,twitchId:'123'};
  const channel={id:'123',login:'owner'};
  const input={title:'¿Replay?',options:['Sí','No']};
  const first=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
  const replay=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
  assert.deepEqual(replay,first);assert.equal(p.markets().filter(m=>m.source==='plot').length,1);
- // Same requestId with different payload is rejected as reuse.
  await assert.rejects(p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input:{title:'Distinta',options:['Sí','No']},requestId:'req-1'})),/reutilizado/);
- // A viewer bets, the owner cancels (automatic refund), then the replay must NOT reopen the market nor re-credit.
+ // Viewer bets, owner cancels (automatic refund): replay must not reopen nor re-credit.
  await p.chatBet('456',first.key,'1','bet-before-cancel');
+ assert.equal(p.me(viewer).balance,9900);
  await p.plotCommand('123','123',{kind:'cancel',id:first.shortId},'cancel-1');
- // Replaying the original publication requestId must return the original receipt, not reopen.
+ assert.equal(p.me(viewer).balance,10000); // Refunded exactly once.
+ assert.equal(p.me(viewer).ledger.filter(l=>l.kind==='refund'&&l.marketKey===first.key).length,1);
  const replay2=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
  assert.deepEqual(replay2,first);
  assert.equal(p.markets().find(m=>m.key===first.key)!.phase,'void');
  assert.equal(p.markets().filter(m=>m.source==='plot').length,1);
-}));
-
-test('publication replay: same requestId+payload returns the same receipt; changed payload rejected; replay after bet+cancel does not double refund',()=>fixture(async({p,owner})=>{
- const actor={accountId:p.me(owner).id,twitchId:'123'};
- const channel={id:'123',login:'owner'};
- const input={title:'¿Replay?',options:['Sí','No']};
- const first=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
- const replay=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
- assert.deepEqual(replay,first);assert.equal(p.markets().filter(m=>m.source==='plot').length,1);
- // Same requestId with different payload is rejected as reuse.
- await assert.rejects(p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input:{title:'Distinta',options:['Sí','No']},requestId:'req-1'})),/reutilizado/);
- // A viewer bets, the owner cancels (automatic refund), then the replay must NOT reopen the market nor re-credit.
- await p.chatBet('456',first.key,'1','bet-before-cancel');
- await p.plotCommand('123','123',{kind:'cancel',id:first.shortId},'cancel-1');
- // Replaying the original publication requestId must return the original receipt, not reopen.
- const replay2=await p.proposalTransaction(draft=>draft.publishMarket({actor,channel,input,requestId:'req-1'}));
- assert.deepEqual(replay2,first);
- assert.equal(p.markets().find(m=>m.key===first.key)!.phase,'void');
- assert.equal(p.markets().filter(m=>m.source==='plot').length,1);
+ assert.equal(p.me(viewer).balance,10000); // Still exactly one refund after the replay.
+ assert.equal(p.me(viewer).ledger.filter(l=>l.kind==='refund'&&l.marketKey===first.key).length,1);
 }));

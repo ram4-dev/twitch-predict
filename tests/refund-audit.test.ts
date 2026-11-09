@@ -54,23 +54,23 @@ test('already credited and claimed positions are not reported; contradictions la
  const report=auditHistoricalRefunds(loaded2);
  assert.equal(report.pending.length,0);assert.equal(report.conflicts.length,1);
 }));
-test('ordinary resolved markets, paid history, aggregate refunds and partial credits are classified correctly',()=>fixture(async(p,dir)=>{
- const a=await p.createAccount(),b=await p.createAccount(),c=await p.createAccount();
+test('ordinary resolved, claim/distribution history, same-account aggregates: real refund arithmetic',()=>fixture(async(p,dir)=>{
+ const a=await p.createAccount(),b=await p.createAccount();
  // Ordinary resolved market with a winner and a loser: neither is a refund debt.
  const m1=await p.accept(demoPrediction(),true);
  await p.bet(a.token,m1.key,'victory',300,randomUUID());
  await p.bet(b.token,m1.key,'defeat',700,randomUUID());
  await p.demoResolve(m1.key,'victory');
- // Legacy cancellation paid historically via claim.
+ // Historical cancellation paid via claim (legacy flags rewritten to uncredited shape below).
  const m2=await p.accept(demoPrediction(),true);
  await p.bet(a.token,m2.key,'victory',200,randomUUID());
  await p.demoResolve(m2.key,null);
- // Current automatic refund: two 100 bets produce ONE aggregated 200 credit.
+ // Two 100 bets from the SAME account cancelled: one aggregated 200 refund credit covers both.
  const m3=await p.accept(demoPrediction(),true);
- await p.bet(b.token,m3.key,'victory',100,randomUUID());
- await p.bet(c.token,m3.key,'victory',100,randomUUID());
+ await p.bet(a.token,m3.key,'victory',100,randomUUID());
+ await p.bet(a.token,m3.key,'defeat',100,randomUUID());
  await p.demoResolve(m3.key,null);
- // Rewrite m1/m2 to the legacy uncredited shape to exercise classification.
+ // Rewrite m2 positions to legacy uncredited shape and strip its refund ledger entries.
  const raw=JSON.parse(await readFile(`${dir}/points.json`,'utf8'));
  for(const bet of raw.bets){if(bet.marketKey===m2.key){bet.claimed=false;bet.creditMethod=undefined;bet.creditedAt=undefined;bet.payout=bet.amount;}}
  raw.ledger=raw.ledger.filter((l:{kind:string;marketKey:string})=>!(l.kind==='refund'&&l.marketKey===m2.key));
@@ -78,16 +78,12 @@ test('ordinary resolved markets, paid history, aggregate refunds and partial cre
  const loaded=new Points(dir);await loaded.load();
  const report=auditHistoricalRefunds(loaded);
  const byMarket=(key:string)=>report.pending.filter(r=>r.marketKey===key).reduce((n,r)=>n+r.pending,0);
- // Ordinary resolved market: no debts.
- assert.equal(byMarket(m1.key),0);
- // Legacy cancellation paid by claim was rewritten to uncredited: pending debt 200.
- assert.equal(byMarket(m2.key),200);
- // Automatic refund with aggregated 200 credit covers both 100 positions: no debts, no conflicts.
- assert.equal(byMarket(m3.key),0);
- const conflicting=report.conflicts.filter(r=>r.marketKey===m3.key).length;
- assert.equal(conflicting,0);
+ assert.equal(byMarket(m1.key),0); // Ordinary resolved: no debts.
+ assert.equal(byMarket(m2.key),200); // Legacy uncredited: real pending debt.
+ assert.equal(byMarket(m3.key),0); // Same-account 200 credit covers both 100 positions.
+ assert.equal(report.conflicts.filter(r=>r.marketKey===m3.key).length,0);
  assert.equal(report.pending.length,1);
- // Partial credit scenario: one 100 refunded for a two-bet cancellation → ambiguity, not a guess.
+ // refund100 against two claimed/refund100 positions (same account) → shortfall conflict, no guessing.
  const raw2=JSON.parse(await readFile(`${dir}/points.json`,'utf8'));
  raw2.ledger=raw2.ledger.filter((l:{kind:string;marketKey:string})=>!(l.kind==='refund'&&l.marketKey===m3.key));
  raw2.ledger.push({id:randomUUID(),accountId:raw2.bets.find((x:{marketKey:string})=>x.marketKey===m3.key)!.accountId,kind:'refund',delta:100,balance:0,marketKey:m3.key,createdAt:new Date().toISOString()});
@@ -96,4 +92,12 @@ test('ordinary resolved markets, paid history, aggregate refunds and partial cre
  const report2=auditHistoricalRefunds(loaded2);
  assert.equal(report2.pending.filter(r=>r.marketKey===m3.key).length,0);
  assert.equal(report2.conflicts.filter(r=>r.marketKey===m3.key).length,1);
+ // refund50 → even shorter: conflict.
+ const raw3=JSON.parse(await readFile(`${dir}/points.json`,'utf8'));
+ raw3.ledger=raw3.ledger.filter((l:{kind:string;marketKey:string})=>!(l.kind==='refund'&&l.marketKey===m3.key));
+ raw3.ledger.push({id:randomUUID(),accountId:raw3.bets.find((x:{marketKey:string})=>x.marketKey===m3.key)!.accountId,kind:'refund',delta:50,balance:0,marketKey:m3.key,createdAt:new Date().toISOString()});
+ await writeFile(`${dir}/points.json`,JSON.stringify(raw3));
+ const loaded3=new Points(dir);await loaded3.load();
+ const report3=auditHistoricalRefunds(loaded3);
+ assert.equal(report3.conflicts.filter(r=>r.marketKey===m3.key).length,1);
 }));
