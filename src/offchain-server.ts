@@ -1,3 +1,6 @@
+import {LocalDocuments} from './local-documents.js';
+import {CloudTwitchBot} from './cloud/twitch-bot.js';
+import {trustedLocalHostname} from './local-origin.js';
 import {EventEmitter} from 'node:events';
 import {TwitchChannelSearch} from './twitch-search.js';
 import {contentSecurityPolicyForPath} from './content-security-policy.js';
@@ -33,7 +36,7 @@ const waitlist=new Waitlist(directory);await waitlist.load();
 
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
-  const trustedHost=(name:string)=>['twitch-predict.localhost','twitch-predict-byte.localhost','twitch-points-test.localhost','localhost','127.0.0.1','twitch-predict.local'].includes(name)||/^[0-9a-z-]+\.sslip\.io$/.test(name)||/^[0-9.]+$/.test(name);
+  const trustedHost=(name:string)=>trustedLocalHostname(name,process.env.AUTH_ORIGIN);
   if(!trustedHost(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
   const origin=req.headers.origin;
   // The portless proxy rewrites Host to its backend address, so validate the origin's hostname against
@@ -46,6 +49,9 @@ app.use((req,res,next)=>{
   if(req.get('sec-fetch-site')==='cross-site'&&!origin?.startsWith('chrome-extension://')&&!documentNavigation){res.status(403).json({error:'Untrusted site'});return;}
   res.set('Referrer-Policy','no-referrer');res.set('Cache-Control','no-store');res.set('X-Content-Type-Options','nosniff');
   res.set('Content-Security-Policy',contentSecurityPolicyForPath(req.path));next();
+});
+app.post('/api/twitch/bot/webhook',express.raw({type:'application/json',limit:'64kb'}),async(req,res)=>{
+  try{if(!Buffer.isBuffer(req.body)){res.sendStatus(400);return;}const headers=Object.fromEntries(['id','timestamp','signature','type'].map(name=>{const key=`twitch-eventsub-message-${name}`;return [key,req.get(key)??''];}));const result=await bot.webhook(headers,req.body);res.status(result.status).type('text/plain').send(result.body);}catch{res.sendStatus(400);}
 });
 app.use(express.json({limit:'16kb'}));
 const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
@@ -86,6 +92,25 @@ app.get('/api/twitch/search',async(req,res)=>{
   try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
  });
 app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
+const bot=new CloudTwitchBot(new LocalDocuments(directory),{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:twitchOrigin,webhookOrigin:process.env.TWITCH_BOT_WEBHOOK_ORIGIN},fetch,Date.now,points);
+const botCookieName='twitch_bot';
+const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
+app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
+const botStart=(kind:'channel'|'account')=>route(async(req,res)=>{
+  if(req.get('origin')!==twitchOrigin)throw new Error('Abrí la plataforma para autorizar el bot');
+  const result=await bot.start(kind,bearer(req));res.cookie(botCookieName,result.cookie,cookieOptions).json({url:result.url});
+});
+app.post('/api/twitch/bot/start',botStart('channel'));
+app.post('/api/twitch/bot/account/start',botStart('account'));
+app.get('/auth/twitch/bot/callback',async(req,res)=>{
+  try{const result=await bot.callback(typeof req.query.state==='string'?req.query.state:'',botCookie(req),typeof req.query.code==='string'?req.query.code:'',!!req.query.error);
+    if(result.kind==='account'){res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${twitchOrigin}/bot-setup.html?connected=1`);return;}
+    res.redirect(`${twitchOrigin}/onboarding?streamer=1&bot_ticket=${encodeURIComponent(result.ticket)}`);
+  }catch{res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${twitchOrigin}/onboarding?streamer=1&bot_error=failed`);}
+});
+app.post('/api/twitch/bot/complete',route(async(req,res)=>{const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const result=await bot.complete(bearer(req),ticket,botCookie(req));res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).json(result);}));
+app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disable(bearer(req)))));
+
 app.post('/api/twitch/start',route((req,res)=>{
   if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
   const result=twitchAuth.start(bearer(req));res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
@@ -165,7 +190,7 @@ app.delete('/api/channels/:channel',route(async(req,res)=>res.json({channels:awa
 app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.accept(demoPrediction(),true))));
 app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
-app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}/onboarding`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
+app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}${req.originalUrl}`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
 // Public streamer pages: the bot, QR codes and search all target /s/twitch/:login.
 app.get(['/s/:platform/:login','/join/:platform/:login','/overlay/:platform/:login'],(_req,res)=>{
   res.sendFile('streamer.html',{root:`${root}/public`});
@@ -189,6 +214,8 @@ const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{
   if(process.env.AUTH_PROXY_STATE_DIR)try{await promisify(execFile)('portless',['alias',process.env.AUTH_PROXY_NAME??'twitch-predict',String(port),'--force'],{env:{...process.env,PORTLESS_STATE_DIR:process.env.AUTH_PROXY_STATE_DIR,PORTLESS_PORT:'1357',PORTLESS_HTTPS:'1'}});}catch(e){console.error('Could not refresh auth HTTPS alias:',(e as Error).message);}
 });
 const sync=async()=>{await source.sync();await byteMirror.sync();};
+let syncingBot=false;
+const botTimer=setInterval(()=>{if(syncingBot)return;syncingBot=true;void bot.sync(channel=>byteMirror.snapshot(channel)).catch(()=>console.error('Twitch bot sync failed')).finally(()=>{syncingBot=false;});},5000);botTimer.unref();
 const timer=setInterval(()=>{void sync().catch(e=>console.error('Twitch sync failed:',(e as Error).message));},5000);timer.unref();
 void sync().catch(e=>console.error('Initial Twitch sync failed:',(e as Error).message));
-process.on('SIGTERM',()=>{clearInterval(timer);server.close();});
+process.on('SIGTERM',()=>{clearInterval(timer);clearInterval(botTimer);server.close();});

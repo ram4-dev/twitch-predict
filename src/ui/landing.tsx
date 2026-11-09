@@ -1,3 +1,4 @@
+import {PlotLogo,PlotBrandLink} from './components/plot.js';
 import {enhancePointerGlow} from '@/components/ui/spotlight-card';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
 import {createRoot} from 'react-dom/client';
@@ -5,7 +6,7 @@ import {ArrowRight,RotateCcw,Check} from 'lucide-react';
 import {BalloonWordmark} from './components/balloon-wordmark.js';
 import {Button} from './components/button.js';
 import {StreamerSearch} from './streamer-search.js';
-function LandingBrand(){return <span className="landing-brand" role="img" aria-label="Plot!"><img src="/brand/plot-logo-transparent.png" alt="" width={1888} height={833}/></span>;}
+
 
 function WaitlistForm(){
   const [email,setEmail]=useState(''),[state,setState]=useState<'idle'|'saving'|'joined'|'error'>('idle'),[error,setError]=useState('');
@@ -44,7 +45,7 @@ function PredictionPreview(){
   </div>;
 }
 function Landing(){useEffect(()=>{const node=document.querySelector<HTMLElement>('.landing');if(node)return enhancePointerGlow(node);},[]);return <div className="landing">
-  <header className="landing-header"><a href="/" aria-label="plot, inicio"><LandingBrand/></a><nav aria-label="Navegación"><a href="#como-funciona">Cómo funciona</a><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></nav></header>
+  <header className="landing-header"><PlotBrandLink logoClassName="landing-brand"/><nav aria-label="Navegación"><a href="#como-funciona">Cómo funciona</a><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></nav></header>
   <main id="contenido">
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="hero-copy"><h1 id="landing-title">El stream juega.<br/>Vos elegís.</h1><p>Predicciones de Twitch con un pozo propio. Elegí tu lado y seguí la jugada con tu comunidad.</p><WaitlistForm/></div>
@@ -53,7 +54,7 @@ function Landing(){useEffect(()=>{const node=document.querySelector<HTMLElement>
     <section className="landing-how" id="como-funciona" aria-labelledby="how-title"><div className="how-heading"><h2 id="how-title">Tu primera jugada, acá.</h2><p>Del stream a tu lado del pozo.</p></div><div className="how-details"><article><h3>Elegí tu lado</h3><p>Abrí un mercado y participá con puntos de prueba. El resultado sigue la predicción original de Twitch.</p></article><article><h3>Llevá tu cuenta</h3><p>Conectá Phantom para conservar tu saldo e historial entre el panel y la extensión.</p></article></div></section>
     <section className="landing-search" id="streamer-search" aria-labelledby="search-title"><h2 id="search-title">Buscá a tu streamer</h2><p>Encontrá las predicciones de tu canal por nombre, @usuario o enlace de Twitch.</p><StreamerSearch/></section>
   </main>
-  <footer className="landing-footer"><LandingBrand/><p>La próxima jugada está por empezar.</p><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></footer>
+  <footer className="landing-footer"><PlotLogo className="landing-brand"/><p>La próxima jugada está por empezar.</p><a className="waitlist-link" href="#waitlist">Entrar a la waitlist</a></footer>
 </div>;}
 // Keep bookmarks and older extension links pointing at app sections working.
 const legacyAppLink=location.pathname==='/'&&(['#markets','#history','#streamer','#channels'].includes(location.hash)||['twitch_ticket','twitch_error','channel','market','view'].some(key=>new URLSearchParams(location.search).has(key)));

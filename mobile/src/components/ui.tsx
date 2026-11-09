@@ -1,3 +1,4 @@
+import {PlotLogo} from "./brand";
 import React from "react";
 import {
   ActivityIndicator,
@@ -15,15 +16,15 @@ import { Link, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePlot } from "../lib/state";
 export const colors = {
-  ground: "#fff4dd",
-  paper: "#fffaf0",
-  ink: "#232039",
-  muted: "#68596a",
-  line: "#d8cdbd",
+  ground: "#080808",
+  paper: "#151515",
+  ink: "#f2f2f2",
+  muted: "#b5b5b5",
+  line: "#383838",
   accent: "#ff7049",
-  pale: "#ede3d3",
-  error: "#a12d3e",
-  positive: "#6a365c",
+  pale: "#282828",
+  error: "#ff9ca7",
+  positive: "#94e8c8",
 };
 export function Copy({ style, ...props }: TextProps) {
   return <Text {...props} style={[styles.copy, style]} />;
@@ -120,10 +121,10 @@ export function Screen({
           onPress={() => (back ? router.back() : router.replace("/"))}
           style={{ minHeight: 48, justifyContent: "center" }}
         >
-          <Text style={styles.logo}>
-            {back ? "‹ " : ""}plot
-            <Text style={{ color: colors.accent }}>.</Text>
-          </Text>
+          <View style={{flexDirection:"row",alignItems:"center",gap:8}}>
+            {back&&<Text style={{color:colors.ink,fontSize:28}}>‹</Text>}
+            <PlotLogo/>
+          </View>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -185,12 +186,6 @@ export const styles = StyleSheet.create({
     gap: 16,
     borderBottomWidth: 1,
     borderColor: colors.line,
-  },
-  logo: {
-    fontFamily: "Fraunces",
-    fontSize: 40,
-    letterSpacing: -2,
-    color: colors.ink,
   },
   wallet: {
     minHeight: 44,

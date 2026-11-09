@@ -50,8 +50,8 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
   const stake=own.reduce((n,b)=>n+b.amount,0);
   const fmt=(n:number)=>new Intl.NumberFormat(extension?'en-US':'es-AR').format(n);
   const status=extension
-    ?{open:market.canBet?'Staking open':market.sourceFresh?'Staking closed':'Waiting for Twitch',locked:'Waiting for the Twitch result',resolved:'Result confirmed',void:'Refund available'}
-    :{open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
+    ?{open:market.canBet?'Staking open':market.sourceFresh?'Staking closed':'Waiting for Twitch',locked:market.source==='plot'?'Waiting for the streamer result':'Waiting for the Twitch result',resolved:'Result confirmed',void:'Refund available'}
+    :{open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:market.source==='plot'?'Esperando resultado del streamer':'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
   const change=(value:string)=>{setAmount(value);form.amount=value;form.pending=undefined;};
   const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message=extension?'Enter a whole amount within your balance.':'Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
   if(extension&&['resolved','void'].includes(market.phase)){

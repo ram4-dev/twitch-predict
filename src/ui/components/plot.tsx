@@ -1,9 +1,13 @@
+import {plotBrand} from '../../brand.js';
 import {type ComponentProps,type ReactNode,useId} from 'react';
 import {CheckCircle2,AlertCircle,Info} from 'lucide-react';
 import {cn} from '../lib/utils.js';
 
-export function PlotLogo({className}: {className?:string}) {
-  return <span className={cn('plot-logo',className)} role="img" aria-label="plot"><span aria-hidden="true">pl</span><span className="plot-o" aria-hidden="true"><span className="plot-o-ring"/><span className="plot-o-dot"/></span><span aria-hidden="true">t</span></span>;
+export function PlotLogo({className,size='default'}: {className?:string;size?:'default'|'compact'}) {
+  return <span className={cn('plot-logo',className)} data-size={size}><img src={plotBrand.logo} alt={plotBrand.label} width={plotBrand.width} height={plotBrand.height}/></span>;
+}
+export function PlotBrandLink({className,logoClassName,href='/',...props}:ComponentProps<'a'>&{logoClassName?:string}){
+  return <a aria-label="Plot, inicio" {...props} href={href} className={cn('plot-brand-link',className)}><PlotLogo className={logoClassName}/></a>;
 }
 export function PlotMascot({mood='watch',className}: {mood?:'doubt'|'watch'|'reaction';className?:string}) {
   return <span className={cn('plot-mascot',`mood-${mood}`,className)} role="img" aria-label={{doubt:'Mascota de Plot esperando',watch:'Mascota de Plot observando',reaction:'Mascota de Plot festejando'}[mood]}/>;

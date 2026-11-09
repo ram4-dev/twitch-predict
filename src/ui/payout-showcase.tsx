@@ -1,3 +1,4 @@
+import {PlotLogo,PlotBrandLink} from './components/plot.js';
 import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ArrowUpRight,Check,ChevronLeft,RotateCcw,X} from 'lucide-react';
@@ -40,7 +41,7 @@ function ResultCard({variant,scenario,run,reduced}:{variant:Variant;scenario:Sce
    </div>
    <p className="payout-detail">{result.detail}</p>
   </div>
-  <div className="payout-foot"><span>Datos de ejemplo</span><span>plot<span className="orange">!</span></span></div>
+  <div className="payout-foot"><span>Datos de ejemplo</span><PlotLogo size="compact"/></div>
  </article>;
 }
 function OpeningDemo({variant,scenario,reduced,onClose}:{variant:Variant;scenario:Scenario;reduced:boolean;onClose:()=>void}){
@@ -53,7 +54,7 @@ function OpeningDemo({variant,scenario,reduced,onClose}:{variant:Variant;scenari
   <div className="browser-stage" data-popup={open?'open':'closed'}>
    <div className="browser-bar"><span className="browser-address">twitch.tv/gorgc</span><span className={`toolbar-mark ${open?'has-result':''}`} aria-label={open?'Plot tiene un resultado':'Plot'}>!</span></div>
    <div className="stream-placeholder"><span>@gorgc</span><strong>{open?'Resultado recibido.':'Esperando el resultado…'}</strong><p>{open?'El popup se abre y revela el importe.':'La extensión está cerrada.'}</p></div>
-   {open&&<div className="simulated-popup" data-motion={reduced?'off':'on'}><div className="popup-heading"><span>plot<span className="orange">!</span></span><span>SOL devnet · Demo</span></div><ResultCard variant={variant} scenario={scenario} run={run} reduced={reduced}/></div>}
+   {open&&<div className="simulated-popup" data-motion={reduced?'off':'on'}><div className="popup-heading"><PlotLogo size="compact"/><span>SOL devnet · Demo</span></div><ResultCard variant={variant} scenario={scenario} run={run} reduced={reduced}/></div>}
   </div>
   <footer className="demo-footer"><span role="status">{open?'Popup abierto': 'Popup cerrado · el resultado llega en un momento'}</span><button onClick={()=>setRun(r=>r+1)}><RotateCcw size={14}/>Repetir secuencia</button></footer>
  </dialog>;
@@ -64,7 +65,7 @@ function Showcase(){
  useEffect(()=>{if(demo===null)lastTrigger.current?.focus();},[demo]);
  const close=()=>setDemo(null);
  return <main className="payout-showcase" data-color={color}>
-  <header className="showcase-header"><a href="/" className="brand">plot<span>!</span></a><span>Laboratorio / Resolución</span><span className="preview-note">Prototipo · Datos de ejemplo</span></header>
+  <header className="showcase-header"><PlotBrandLink className="brand"/><span>Laboratorio / Resolución</span><span className="preview-note">Prototipo · Datos de ejemplo</span></header>
   <section className="showcase-intro"><a href="/resolution.html" className="back"><ChevronLeft size={14}/>Showcase anterior</a><h1>Conteo con carácter.</h1><p>Mismo conteo, cuatro tipografías. Al llegar, la cifra crece y vuelve a su tamaño.</p></section>
   <div className="scenario-controls"><fieldset><legend>Probá un resultado</legend><div className="scenario-buttons">{scenarios.map(s=><button key={s.id} aria-pressed={scenario===s.id} onClick={()=>setScenario(s.id)}>{s.label}</button>)}</div></fieldset><span>Cifras ficticias en SOL devnet</span></div>
   <fieldset className="color-controls"><legend>Color de la ganancia</legend>{[{id:'orange',name:'Naranja Plot'},{id:'mint',name:'Menta'},{id:'gold',name:'Dorado'}].map(c=><button key={c.id} aria-pressed={color===c.id} onClick={()=>setColor(c.id)}>{c.name}</button>)}<button className="replay-all" onClick={()=>setRuns(r=>({count:r.count+1,reel:r.reel+1,cut:r.cut+1,impact:r.impact+1}))}><RotateCcw size={14}/>Repetir todas</button></fieldset>

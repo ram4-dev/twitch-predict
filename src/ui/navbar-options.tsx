@@ -1,3 +1,4 @@
+import {PlotLogo} from './components/plot.js';
 import {useRef,useState,type CSSProperties} from 'react';
 import {createRoot} from 'react-dom/client';
 import {BarChart3,Layers3,Radio,Users,ArrowUpRight,ArrowLeft,Check} from 'lucide-react';
@@ -13,8 +14,8 @@ const variants=[
  {id:'dock',name:'Dock abierto',detail:'Controles independientes sin marco exterior. Abajo en mobile; al costado cuando hay espacio.',trait:'Sin borde · modular · hover magnético',reference:'DockMorph',author:'Ruixen UI',url:'https://21st.dev/@ruixen.ui/components/dock-morph'},
 ] as const;
 const isVariant=(value:string|null):value is Variant=>variants.some(v=>v.id===value);
-function Brand(){return <span className="nav-brand"><img src="/brand/plot-logo-transparent.png" width="1888" height="833" alt="Plot!"/></span>;}
-function BrandAndBalance(){return <div className="preview-head"><Brand/><div className="preview-balance"><span>Saldo de ejemplo</span><strong>10.000 <small>pts</small></strong></div></div>;}
+
+function BrandAndBalance(){return <div className="preview-head"><PlotLogo className="nav-brand"/><div className="preview-balance"><span>Saldo de ejemplo</span><strong>10.000 <small>pts</small></strong></div></div>;}
 function Navbar({variant,active,onChange}:{variant:Variant;active:View;onChange:(view:View)=>void}){
  const index=items.findIndex(item=>item.id===active);
  return <nav className={`option-navbar navbar-${variant}`} aria-label="Secciones de Plot" style={{'--active':index} as CSSProperties}>
@@ -46,7 +47,7 @@ function Comparison(){
  const [size,setSize]=useState<'fluid'|'360'|'700'>('fluid');
  const choose=(value:Variant|'all')=>{setChoice(value);const next=new URL(location.href);if(value==='all')next.searchParams.delete('variant');else next.searchParams.set('variant',value);history.replaceState(null,'',next);};
  const shown=choice==='all'?variants:variants.filter(variant=>variant.id===choice);
- return <div className="navbar-lab"><header className="lab-header"><a href="/app" aria-label="Volver a Plot"><Brand/></a><a className="back-link" href="/app"><ArrowLeft size={16}/>Volver a la app</a></header><main>
+ return <div className="navbar-lab"><header className="lab-header"><a href="/app" aria-label="Volver a Plot"><PlotLogo className="nav-brand"/></a><a className="back-link" href="/app"><ArrowLeft size={16}/>Volver a la app</a></header><main>
   <div className="lab-intro"><h1>Tres formas de navegar Plot.</h1><p>El mismo negro y naranja. Tres estructuras, materiales y movimientos distintos.</p></div>
   <div className="lab-controls"><div className="variant-picker" role="group" aria-label="Comparar opciones"><button aria-pressed={choice==='all'} onClick={()=>choose('all')}>Las tres</button>{variants.map(variant=><button key={variant.id} aria-pressed={choice===variant.id} onClick={()=>choose(variant.id)}>{variant.name}</button>)}</div><div className="size-picker" role="group" aria-label="Ancho de la vista previa">{([['fluid','Adaptable'],['360','360 px'],['700','700 px']] as const).map(([value,label])=><button key={value} aria-pressed={size===value} onClick={()=>setSize(value)}>{label}</button>)}</div></div>
   <div className={`variants-grid ${choice==='all'?'compare-all':'compare-one'}`} data-size={size}>

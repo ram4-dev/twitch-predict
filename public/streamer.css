@@ -87,8 +87,8 @@ body:has(.overlay-page){background:transparent}
 .streamer-page.plot-glow-stage::before{inset:0}
 .streamer-identity>div{min-width:0}
 
-.streamer-brand{position:relative;display:block;width:104px;height:48px;overflow:hidden;mix-blend-mode:screen}
-.streamer-brand img{display:block;width:100%;height:100%;object-fit:contain}
+.streamer-brand{width:104px;height:48px}
+
 
 .public-points.phone-app{height:auto;min-height:0;overflow:visible;background:transparent;isolation:isolate}
 .public-points.phone-app::before,.public-points.phone-app::after{display:none}

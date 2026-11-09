@@ -1,0 +1,6 @@
+.plot-logo,plot-brand{display:inline-flex;align-items:center;width:104px;max-width:100%;height:auto;line-height:1;flex-shrink:0}
+.plot-logo>img,plot-brand>img{display:block;width:100%;max-width:100%;height:auto;object-fit:contain;position:static;transform:none}
+.plot-brand-link{display:inline-flex;min-height:44px;align-items:center;text-decoration:none}
+.plot-brand-link:focus-visible{outline:3px solid var(--ring,#dedede);outline-offset:4px;border-radius:4px}
+
+.plot-logo[data-size=compact]{width:64px}

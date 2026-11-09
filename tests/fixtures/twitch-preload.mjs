@@ -4,10 +4,11 @@ await writeFile(process.env.E2E_SERVER_PID_FILE,String(process.pid));
 const original=globalThis.fetch;
 globalThis.fetch=async(input,options)=>{
   const url=String(input);
-  if(url.startsWith('https://id.twitch.tv/oauth2/')||url==='https://api.twitch.tv/helix/users'){
+  if(url.startsWith('https://id.twitch.tv/oauth2/')||url.startsWith('https://api.twitch.tv/helix/users')){
     const user=JSON.parse(await readFile(process.env.TWITCH_OAUTH_FIXTURE,'utf8'));
-    if(url.endsWith('/token'))return Response.json({access_token:'e2e-access-token',refresh_token:'e2e-refresh-token',token_type:'bearer'});
-    if(url.endsWith('/validate'))return Response.json({client_id:'e2e-client',user_id:user.id,login:user.login,expires_in:3600});
+    if(url.endsWith('/token'))return Response.json({access_token:'e2e-access-token',refresh_token:'e2e-refresh-token',token_type:'bearer',expires_in:3600});
+    if(url.endsWith('/validate'))return Response.json({client_id:'e2e-client',user_id:user.id,login:user.login,scopes:user.scopes??['channel:bot'],expires_in:3600});
+    if(url.includes('/users?login='))return Response.json({data:[]});
     if(url.endsWith('/users'))return Response.json({data:[user]});
     return new Response(null,{status:200});
   }

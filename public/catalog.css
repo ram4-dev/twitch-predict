@@ -24,3 +24,6 @@
 .dia-pool{margin:24px 0}
 
 .resolution-nav-link{padding:12px 0;font-size:14px;color:#ddd;white-space:nowrap}.resolution-nav-link:hover{color:#fff}
+
+.catalog-title .plot-balloon-wordmark{width:100%;max-width:560px;height:clamp(100px,25vw,220px)}
+.identity-logo .plot-logo{width:min(100%,240px)}

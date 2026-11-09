@@ -25,7 +25,7 @@ export default function Layout() {
   return (
     <SafeAreaProvider>
       <PlotProvider>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <Stack
           screenOptions={{
             headerShown: false,

@@ -1,0 +1,1 @@
+var e={logo:"/brand/plot-logo-transparent.png",label:"Plot!",width:1888,height:833};var l=class extends HTMLElement{connectedCallback(){let t=this.querySelector("img")??document.createElement("img");t.src=e.logo,t.alt=e.label,t.width=e.width,t.height=e.height,t.parentElement||this.append(t)}};customElements.get("plot-brand")||customElements.define("plot-brand",l);

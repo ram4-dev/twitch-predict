@@ -1,6 +1,10 @@
+import {PhantomHandoff} from './components/phantom-handoff.js';
+import {mobileBrowser} from './lib/phantom-browser.js';
+import {AuthLayout} from './components/auth-layout.js';
+import {useBettingMode,BettingModeNotice} from './components/betting-mode.js';
 import {useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {PlotLogo,PlotMascot} from './components/plot.js';
+import {PlotMascot} from './components/plot.js';
 import {Button} from './components/button.js';
 import {ArrowRight,Check,Loader2} from 'lucide-react';
 import {StreamerOnboarding} from './streamer-onboarding.js';
@@ -10,6 +14,7 @@ const provider=()=> (window as unknown as {phantom?:{solana?:Provider}}).phantom
 const flowId=new URLSearchParams(location.hash.slice(1)).get('flow')??undefined;
 async function request<T>(path:string,body?:unknown):Promise<T>{const token=localStorage.getItem('pointsToken');const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar el acceso');return data;}
 function Onboarding(){
+  const mode=useBettingMode();
   const [phase,setPhase]=useState('ready'),[error,setError]=useState(''),[installed,setInstalled]=useState(!!provider()?.isPhantom),[login,setLogin]=useState<Login>(),[flowReady,setFlowReady]=useState(!flowId);
   useEffect(()=>{let active=true;const timer=setInterval(()=>setInstalled(!!provider()?.isPhantom),500);if(flowId)void request('/api/auth/flow/'+encodeURIComponent(flowId)).then(()=>{if(active)setFlowReady(true);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;clearInterval(timer);};},[]);
   const finish=async(result:Login)=>{
@@ -42,8 +47,8 @@ function Onboarding(){
   useEffect(()=>{if(flowReady&&installed&&new URLSearchParams(location.search).has('extension')&&!autoStarted.current){autoStarted.current=true;void connect();}},[flowReady,installed]);
   const busy=phase!=='ready';
   const labels:Record<string,string>={ready:login?'Reintentar vinculación':'Conectar Phantom',connecting:'Conectá tu wallet en Phantom…',signing:'Confirmá el inicio de sesión en Phantom…',linking:'Vinculando tu extensión…',done:'Abriendo tu panel…'};
-  return <main className="onboarding"><a className="auth-brand" href="/"><PlotLogo/></a><section className="auth-card"><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><PlotMascot/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Conectá Phantom para tener tus puntos y apuestas en la extensión y en el panel.</p><div className="auth-benefits"><span>Una misma cuenta en ambos lugares</span><span>Tu saldo e historial se conservan</span><span>Solo una firma de acceso, sin comisión</span></div>
-      {installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><a className="auth-primary" href="https://phantom.com/download" target="_blank" rel="noopener">Instalar Phantom <ArrowRight size={16}/></a><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>}
-      {error&&<p className="auth-error" role="alert">{error}</p>}<p className="auth-note">Los puntos son internos y de prueba. No necesitás depositar SOL.</p></section><p className="auth-footer">Al terminar, abrimos tu panel y la extensión queda conectada.</p></main>;
+  return <AuthLayout footer="Al terminar, abrimos tu panel y la extensión queda conectada."><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><PlotMascot/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Conectá Phantom para tener tus puntos y apuestas en la extensión y en el panel.</p><div className="auth-benefits"><span>Una misma cuenta en ambos lugares</span><span>Tu saldo e historial se conservan</span><span>Solo una firma de acceso, sin comisión</span></div>
+      {installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={!flowId}/><p className="auth-secondary">{!flowId&&mobileBrowser()?'Continuá dentro de Phantom para conectar tu wallet.':'Después de instalarla, volvé acá para conectar tu wallet.'}</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>}
+      {error&&<p className="auth-error" role="alert">{error}</p>}<BettingModeNotice mode={mode}/></AuthLayout>;
 }
 createRoot(document.getElementById('onboarding-root')!).render(new URLSearchParams(location.search).has('streamer')?<StreamerOnboarding/>:<Onboarding/>);

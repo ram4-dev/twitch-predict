@@ -339,7 +339,7 @@ export default function Channel() {
         <View
           style={{
             flex: 1,
-            backgroundColor: "#23203966",
+            backgroundColor: "#00000099",
             justifyContent: "flex-end",
           }}
         >

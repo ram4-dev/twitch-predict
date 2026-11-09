@@ -1,3 +1,4 @@
+import {BettingModeLabel,type BettingMode} from './components/betting-mode.js';
 import {UserMarketCard,BetSheet,type Selection} from './components/user-market-card.js';
 import {MarketDetail} from './market-detail.js';
 import {createPointsClient} from './points-ui.js';
@@ -11,11 +12,11 @@ import type {TwitchPreview} from '../twitch-preview.js';
 import {TwitchMarketPreview} from './byte-market.js';
 import {reconcileBytePredictions} from '../popup-cache.js';
 import {Scene} from './scene.js';
-import {PlotMascot} from './components/plot.js';
+import {PlotMascot,PlotBrandLink} from './components/plot.js';
 import {Button} from './components/button.js';
 import {enhanceGlowStage} from '@/components/ui/spotlight-card';
 
-type LoadState={loading:boolean;error:string;markets:DisplayByteMarket[];previews:TwitchPreview[];points:AppMarket[]};
+type LoadState={loading:boolean;error:string;markets:DisplayByteMarket[];previews:TwitchPreview[];points:AppMarket[];mode?:BettingMode};
 
 /** Anonymous channel snapshot; existence and availability come from the served markets, not guesses. */
 export function useChannelData(login:string|undefined){
@@ -31,14 +32,17 @@ export function useChannelData(login:string|undefined){
         if(!response.ok)throw new Error('No pudimos cargar las predicciones del canal.');
         const data=await response.json();
         const reconciled=reconcileBytePredictions(data.markets??[],(data.predictions??[]) as TwitchPreview[],login);
-        setState({loading:false,error:'',markets:reconciled.markets,previews:reconciled.predictions,points:[]});
+        const pointsResponse=await fetch('/api/markets');
+        if(!pointsResponse.ok)throw new Error('No pudimos cargar las predicciones de Plot.');
+        const native=(await pointsResponse.json() as AppMarket[]).filter(m=>m.source==='plot'&&m.prediction.channel.toLowerCase()===login);
+        setState({loading:false,error:'',markets:reconciled.markets,previews:reconciled.predictions,points:native,mode:native.length&&!reconciled.markets.length&&!reconciled.predictions.length?'points':'byte'});
         return;
       }
       const response=await fetch('/api/markets');
       if(!response.ok)throw new Error('No pudimos cargar las predicciones del canal.');
       const data=await response.json() as AppMarket[];
       const points=data.filter(m=>m.prediction.channel.toLowerCase()===login);
-      setState({loading:false,error:'',markets:[],previews:[],points});
+      setState({loading:false,error:'',markets:[],previews:[],points,mode:'points'});
     }catch(e){setState({loading:false,error:(e as Error).message,markets:[],previews:[],points:[]});}
   });
   useMarketStream(()=>void reload.current());
@@ -88,6 +92,7 @@ export function OverlayPage({channel}:{channel:StreamerChannel}){
 /** /s/twitch/:login — the public channel page. */
 export function ChannelPage({channel}:{channel:StreamerChannel}){
   const {state,refresh}=useChannelData(channel.login);
+  const mode=state.mode;
   const [wallet,setWallet]=useState(''),[config,setConfig]=useState<ByteConfig>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
   useEffect(()=>{void restoreWallet().then(setWallet);},[]);
   useEffect(()=>{void fetch('/api/byte/config').then(r=>r.json()).then(setConfig).catch(()=>{});},[]);
@@ -118,8 +123,8 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
   const visible=state.markets.filter(m=>m.status==='open');
   const closed=state.markets.filter(m=>m.status!=='open');
   return <main className="streamer-page" ref={node=>{if(node)enhanceGlowStage(node);}}>
-    <header className="streamer-head"><a href="/" aria-label="plot, inicio"><span className="streamer-brand"><img src="/brand/plot-logo-transparent.png" alt="Plot!" width={1888} height={833}/></span></a><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/></header>
-    <div className="byte-connection"><span>{state.points.length?'Puntos internos de Plot · sin dinero real':'SOL devnet · sin dinero real'}</span></div>
+    <header className="streamer-head"><PlotBrandLink logoClassName="streamer-brand"/><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/></header>
+    <div className="byte-connection"><BettingModeLabel mode={mode}/>{mode==='byte'&&state.points.length>0&&<> · <BettingModeLabel mode="points"/></>}</div>
     <StreamerIdentity login={channel.login}/>
     <div className="streamer-tools">
       <Button variant="ghost" onClick={()=>void copy(`${location.origin}${share}`,'el enlace del canal')}><Share2 size={15}/>Compartir canal</Button>

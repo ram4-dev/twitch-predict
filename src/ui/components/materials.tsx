@@ -1,5 +1,4 @@
 import {useEffect,useRef,useState} from 'react';
-import {HalftoneWordmark} from '@/components/ui/halftone-wordmark-footer';
 import {enhanceGlowCard} from '@/components/ui/spotlight-card';
 import {ShaderMount,liquidMetalFragmentShader,ditheringFragmentShader} from '@paper-design/shaders';
 
@@ -44,8 +43,4 @@ export function enableSpotlight(node:HTMLElement){
  if(spotlightNodes.has(node))return;spotlightNodes.add(node);node.classList.add('plot-spotlight');
  const follow=(e:PointerEvent)=>{if(e.pointerType==='touch')return;const r=node.getBoundingClientRect();node.style.setProperty('--spot-x',`${e.clientX-r.left}px`);node.style.setProperty('--spot-y',`${e.clientY-r.top}px`);};
  node.addEventListener('pointerenter',follow);node.addEventListener('pointermove',follow);
-}
-// Shared halftone engine, adapted from the supplied wordmark component.
-export function HalftonePlot({replayKey=0,paused=false,label='Plot! en puntos'}:{replayKey?:number;paused?:boolean;label?:string}){
- return <HalftoneWordmark wordmark="Plot!" className="plot-halftone" label={label} replayKey={replayKey} paused={paused}/>;
 }

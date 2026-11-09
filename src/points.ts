@@ -1,3 +1,4 @@
+import {type PlotCommand} from './plot-chat.js';
 import type {Documents} from './cloud/documents.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -11,7 +12,7 @@ export type TwitchIdentity = {id:string;login:string;displayName:string;linkedAt
 type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
-type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
+type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; creatorTwitchId?:string; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
 type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
@@ -23,7 +24,7 @@ const now = () => new Date().toISOString();
 export class Points {
   private state:State = fresh();
   private queue:Promise<unknown> = Promise.resolve();
-  constructor(readonly directory:string,private readonly documents?:Documents) {}
+  constructor(readonly directory:string,private readonly documents?:Pick<Documents,'read'|'update'>) {}
   async load() {
     if(this.documents){this.state=await this.documents.read('points',fresh);return;}
     await mkdir(this.directory,{recursive:true,mode:0o700});
@@ -80,7 +81,7 @@ export class Points {
   }
   private view(state:State, m:Market) {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const total=bets.reduce((n,b)=>n+b.amount,0);
-    const sourceFresh=m.demo||Date.now()-Date.parse(m.sourceCheckedAt)<SOURCE_MAX_AGE;
+    const sourceFresh=m.demo||m.source==='plot'||Date.now()-Date.parse(m.sourceCheckedAt)<SOURCE_MAX_AGE;
     const phase=m.phase==='open'&&closesAt(m.prediction)<=Date.now()?'locked':m.phase;
     return {...m,phase,network:'offchain',canBet:phase==='open'&&m.prediction.status==='ACTIVE'&&closesAt(m.prediction)>Date.now()&&sourceFresh,
       sourceFresh,totalPoints:total,totalBets:bets.length,participants:new Set(bets.map(b=>b.accountId)).size,
@@ -93,12 +94,48 @@ export class Points {
   enabledBotChannels(){return Object.values(this.state.accounts).filter(a=>a.twitch&&a.botEnabled&&a.botEpoch).map(a=>({id:a.twitch!.id,login:a.twitch!.login,epoch:a.botEpoch!}));}
   botState(token:string){const a=this.account(this.state,token);return {enabled:!!a.twitch&&!!a.botEnabled,twitch:a.twitch??null};}
   setBotEnabled(token:string,enabled:boolean,expected?:{accountId:string;twitchId:string}){return this.transaction(state=>{const a=this.account(state,token);if(!a.wallet||!a.twitch)throw new Error('Vinculá primero tu cuenta de Twitch');if(expected&&(a.id!==expected.accountId||a.twitch.id!==expected.twitchId))throw new Error('La cuenta cambió durante la conexión');if(enabled&&!a.botEnabled)a.botEpoch=randomUUID();a.botEnabled=enabled;return {enabled,channel:a.twitch.login};});}
-  pendingSources() {return Object.values(this.state.markets).filter(m=>!m.demo&&!['resolved','void'].includes(m.phase)).map(m=>({id:m.prediction.id,channel:m.prediction.channel}));}
+  pendingSources() {return Object.values(this.state.markets).filter(m=>!m.demo&&m.source!=='plot'&&!['resolved','void'].includes(m.phase)).map(m=>({id:m.prediction.id,channel:m.prediction.channel}));}
   async watch(channel:string) {
     if(!/^[a-zA-Z0-9_]{1,40}$/.test(channel))throw new Error('Canal inválido');
     return this.transaction(s=>{const name=channel.toLowerCase();if(!s.channels.includes(name)){if(s.channels.length>=30)throw new Error('Máximo 30 canales en esta POC');s.channels.push(name);}return s.channels;});
   }
   async unwatch(channel:string) {return this.transaction(s=>{s.channels=s.channels.filter(c=>c!==channel.toLowerCase());return s.channels;});}
+  /** Only a signed chat event for the linked broadcaster can create or manage Plot markets. */
+  async plotCommand(channelId:string,actorId:string,command:PlotCommand,eventId:string){
+    return this.transaction(state=>{
+      const account=Object.values(state.accounts).find(a=>a.twitch?.id===channelId&&a.wallet&&a.botEnabled);
+      if(actorId!==channelId||!account?.twitch||state.streamers[account.twitch.login]?.twitchId!==channelId)throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
+      const receiptId=`plot-command:${channelId}:${eventId}`,fingerprint=JSON.stringify([actorId,command]);
+      const previous=state.receipts[receiptId];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de evento reutilizado con otros datos');return previous.result as {key:string;text:string};}
+      const channel=account.twitch.login;
+      let market=Object.values(state.markets).find(m=>m.source==='plot'&&m.creatorTwitchId===channelId&&m.prediction.channel===channel&&!['resolved','void'].includes(m.phase));
+      let text:string;
+      if(command.kind==='create'){
+        if(market)throw new Error('Ya hay una predicción de Plot pendiente. Cerrala y resolvela, o usá !plot cancelar.');
+        const id=`plot-${createHash('sha256').update(channelId+':'+eventId).digest('hex').slice(0,32)}`,stamp=now();
+        const prediction=predictionSchema.parse({id,channel,title:command.title,status:'ACTIVE',createdAt:stamp,predictionWindowSeconds:120,outcomes:command.options.map((title,i)=>({id:String(i+1),title}))});
+        if(new Set(prediction.outcomes.map(o=>o.title.toLocaleLowerCase())).size!==prediction.outcomes.length||prediction.outcomes.length>6)throw new Error('Ingresá entre 2 y 6 opciones distintas.');
+        market={key:`plot:${channel}:${id}`,prediction,phase:'open',demo:false,source:'plot',creatorTwitchId:channelId,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
+        state.markets[market.key]=market;
+        text=`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · 100 puntos por apuesta. Abierta 2 minutos.`;
+      }else{
+        if(!market)throw new Error('No hay una predicción de Plot pendiente en este canal.');
+        if(command.kind==='lock'){
+          market.phase='locked';market.operatorLockedAt??=now();market.operatorLockedBy??=account.wallet;market.prediction.status='LOCKED';market.prediction.lockedAt??=now();
+          text='Apuestas cerradas. Usá !plot resolver 1 (número ganador) o !plot cancelar.';
+        }else{
+          if(command.kind==='resolve'&&this.view(state,market).phase!=='locked')throw new Error('Primero cerrá las apuestas con !plot cerrar.');
+          const chosen=command.kind==='resolve'?market.prediction.outcomes[command.option-1]:undefined;
+          if(command.kind==='resolve'&&!chosen)throw new Error('Esa opción no existe en esta predicción.');
+          this.settle(state,market,chosen?.id??null,chosen?'Resultado confirmado por el streamer':'Cancelada por el streamer: reembolso de apuestas');
+          market.settlement={source:'streamer',wallet:account.wallet,at:now()};market.prediction.status=chosen?'RESOLVED':'CANCELED';market.prediction.winningOutcomeId=chosen?.id??null;market.prediction.endedAt=now();
+          text=chosen?`Resultado: ${chosen.title}. Revisá y cobrá tus puntos en Plot.`:'Predicción cancelada. Recuperá tu apuesta en Plot.';
+        }
+        market.updatedAt=now();
+      }
+      const result={key:market.key,text};state.receipts[receiptId]={fingerprint,result};return result;
+    });
+  }
   async accept(input:unknown, demo=false) {
     const p=predictionSchema.parse(input);const key=`offchain:${p.channel.toLowerCase()}:${p.id}`;
     return this.transaction(state=>{

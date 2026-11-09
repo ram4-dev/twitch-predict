@@ -1,3 +1,4 @@
+export {phantomBrowseUrl} from './lib/phantom-browser.js';
 import {twitchChannel} from '../mobile-model.js';
 import {publicChannelPath} from '../public-paths.js';
 import {useEffect,useRef,useState} from 'react';
@@ -131,11 +132,7 @@ export async function connectWallet():Promise<string>{
  * browser do not share localStorage or session.
  * https://docs.phantom.com/phantom-deeplinks/other-methods/browse
  */
-export function phantomBrowseUrl(target:string):string{
-  const url=new URL(target,location.origin);
-  if(url.origin!==location.origin||url.protocol!=='https:'&&url.protocol!=='http:')throw new Error('Destino de wallet inválido.');
-  return `https://phantom.com/ul/browse/${encodeURIComponent(url.href)}?ref=${encodeURIComponent(location.origin)}`;
-}
+
 
 /** Reads the preserved bet intention from public query parameters; internal paths only. */
 export function readIntention():{market?:string;option?:string;amount?:string}{

@@ -4,7 +4,7 @@ test('catalog uses the shared market, validates input, supports dialog keyboard 
  const mutations:string[]=[];page.on('request',r=>{if(r.method()==='POST')mutations.push(r.url());});
  await page.goto('/components.html');await page.evaluate(()=>document.fonts.ready);
  expect(await page.evaluate(()=>document.fonts.check('800 40px Fraunces'))).toBe(true);
- await expect(page.getByRole('img',{name:'plot',exact:true})).toBeVisible();
+ await expect(page.locator('.catalog-header').getByRole('img',{name:'Plot!',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Probar carga',exact:true}).click();await expect(page.getByRole('button',{name:'Guardando…',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Probar carga',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'Ver detalle',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible();await expect(page.getByRole('button',{name:'Ver detalle',exact:true})).toBeFocused();
  await page.getByLabel('Canal de Twitch',{exact:true}).fill('bad channel');await page.getByRole('button',{name:'Probar validación',exact:true}).click();await expect(page.getByLabel('Canal de Twitch',{exact:true})).toHaveAttribute('aria-invalid','true');
@@ -47,7 +47,7 @@ test('Dia selection renders the dither shader, disposes button shader, and keeps
  const choose=page.getByRole('button',{name:'Lo baja · 62,5%',exact:true});await choose.focus();await expect(choose.locator('canvas')).toHaveCount(1);await page.keyboard.press('Enter');await expect(page.locator('.catalog-feedback')).toContainText('Lo baja');
  await page.getByRole('button',{name:'Pausar fondo',exact:true}).click();await expect(page.getByRole('button',{name:'Reanudar fondo',exact:true})).toHaveAttribute('aria-pressed','true');await expect(choose.locator('canvas')).toHaveCount(0);
  await page.getByRole('button',{name:'Simplex',exact:true}).click();await expect(page.getByRole('button',{name:'Simplex',exact:true})).toHaveAttribute('aria-pressed','true');
- await page.getByRole('button',{name:'Repetir animación',exact:true}).click();await expect(page.locator('.plot-halftone')).toHaveAttribute('data-animation-state','assembling');await expect(page.locator('.plot-halftone')).toHaveAttribute('data-animation-state','settled');
+ await page.getByRole('button',{name:'Repetir animación',exact:true}).click();await expect(page.locator('.plot-balloon-wordmark')).toHaveAttribute('data-renderer','balloon');await page.locator('.plot-balloon-wordmark').scrollIntoViewIfNeeded();await expect(page.locator('.plot-balloon-wordmark canvas')).toHaveAttribute('data-motion','resting');
  for(const width of [320,728,1440]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/plot-dia-${width}.png`,fullPage:true});}
  await page.emulateMedia({reducedMotion:'reduce'});await choose.focus();await expect(choose.locator('canvas')).toHaveCount(0);expect(errors).toEqual([]);
 });
@@ -69,14 +69,14 @@ test('all button variants share a capsule at rest and only soften while hovered'
 
 test('black showcase shares the high resolution wordmark across every family without stickers or small annotations',async({browser})=>{
  const context=await browser.newContext({viewport:{width:728,height:1000},deviceScaleFactor:2});
- try{const page=await context.newPage();await page.goto('/components.html');const wordmark=page.locator('.plot-halftone');await expect(wordmark).toHaveAttribute('data-animation-state','settled');
-  const resolution=await wordmark.evaluate(el=>{const canvas=el as HTMLCanvasElement;return {pixels:canvas.width,css:canvas.clientWidth,dots:Number(canvas.dataset.particles)};});
-  expect(resolution.pixels).toBeGreaterThanOrEqual(resolution.css*2);expect(resolution.dots).toBeGreaterThan(100);
+ try{const page=await context.newPage();await page.goto('/components.html');const wordmark=page.locator('.plot-balloon-wordmark');await expect(wordmark).toHaveAttribute('data-renderer','balloon');
+  const resolution=await wordmark.evaluate(el=>{const canvas=el.querySelector('canvas')!,image=el.querySelector('img')!;return {pixels:canvas.width,css:canvas.clientWidth,source:image.naturalWidth};});
+  expect(resolution.pixels).toBeGreaterThanOrEqual(resolution.css*2);expect(resolution.source).toBeGreaterThanOrEqual(1792);
   for(const family of ['Botones y campos','Mercados','Estados','Identidad','Selección de Dia']){
    await page.getByRole('button',{name:family,exact:true}).click();await expect(wordmark).toBeVisible();expect(await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(8, 8, 8)');await expect(page.getByText('Mirá esta.',{exact:true})).toHaveCount(0);await expect(page.locator('.dia-market-note,.dia-references')).toHaveCount(0);
   }
-  await page.getByRole('button',{name:'Repetir animación',exact:true}).click();await expect(wordmark).toHaveAttribute('data-animation-state','assembling');await expect(wordmark).toHaveAttribute('data-animation-state','settled');
-  await page.emulateMedia({reducedMotion:'reduce'});await expect(wordmark).toHaveAttribute('data-animation-state','settled');await page.getByRole('button',{name:'Repetir animación',exact:true}).click();await expect(wordmark).toHaveAttribute('data-animation-state','settled');
+  await page.getByRole('button',{name:'Repetir animación',exact:true}).click();await expect(wordmark).toHaveAttribute('data-renderer','balloon');await expect(wordmark.locator('canvas')).toHaveAttribute('data-motion','resting');
+  await page.emulateMedia({reducedMotion:'reduce'});await expect(wordmark).toHaveAttribute('data-renderer','image');await expect(wordmark.locator('canvas')).toBeHidden();await page.getByRole('button',{name:'Repetir animación',exact:true}).click();await expect(wordmark).toHaveAttribute('data-renderer','image');await expect(wordmark.locator('canvas')).toBeHidden();
  }finally{await context.close();}
 });
 

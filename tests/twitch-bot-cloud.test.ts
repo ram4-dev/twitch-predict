@@ -14,7 +14,7 @@ async function fixture(work:(v:{docs:Documents;bot:CloudTwitchBot;points:Points;
  const docs=new Documents(database!,`bot-${randomUUID()}`);await docs.migrate();const points=new Points('',docs);await points.load();const a=await points.walletLogin('wallet-a');await points.linkTwitch(a.token,{id:'123',login:'streamer',displayName:'Streamer',linkedAt:new Date().toISOString()});
  let identity={client_id:config.clientId,user_id:'42',login:'plotfun',scopes:['user:read:chat','user:write:chat','user:bot'],expires_in:3600};
  const sent:{broadcaster_id:string;message:string}[]=[],subscriptions:Record<string,unknown>[]=[],clock={now:Date.now()};
- const request:typeof fetch=async(input,init)=>{const url=String(input);if(url.endsWith('/token'))return Response.json({access_token:'fixture-token',expires_in:3600});if(url.endsWith('/validate'))return Response.json(identity);if(url.includes('/eventsub/subscriptions')){
+ const request:typeof fetch=async(input,init)=>{const url=String(input);if(url.endsWith('/token'))return Response.json({access_token:'fixture-token',expires_in:3600});if(url.endsWith('/validate'))return Response.json(identity);if(url.includes('/users?login='))return Response.json({data:[]});if(url.includes('/eventsub/subscriptions')){
   if(init?.method==='POST'){const sub=JSON.parse(String(init.body));subscriptions.push({...sub,id:String(subscriptions.length+1),status:'enabled'});return Response.json({data:[]},{status:202});}
   if(init?.method==='DELETE'){const id=new URL(url).searchParams.get('id');const index=subscriptions.findIndex(s=>s.id===id);if(index>=0)subscriptions.splice(index,1);return new Response(null,{status:204});}
   return Response.json({data:subscriptions,pagination:{}});
