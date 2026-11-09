@@ -20,6 +20,8 @@ import { Points } from './points.js';
 import { TwitchSource } from './twitch-source.js';
 import {proposalsRouter, type ProposalActorResolver} from './proposals-router.js';
 import {ProposalService} from './proposals-service.js';
+import {ProposalError} from './proposals.js';
+import {capabilities} from './market-contract.js';
 import { demoPrediction } from './mirror.js';
 import { predictionSchema } from './prediction.js';
 import {ByteTwitchMirror} from './byte-twitch.js';
@@ -132,6 +134,12 @@ const proposalsForBot={
   accountForTwitch:async(twitchId:string)=>points.accountForTwitch(twitchId),
 };
 bot.mountProposals(proposalsForBot);
+// Authoritative moderator revalidation for HTTP publication: wired to the bot's fresh Get Moderators query
+// when the adapter exposes it (session 1 owns that method's promotion to public); absent → evidence TTL decides.
+type RevalidatingBot={revalidateModerators?(channelId:string):Promise<string[]|null>};
+points.moderatorRevalidator=(bot as RevalidatingBot).revalidateModerators
+  ?(channel)=>((bot as RevalidatingBot).revalidateModerators!(channel.id))
+  :null;
 const botCookieName='twitch_bot';
 const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
 app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
@@ -219,6 +227,22 @@ const proposalResolver:ProposalActorResolver={
 app.use('/api/proposals',proposalsRouter({service:proposals,resolver:proposalResolver}));
 app.get('/api/points/me',route((req,res)=>res.json(points.me(bearer(req)))));
 app.get('/api/streamer/console',route((req,res)=>res.json(points.streamerConsole(bearer(req)))));
+// Plan 2 (contract POST /api/streamer/markets): owner/mod direct creation through the same aggregate
+// transaction as acceptance. eventId comes from the client intent id; capabilities re-validated inside.
+app.post('/api/streamer/markets',route(async(req,res)=>{
+  const me=points.me(bearer(req));
+  const i=z.object({channelLogin:z.string().regex(/^[a-zA-Z0-9_]{1,40}$/),title:z.string().min(1).max(140),options:z.array(z.string().min(1).max(60)).min(2).max(6),durationSeconds:z.number().int().min(30).max(86400).optional(),intentId:z.string().min(8).max(120)}).parse(req.body);
+  // SAFETY: exportStateJson is this server's own valid JSON; a corrupt read fails closed to null.
+  let snapshot:{streamers:Record<string,{channel:string;twitchId?:string}>};
+  try{snapshot=JSON.parse(points.exportStateJson()) as {streamers:Record<string,{channel:string;twitchId?:string}>};}catch{throw new ProposalError('PROPOSAL_NOT_FOUND','Canal desconocido.');}
+  const streamer=Object.values(snapshot.streamers??{}).find(s=>s.channel===i.channelLogin.toLowerCase());
+  if(!streamer?.twitchId)throw new ProposalError('PROPOSAL_NOT_FOUND','Canal desconocido.');
+  const channel={id:streamer.twitchId,login:streamer.channel};
+  const caps=capabilities({accountId:me.id,twitchId:me.twitch?.id},channel,false);
+  if(!caps.create)throw new ProposalError('PROPOSAL_FORBIDDEN','Solo el dueño del canal o un moderador puede publicar predicciones.');
+  const market=await proposals.createDirectly({channel,actor:{accountId:me.id,twitchId:me.twitch?.id},input:{title:i.title,options:i.options,durationSeconds:i.durationSeconds},eventId:i.intentId});
+  res.status(201).json(market);
+}));
 app.post('/api/streamer/preview',route((req,res)=>{
   const i=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);
   res.json(points.previewSettlement(bearer(req),i.key,i.winnerId));
