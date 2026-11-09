@@ -13,10 +13,22 @@ import {Documents} from './documents.js';
 import {CloudAuth} from './auth.js';
 import {CloudTwitchAuth} from './twitch-auth.js';
 import {CloudTwitchBot} from './twitch-bot.js';
+import {proposalsRouter, type ProposalActorResolver} from '../proposals-router.js';
+import {ProposalService} from '../proposals-service.js';
 import {cloudConfig} from './config.js';
 export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
  const bot=new CloudTwitchBot(documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
+ // Plan 2 mount: the bot derives viewer !plot crear to the proposal service (same aggregate + Documents).
+ // accountForTwitch is a read-only lookup resolved BEFORE any documents.update (no nested runtime updates).
+ bot.mountProposals({
+  submit:async args=>{
+   const p=new Points('',documents);await p.load();
+   const proposal=await new ProposalService(p).submit(args);
+   return {id:proposal.id,shortId:proposal.shortId,text:`Propuesta ${proposal.shortId} enviada al streamer; pendiente de aprobación.`};
+  },
+  accountForTwitch:async twitchId=>{const p=new Points('',documents);await p.load();return p.accountForTwitch(twitchId);},
+ });
  const liveMarkets=new LiveMarkets(documents);app.locals.liveMarkets=liveMarkets;
  const extensionOrigins=new Set(config.extensionIds.map(id=>`chrome-extension://${id}`));
  const extensionIdSchema=z.string().refine(id=>config.extensionIds.includes(id));
@@ -120,6 +132,22 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  app.post('/api/twitch/complete',route(async(req,res)=>{const i=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const r=await context(res).twitch.complete(bearer(req)||undefined,i.ticket,cookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).json(r);}));
  app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await context(res).points.unlinkTwitch(bearer(req)))));
  app.get('/api/points/me',route((req,res)=>res.json(context(res).points.me(bearer(req)))));
+ // Plan 2: proposals API over the per-request Points context; identity and owner evidence stay server-side.
+ const proposalResolver:ProposalActorResolver={
+  actor:async (req,res)=>{try{const me=context(res).points.me(bearer(req));return {accountId:me.id,twitchId:me.twitch?.id};}catch{return null;}},
+  channel:async (req,res,channelId)=>{
+   if(!/^[a-zA-Z0-9_]{1,40}$/.test(channelId))return null;
+   // SAFETY: exportStateJson is this app's own valid JSON; a corrupt read fails closed to null.
+   let snapshot:{streamers:Record<string,{channel:string;twitchId?:string}>};
+   try{snapshot=JSON.parse(context(res).points.exportStateJson()) as {streamers:Record<string,{channel:string;twitchId?:string}>};}catch{return null;}
+   const byTwitchId=Object.values(snapshot.streamers??{}).find(st=>st.twitchId===channelId);
+   if(byTwitchId)return {id:channelId,login:byTwitchId.channel};
+   const byLogin=Object.values(snapshot.streamers??{}).find(st=>st.channel===channelId.toLowerCase());
+   return byLogin?.twitchId?{id:byLogin.twitchId,login:byLogin.channel}:null;
+  },
+  isChannelOwner:async (_req,_res,actor,channelId)=>actor.twitchId===channelId,
+ };
+ app.use('/api/proposals',(req,res,next)=>{proposalsRouter({service:new ProposalService(context(res).points),resolver:proposalResolver})(req,res,next);});
  app.get('/api/streamer/console',route((req,res)=>res.json(context(res).points.streamerConsole(bearer(req)))));
  app.get('/api/markets',(_req,res)=>res.json(context(res).points.markets()));
  app.get('/api/channels',(_req,res)=>res.json({channels:context(res).points.channels(),details:[],sourceError:null}));

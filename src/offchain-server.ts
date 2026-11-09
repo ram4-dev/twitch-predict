@@ -202,8 +202,8 @@ app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Conectá
 // Plan 2: proposals API (session 2). Mounted beside /api/points/me: same bearer session, identity resolved
 // server-side from the linked account; owner evidence via capabilities() inside the aggregate, never from the body.
 const proposalResolver:ProposalActorResolver={
-  actor:async req=>{try{const me=points.me(bearer(req));return {accountId:me.id,twitchId:me.twitch?.id};}catch{return null;}},
-  channel:async channelId=>{
+  actor:async (req,_res)=>{try{const me=points.me(bearer(req));return {accountId:me.id,twitchId:me.twitch?.id};}catch{return null;}},
+  channel:async (_req,_res,channelId)=>{
     // The channel identity is the broadcaster's Twitch id (digits); accept also the login for convenience.
     if(!/^[a-zA-Z0-9_]{1,40}$/.test(channelId))return null;
     // SAFETY: exportStateJson is this server's own valid JSON; a corrupt file fails closed to null.
@@ -214,7 +214,7 @@ const proposalResolver:ProposalActorResolver={
     const byLogin=Object.values(snapshot.streamers??{}).find(s=>s.channel===channelId.toLowerCase());
     return byLogin?.twitchId?{id:byLogin.twitchId,login:byLogin.channel}:null;
   },
-  isChannelOwner:async (actor,channelId)=>actor.twitchId===channelId,
+  isChannelOwner:async (_req,_res,actor,channelId)=>actor.twitchId===channelId,
 };
 app.use('/api/proposals',proposalsRouter({service:proposals,resolver:proposalResolver}));
 app.get('/api/points/me',route((req,res)=>res.json(points.me(bearer(req)))));
