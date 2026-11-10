@@ -11,7 +11,6 @@ import {type ByteConfig,type DisplayByteMarket} from '../byte-model.js';
 import type {TwitchPreview} from '../twitch-preview.js';
 import {TwitchMarketPreview} from './byte-market.js';
 import {reconcileBytePredictions} from '../popup-cache.js';
-import {Scene} from './scene.js';
 import {PlotMascot,PlotBrandLink} from './components/plot.js';
 import {Button} from './components/button.js';
 import {enhanceGlowStage} from '@/components/ui/spotlight-card';
@@ -64,8 +63,8 @@ export function JoinPage({channel}:{channel:StreamerChannel}){
     // Replace, not assign: the QR/button handoff must not trap the Back button in a /join loop.
     location.replace(target);
   },[target]);
+  // No decorative scene here: the join handoff must read as a plain, calm page like the rest of the app.
   return <main className="streamer-page join-page">
-    <Scene compact/>
     <StreamerIdentity login={channel.login}/>
     <p className="join-copy">Las predicciones de @{channel.login}, en tu celular.</p>
     <p className="join-sub">Escaneá el QR para participar mientras seguís mirando el stream.</p>
