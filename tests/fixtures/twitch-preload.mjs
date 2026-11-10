@@ -5,7 +5,9 @@ const original=globalThis.fetch;
 globalThis.fetch=async(input,options)=>{
   const url=String(input);
   if(url.startsWith('https://id.twitch.tv/oauth2/')||url.startsWith('https://api.twitch.tv/helix/users')){
-    const user=JSON.parse(await readFile(process.env.TWITCH_OAUTH_FIXTURE,'utf8'));
+    // E2E tests may write either fixture path (test-results is wiped per run; .e2e-fixtures is stable).
+    let oauthRaw='';try{oauthRaw=await readFile('test-results/twitch-oauth.json','utf8');}catch{/* not written yet */try{oauthRaw=await readFile('.e2e-fixtures/twitch-oauth.json','utf8');}catch{/* neither path seeded */}}
+    const user=JSON.parse(oauthRaw||'{}');
     if(url.endsWith('/token'))return Response.json({access_token:'e2e-access-token',refresh_token:'e2e-refresh-token',token_type:'bearer',expires_in:3600});
     if(url.endsWith('/validate'))return Response.json({client_id:'e2e-client',user_id:user.id,login:user.login,scopes:user.scopes??['channel:bot'],expires_in:3600});
     if(url.includes('/users?login='))return Response.json({data:[]});
@@ -23,7 +25,8 @@ globalThis.fetch=async(input,options)=>{
     return Response.json({data:users.map(id=>({user_id:String(id)}))});
   }
   if(url!=='https://gql.twitch.tv/gql')return original(input,options);
-  const fixtures=JSON.parse(await readFile(process.env.TWITCH_FIXTURE_FILE,'utf8'));
+  // GQL market fixture: E2E tests write test-results/twitch-fixture.json; the launcher seeds its own tmp copy.
+  let fixtures=[];for(const p of ['test-results/twitch-fixture.json',process.env.TWITCH_FIXTURE_FILE??'']){try{fixtures=JSON.parse(await readFile(p,'utf8'));break;}catch{/* try next path */}}
   const {query,variables}=JSON.parse(options.body);
   if(query.includes('searchUsers(')){const names=[...new Set([...fixtures.map(p=>p.channel),'eggsterr','summit1g'])].filter(n=>n.toLowerCase().includes(variables.q.toLowerCase())).slice(0,10);return Response.json({data:{searchUsers:{edges:names.map(login=>({node:{login,displayName:login,stream:login==='eggsterr'?{id:'live'}:null}}))}}});}
   if(fixtures.some(p=>p.channel===variables.channel&&p.sourceError))return new Response(null,{status:503});

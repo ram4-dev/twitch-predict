@@ -8,6 +8,7 @@ import express from 'express';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -250,6 +251,7 @@ app.post('/api/streamer/preview',route((req,res)=>{
   res.json(points.previewSettlement(bearer(req),i.key,i.winnerId));
 }));
 app.post('/api/streamer/action',route(async(req,res)=>{
+  appendFileSync('.e2e-fixtures/actions.log',JSON.stringify(req.body)+'\n');
   const i=z.object({key:z.string().max(300),action:z.enum(['lock','resolve','cancel','distribute']),winnerId:z.string().max(128).optional(),requestId:z.string().uuid()}).parse(req.body);
   res.json(await points.streamerAction(bearer(req),i));
 }));

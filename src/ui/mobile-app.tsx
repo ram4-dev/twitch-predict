@@ -12,6 +12,8 @@ import {useActiveIndicator} from './vendor/opaline/use-active-indicator.js';
 import {createPointsClient,number} from './points-ui.js';
 import {enhancePointerGlow} from '@/components/ui/spotlight-card';
 import {appThemes,applyDemoBet,demoSnapshot,isAppTheme,type AppMarket,type AppSnapshot,type AppTheme} from './mobile-app-data.js';
+import {MarketComposer,ProposalInbox} from './proposals-ui.js';
+import {httpProposalsClient} from './proposals-client.js';
 
 type SearchResult={login:string;displayName:string;live:boolean};
 
@@ -68,12 +70,49 @@ function FeedTabs({tab,selected,count,onChange}:{tab:'active'|'own';selected:str
 
 function Profile({snapshot,demo}:{snapshot:AppSnapshot;demo:boolean}){
  const account=snapshot.account;const paid=account?.bets.filter(b=>b.claimed).reduce((sum,bet)=>sum+bet.payout,0)??0;
+ // Streamer console: owner/moderator operations for channels this account manages (server-verified capabilities).
+ const [streamerChannels,setStreamerChannels]=useState<string[]>([]);
+ useEffect(()=>{if(demo)return;let active=true;void fetch('/api/streamer/console',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')??''}`}}).then(r=>r.ok?r.json():Promise.reject(new Error('sin consola'))).then((c:{channels:string[]})=>{if(active)setStreamerChannels(c.channels??[]);}).catch(()=>{if(active)setStreamerChannels([]);});return()=>{active=false;};},[demo,account?.id]);
  // Provider-aware: Google renders disabled without server configuration instead of a broken button.
  const [googleConfigured,setGoogleConfigured]=useState<boolean|null>(null);
  useEffect(()=>{if(demo)return;let active=true;void fetch('/api/google/config').then(r=>r.json()).then((c:{configured:boolean})=>{if(active)setGoogleConfigured(c.configured);}).catch(()=>{if(active)setGoogleConfigured(false);});return()=>{active=false;};},[demo]);
  // Native profile display for every provider combination; a wallet never gates the identity name.
  const identityName=demo?'@plot_user':account?.twitch?.displayName??account?.google?.displayName??(account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Tu cuenta');
- return <div className="phone-profile"><div className="phone-profile-identity"><div className="phone-avatar-large"><UserRound size={28}/></div><strong>{identityName}</strong>{!account?.twitch&&<a href="/onboarding" className="phone-connect">Conectá Twitch<ArrowUpRight size={16}/></a>}</div><div className="phone-profile-stats">{[['Jugadas',number(account?.bets.length??0)],['Cobrados',`${number(paid)} pts`],['Siguiendo',number(snapshot.followed.length)]].map(([label,value])=><Glass key={label}><span>{label}</span><strong>{value}</strong></Glass>)}</div><section className="phone-connected" aria-label="Cuentas conectadas"><h2 className="phone-sr-only">Cuentas conectadas</h2>{[['Twitch',account?.twitch?`@${account.twitch.login}`:'Sin conectar',account?.twitch?'/onboarding':'/onboarding'],['Phantom',account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Sin conectar','/onboarding'],['Google',account?.google?account.google.email??account.google.displayName:'Sin conectar']].map(([label,status,href])=>{const isGoogle=label==='Google';const link=isGoogle?(googleConfigured?'/onboarding':undefined):href;return <Glass key={label} className="phone-connected-row"><span>{label}</span><small>{isGoogle&&googleConfigured===false?'No disponible':status}</small>{status==='Sin conectar'&&link&&<a href={link}>Conectar</a>}{isGoogle&&status==='Sin conectar'&&googleConfigured===false&&<small aria-disabled="true">Próximamente</small>}</Glass>;})}</section></div>;
+ return <div className="phone-profile"><div className="phone-profile-identity"><div className="phone-avatar-large"><UserRound size={28}/></div><strong>{identityName}</strong>{!account?.twitch&&<a href="/onboarding" className="phone-connect">Conectá Twitch<ArrowUpRight size={16}/></a>}</div><div className="phone-profile-stats">{[['Jugadas',number(account?.bets.length??0)],['Cobrados',`${number(paid)} pts`],['Siguiendo',number(snapshot.followed.length)]].map(([label,value])=><Glass key={label}><span>{label}</span><strong>{value}</strong></Glass>)}</div><section className="phone-connected" aria-label="Cuentas conectadas"><h2 className="phone-sr-only">Cuentas conectadas</h2>{[['Twitch',account?.twitch?`@${account.twitch.login}`:'Sin conectar',account?.twitch?'/onboarding':'/onboarding'],['Phantom',account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Sin conectar','/onboarding'],['Google',account?.google?account.google.email??account.google.displayName:'Sin conectar']].map(([label,status,href])=>{const isGoogle=label==='Google';const link=isGoogle?(googleConfigured?'/onboarding':undefined):href;return <Glass key={label} className="phone-connected-row"><span>{label}</span><small>{isGoogle&&googleConfigured===false?'No disponible':status}</small>{status==='Sin conectar'&&link&&<a href={link}>Conectar</a>}{isGoogle&&status==='Sin conectar'&&googleConfigured===false&&<small aria-disabled="true">Próximamente</small>}</Glass>;})}</section>{streamerChannels.length>0&&<section className="phone-streamer-console" aria-label="Consola del streamer">
+ <h2 className="phone-sr-only">Consola del streamer</h2>
+ <MarketComposer mode="create" channelLabel={`@${streamerChannels[0]}`} onSubmit={async input=>{
+  const response=await fetch('/api/streamer/markets',{method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')??''}`},body:JSON.stringify({...input,channelLogin:streamerChannels[0],intentId:`app-${Date.now()}-${Math.random().toString(36).slice(2,10)}`})});
+  const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error((body as {error?:string}).error??'No se pudo publicar el mercado.');
+  return {id:(body as {id?:string}).id};
+ }}/>
+ <ProposalInbox client={httpProposalsClient()} channelId={streamerChannels[0]}/>
+ {snapshot.markets.filter(m=>m.source==='plot'&&streamerChannels.includes(m.prediction.channel)).map(m=>
+  <div key={m.key} className="phone-streamer-market" data-streamer-key={m.key}><span>@{m.prediction.channel}</span><strong>{m.prediction.title}</strong>
+   <MarketAdminActionsInline market={m} token={localStorage.getItem('pointsToken')??''}/></div>)}
+</section>}</div>;
+}
+
+/** Inline owner actions for the mobile console: close, resolve (preview) and cancel via /api/streamer/*.
+ * Móvil sigue siendo dueña del archivo; usa la misma lógica server-side que la consola de escritorio. */
+function MarketAdminActionsInline({market:m,token}:{market:AppMarket;token:string}){
+ const [busy,setBusy]=useState('');const [message,setMessage]=useState('');const [winner,setWinner]=useState('');
+ if(['resolved','void'].includes(m.phase))return null;
+ const run=async(action:'lock'|'resolve'|'cancel',winnerId?:string)=>{
+  setBusy(action);setMessage('');
+  try{const r=await fetch('/api/streamer/action',{method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({key:m.key,action,winnerId,requestId:crypto.randomUUID()})});
+   const body=await r.json().catch(()=>({}));if(!r.ok)throw new Error((body as {error?:string}).error??'No se pudo completar.');
+   setMessage(action==='lock'?'Apuestas cerradas.':action==='resolve'?'Mercado resuelto.':'Cancelado con reembolso automático.');}
+  catch(e){setMessage((e as Error).message);}finally{setBusy('');}
+ };
+ return <div className="phone-admin-actions">
+  {m.phase==='open'&&<Button disabled={!!busy} onClick={()=>void run('lock')}>{busy==='lock'?'Cerrando…':'Cerrar apuestas'}</Button>}
+  {m.phase==='locked'&&<>
+   <label className="phone-admin-winner">Ganador<select aria-label={`Ganador de ${m.prediction.title}`} value={winner} onChange={e=>setWinner(e.target.value)}><option value="">Elegí una opción</option>{m.outcomes.map(o=><option key={o.id} value={o.id}>{o.title}</option>)}</select></label>
+   <Button disabled={!!busy||!winner} onClick={()=>void run('resolve',winner)}>{busy==='resolve'?'Resolviendo…':'Resolver mercado'}</Button>
+  </>}
+  <Button variant="ghost" disabled={!!busy} onClick={()=>void run('cancel')}>{busy==='cancel'?'Cancelando…':'Cancelar y reembolsar'}</Button>
+  {message&&<p role={/No se pudo|Solo|Primero/.test(message)?'alert':'status'}>{message}</p>}
+ </div>;
 }
 function OwnBets({snapshot,demo,onClaim,onDetail}:{snapshot:AppSnapshot;demo:boolean;onClaim:(key:string)=>Promise<void>;onDetail?:(key:string)=>void}){
  const [busy,setBusy]=useState(''),[error,setError]=useState('');
@@ -100,7 +139,8 @@ export function PhoneApp({theme='ember',demo=false,embedded=false,detailLayout='
  if(googleError){setAuthError(googleError==='canceled'?'Cancelaste la conexión con Google.':'No se pudo completar la conexión con Google.');return;}
  if(googleTicket){let activeG=true;void client.request<{token:string}>('/api/google/complete',{ticket:googleTicket}).then(result=>{if(!activeG)return;if(result?.token)localStorage.setItem('pointsToken',result.token);void refresh();}).catch(error=>{if(activeG)setAuthError(error instanceof Error?error.message:'No se pudo completar la conexión con Google.');});return()=>{activeG=false;};}
   if(!ticket){setAuthError(cancelled?'Cancelaste la conexión con Twitch.':'No se pudo completar la conexión.');return;}
-  let active=true;void client.request<{token:string}>('/api/twitch/complete',{ticket}).then(result=>{if(!active)return;
+  // Link completion carries the session bearer when one exists (link flow); the login flow completes without one.
+  let active=true;void client.request<{token:string}>('/api/twitch/complete',{ticket},localStorage.getItem('pointsToken')??undefined).then(result=>{if(!active)return;
    // Social-first logins create a brand-new session: persist the returned token before refreshing.
    if(result?.token)localStorage.setItem('pointsToken',result.token);
    void refresh();

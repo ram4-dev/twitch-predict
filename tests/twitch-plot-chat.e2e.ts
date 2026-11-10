@@ -6,7 +6,7 @@ import {phantomProvider} from './fixtures/phantom.js';
 
 test('streamer creates a Plot prediction in chat; viewer stakes on the public page, streamer resolves, viewer claims',async({page,context,browser})=>{
  const login=`plot_${randomUUID().replaceAll('-','').slice(0,8)}`,ownerId=String(Date.now());
- const owner={id:ownerId,login,display_name:'Plot streamer',scopes:['channel:bot']};
+ const owner={id:ownerId,login,display_name:'Plot streamer',scopes:['channel:bot','moderation:read']};
  await writeFile(resolve('test-results/twitch-oauth.json'),JSON.stringify(owner));await phantomProvider(page);
  await page.route('https://id.twitch.tv/oauth2/authorize?**',async route=>{
   const url=new URL(route.request().url()),callback=new URL(url.searchParams.get('redirect_uri')!);callback.searchParams.set('state',url.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');
