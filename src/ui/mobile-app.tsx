@@ -100,7 +100,15 @@ function Profile({snapshot,demo,onRefresh}:{snapshot:AppSnapshot;demo:boolean;on
  }}/>
  <ProposalInbox client={httpProposalsClient()} channelId={streamerChannels[0]}/>
  {snapshot.markets.filter(m=>m.source==='plot'&&streamerChannels.includes(m.prediction.channel)).map(m=>
-  <div key={m.key} className="phone-streamer-market" data-streamer-key={m.key}><span>@{m.prediction.channel}</span><strong>{m.prediction.title}</strong>
+  <div key={m.key} className="phone-streamer-market" data-streamer-key={m.key} data-phase={m.phase}>
+   <div className="phone-streamer-market-head">
+    {m.shortId&&<span className="phone-market-code" title={`Código para el chat: !plot cerrar ${m.shortId}`}>#{m.shortId}</span>}
+    <span className="phone-streamer-market-channel">@{m.prediction.channel}</span>
+    <span className="phone-streamer-market-phase" data-phase={m.phase}>{({open:'Apuestas abiertas',locked:'Apuestas cerradas',resolved:'Resuelto',void:'Reembolsado'} as Record<string,string>)[m.phase]??m.phase}</span>
+   </div>
+   <strong className="phone-streamer-market-title">{m.prediction.title}</strong>
+   <ol className="phone-streamer-market-options">{m.outcomes.map((o,i)=><li key={o.id}><span className="phone-option-index">{i+1}</span><span className="phone-option-name">{o.title}</span><small>{number(o.points)} pts · {number(o.bets)} {o.bets===1?'apuesta':'apuestas'}</small></li>)}</ol>
+   <p className="phone-streamer-market-pool">{number(m.totalPoints)} pts en juego · {number(m.totalBets)} {m.totalBets===1?'apuesta':'apuestas'}</p>
    <MarketAdminActionsInline market={m} token={localStorage.getItem('pointsToken')??''}/></div>)}
 </section>}</div>;
 }
