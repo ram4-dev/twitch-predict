@@ -5,6 +5,7 @@ import {EventEmitter} from 'node:events';
 import {TwitchChannelSearch} from './twitch-search.js';
 import {contentSecurityPolicyForPath} from './content-security-policy.js';
 import express from 'express';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -46,6 +47,12 @@ const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback'
 app.use((req,res,next)=>{
   const trustedHost=(name:string)=>trustedLocalHostname(name,process.env.AUTH_ORIGIN);
   if(!trustedHost(req.hostname)){res.status(403).json({error:'Untrusted host'});return;}
+  // A request that already passed the host guard defines the public origin for its Twitch redirect_uri.
+  // Behind a TLS proxy the socket protocol is http, so prefer the forwarded scheme when present.
+  const forwarded=String(req.get('x-forwarded-proto')??'').split(',')[0].trim();
+  const scheme=forwarded==='https'||forwarded==='http'?forwarded:req.protocol;
+  const host=req.get('host')??'';
+  if(host){requestOrigin.enterWith(`${scheme}://${host}`);}
   const origin=req.headers.origin;
   // The portless proxy rewrites Host to its backend address, so validate the origin's hostname against
   // the same trusted set instead of comparing it to req.hostname.
@@ -90,22 +97,31 @@ app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),details
 app.get('/api/pair',(req,res)=>{if(req.get('sec-fetch-site')!=='same-origin'){res.status(403).json({error:'Open the dashboard to pair'});return;}res.json({token});});
 const appOrigin=(req:express.Request)=>`${req.protocol}://${req.get('host')}`;
 const twitchOrigin=process.env.AUTH_ORIGIN??`http://twitch-predict.localhost:${process.env.PORTLESS_PORT??1356}`;
-const twitchAuth=new TwitchAuth(points,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:twitchOrigin});
+// The Twitch redirect_uri must match the host the operator is actually using. It used to be frozen from
+// AUTH_ORIGIN at startup, so a server reached on another host advertised a stale callback and Twitch
+// answered redirect_mismatch. Resolve it per request instead (AsyncLocalStorage carries the host), while
+// still ignoring foreign Host headers: only an already-trusted host can override the configured origin.
+const requestOrigin=new AsyncLocalStorage<string>();
+const resolveTwitchOrigin=()=>requestOrigin.getStore()??twitchOrigin;
+// Any request that survived the global trusted-host guard may start OAuth; the redirect_uri is built from
+// that same host, so it always matches what the operator sees instead of a value frozen at startup.
+const trustedRequestOrigin=(req:express.Request)=>appOrigin(req)===resolveTwitchOrigin();
+const twitchAuth=new TwitchAuth(points,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:resolveTwitchOrigin});
 const cookieName='twitch_link';
 const linkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${cookieName}=`))?.slice(cookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
 const cookieOptions={httpOnly:true,secure:new URL(twitchOrigin).protocol==='https:',sameSite:'lax' as const,path:'/',maxAge:10*60_000};
-const googleAuth=new GoogleAuth(points,{clientId:process.env.GOOGLE_CLIENT_ID??'',clientSecret:process.env.GOOGLE_CLIENT_SECRET,origin:twitchOrigin});
+const googleAuth=new GoogleAuth(points,{clientId:process.env.GOOGLE_CLIENT_ID??'',clientSecret:process.env.GOOGLE_CLIENT_SECRET,origin:resolveTwitchOrigin});
 const googleCookieName='google_link';
 const googleLinkCookie=(req:express.Request)=>{const raw=req.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(`${googleCookieName}=`))?.slice(googleCookieName.length+1)??'';return /^[a-f0-9]{64}$/.test(raw)?raw:'';};
 app.get('/api/google/config',(_req,res)=>res.json({configured:googleAuth.configured}));
 app.post('/api/google/start',route((req,res)=>{
-  if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Google');
+  if(!trustedRequestOrigin(req))throw new Error('Abrí el panel seguro para conectar Google');
   const sessionToken=bearer(req)||undefined;
   if(sessionToken)points.me(sessionToken);
   const result=googleAuth.start(sessionToken);res.cookie(googleCookieName,result.cookie,cookieOptions);res.json({url:result.url});
 }));
 app.get('/auth/google/callback',async(req,res)=>{
-  if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
+  if(!trustedRequestOrigin(req)){res.status(400).send('Origen de conexión inválido');return;}
   try{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await googleAuth.callback(state,googleLinkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,req.query.error==='access_denied');
@@ -125,8 +141,10 @@ app.get('/api/twitch/search',async(req,res)=>{
   if(!/^[a-zA-Z0-9_]{2,40}$/.test(query)){res.status(400).json({error:'Ingresá al menos dos caracteres del usuario de Twitch.'});return;}
   try{res.json({channels:await channelSearch.search(query)});}catch{res.status(503).json({error:'No pudimos consultar Twitch. Probá de nuevo.'});}
  });
-app.get('/api/twitch/config',(_req,res)=>res.json({configured:twitchAuth.configured,origin:twitchOrigin}));
-const bot=new CloudTwitchBot(new LocalDocuments(directory),{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:twitchOrigin,webhookOrigin:process.env.TWITCH_BOT_WEBHOOK_ORIGIN},fetch,Date.now,points);
+app.get('/api/twitch/config',(req,res)=>res.json({configured:twitchAuth.configured,origin:resolveTwitchOrigin(),
+  // Build marker so a cached bundle or a stale deployment is visible instead of guesswork.
+  deployment:'plan2-dynamic-origin',resolveOriginFor:appOrigin(req)}));
+const bot=new CloudTwitchBot(new LocalDocuments(directory),{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:resolveTwitchOrigin,webhookOrigin:process.env.TWITCH_BOT_WEBHOOK_ORIGIN??resolveTwitchOrigin},fetch,Date.now,points);
 const proposalsForBot={
   submit:async(args:{channel:{id:string;login:string};actor:{accountId:string;twitchId:string};origin:'chat';intentId:string;input:{title:string;options:string[]}})=>{
     const proposal=await proposals.submit({channel:args.channel,actor:args.actor,origin:'chat',intentId:args.intentId,input:args.input});
@@ -142,7 +160,7 @@ const botCookieName='twitch_bot';
 const botCookie=(req:express.Request)=>req.get('cookie')?.split(';').map(v=>v.trim()).find(v=>v.startsWith(botCookieName+'='))?.slice(botCookieName.length+1)??'';
 app.get('/api/twitch/bot/status',route(async(req,res)=>res.json(await bot.status(bearer(req)||undefined))));
 const botStart=(kind:'channel'|'account')=>route(async(req,res)=>{
-  if(req.get('origin')!==twitchOrigin)throw new Error('Abrí la plataforma para autorizar el bot');
+  if(req.get('origin')!==resolveTwitchOrigin())throw new Error('Abrí la plataforma para autorizar el bot');
   const result=await bot.start(kind,bearer(req));res.cookie(botCookieName,result.cookie,cookieOptions).json({url:result.url});
 });
 app.post('/api/twitch/bot/start',botStart('channel'));
@@ -157,14 +175,14 @@ app.post('/api/twitch/bot/complete',route(async(req,res)=>{const {ticket}=z.obje
 app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disable(bearer(req)))));
 
 app.post('/api/twitch/start',route((req,res)=>{
-  if(appOrigin(req)!==twitchOrigin)throw new Error('Abrí el panel seguro para conectar Twitch');
+  if(!trustedRequestOrigin(req))throw new Error('Abrí el panel seguro para conectar Twitch');
   // Without a session this is a Twitch-first login; with one it links the provider to the existing account.
   const sessionToken=bearer(req)||undefined;
   if(sessionToken)points.me(sessionToken);
   const result=twitchAuth.start(sessionToken);res.cookie(cookieName,result.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:result.url});
 }));
 app.get('/auth/twitch/callback',async(req,res)=>{
-  if(appOrigin(req)!==twitchOrigin){res.status(400).send('Origen de conexión inválido');return;}
+  if(!trustedRequestOrigin(req)){res.status(400).send('Origen de conexión inválido');return;}
   const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
   try{
     const state=typeof req.query.state==='string'?req.query.state:'';
@@ -285,7 +303,7 @@ app.delete('/api/channels/:channel',route(async(req,res)=>res.json({channels:awa
 app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.accept(demoPrediction(),true))));
 app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
-app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&appOrigin(req)!==process.env.AUTH_ORIGIN){res.redirect(`${process.env.AUTH_ORIGIN}${req.originalUrl}`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
+app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&!trustedRequestOrigin(req)){res.redirect(`${resolveTwitchOrigin()}${req.originalUrl}`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
 // Public streamer pages: the bot, QR codes and search all target /s/twitch/:login.
 app.get(['/s/:platform/:login','/join/:platform/:login','/overlay/:platform/:login'],(_req,res)=>{
   res.sendFile('streamer.html',{root:`${root}/public`});

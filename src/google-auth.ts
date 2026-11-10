@@ -9,7 +9,7 @@ const nonce=()=>randomBytes(32).toString('hex');
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
 export type GoogleIdentity={id:string;email?:string;displayName:string;linkedAt:string};
-type Config={clientId:string;clientSecret?:string;origin:string};
+type Config={clientId:string;clientSecret?:string;origin:string|(()=>string)};
 type Flow={accountId?:string;cookieHash:string;nonceHash:string;expires:number};
 type Pending=Flow&{identity:GoogleIdentity};
 type IdTokenClaims={iss:string;aud:string;sub:string;email?:string;name?:string;nonce?:string;exp:number};
@@ -59,7 +59,7 @@ export class GoogleAuth {
     this.flows.set(state,{...flow,cookieHash:hash(cookie),nonceHash:hash(userNonce),expires:this.clock()+10*60_000});
     let url:URL;
     try{url=new URL('https://accounts.google.com/o/oauth2/v2/auth');}catch(e){throw new Error('No se pudo armar la URL de Google',{cause:e});}
-    try{url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:`${this.config.origin}/auth/google/callback`,response_type:'code',scope:'openid profile email',state,nonce:userNonce,prompt:'select_account'}).toString();}catch(e){throw new Error('No se pudo armar la URL de Google',{cause:e});}
+    try{url.search=new URLSearchParams({client_id:this.config.clientId,redirect_uri:`${typeof this.config.origin==='function'?this.config.origin():this.config.origin}/auth/google/callback`,response_type:'code',scope:'openid profile email',state,nonce:userNonce,prompt:'select_account'}).toString();}catch(e){throw new Error('No se pudo armar la URL de Google',{cause:e});}
     return {url:url.href,cookie};
   }
   consume(state:string,cookie:string,code:string|undefined,denied=false){
@@ -73,7 +73,7 @@ export class GoogleAuth {
   /** Exchanges the code, validates the ID token fully and stages the verified identity. */
   async callback(state:string,cookie:string,code:string|undefined,denied=false){
     const flow=this.consume(state,cookie,code,denied);
-    const tokenResponse=await this.request('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.config.clientId,...(this.config.clientSecret?{client_secret:this.config.clientSecret}:{}),code:code!,grant_type:'authorization_code',redirect_uri:`${this.config.origin}/auth/google/callback`,nonce:flow.nonceHash.slice(0,0)}),signal:AbortSignal.timeout(10000)});
+    const tokenResponse=await this.request('https://oauth2.googleapis.com/token',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:this.config.clientId,...(this.config.clientSecret?{client_secret:this.config.clientSecret}:{}),code:code!,grant_type:'authorization_code',redirect_uri:`${typeof this.config.origin==='function'?this.config.origin():this.config.origin}/auth/google/callback`,nonce:flow.nonceHash.slice(0,0)}),signal:AbortSignal.timeout(10000)});
     if(!tokenResponse.ok)throw new Error('Google no pudo confirmar el acceso. Volvé a conectar.');
     const tokens={id_token:z.string().min(1).parse(((await tokenResponse.json().catch(e=>{throw new Error('Respuesta de Google inválida',{cause:e});})) as {id_token?:string}).id_token)};
     const claims=await verifyIdToken(tokens.id_token,this.config,flow.nonceHash,this.request,this.clock);

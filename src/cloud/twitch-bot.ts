@@ -7,7 +7,8 @@ import {TwitchSource} from '../twitch-source.js';
 import {joinPath} from '../public-paths.js';
 import type {Documents} from './documents.js';
 
-type Config={clientId:string;clientSecret:string;origin:string;webhookOrigin?:string;login?:string};
+type OriginSource=string|(()=>string);
+type Config={clientId:string;clientSecret:string;origin:OriginSource;webhookOrigin?:OriginSource;login?:string};
 type Flow={kind:'account'|'channel';cookieHash:string;expires:number;accountId?:string;wallet?:string;twitchId?:string};
 type Pending=Flow&{twitchId:string};
 type AuthState={flows:Record<string,Flow>;pending:Record<string,Pending>;bot?:{id:string;login:string;clientId:string;authorizedAt:number}};
@@ -32,8 +33,10 @@ export class CloudTwitchBot {
  /** Mounts the session-2 proposal service (viewer !plot crear → pending proposal). */
  mountProposals(handler:NonNullable<CloudTwitchBot['proposals']>){this.proposals=handler;}
  get configured(){return !!this.config.clientId&&!!this.config.clientSecret;}
- get callbackUrl(){return `${this.config.origin}/auth/twitch/bot/callback`;}
- get webhookUrl(){return `${this.config.webhookOrigin??this.config.origin}/api/twitch/bot/webhook`;}
+ /** Resolved per call: the bot must advertise the host the operator is actually using. */
+ private resolve(source:OriginSource|undefined,fallback?:OriginSource){const value=source??fallback;return typeof value==='function'?value():value??'';}
+ get callbackUrl(){return `${this.resolve(this.config.origin)}/auth/twitch/bot/callback`;}
+ get webhookUrl(){return `${this.resolve(this.config.webhookOrigin,this.config.origin)}/api/twitch/bot/webhook`;}
  private get secret(){return createHmac('sha256',this.config.clientSecret).update('plot-eventsub-webhook-v1').digest('hex');}
  private async points(){if(this.localPoints)return this.localPoints;const p=new Points('',this.documents);await p.load();return p;}
  private async botAuthorization(){

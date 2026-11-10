@@ -4,7 +4,8 @@ import type {Points,TwitchIdentity} from './points.js';
 const nonce=()=>randomBytes(32).toString('hex');
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
-type Config={clientId:string;clientSecret:string;origin:string};
+type OriginSource=string|(()=>string);
+type Config={clientId:string;clientSecret:string;origin:OriginSource};
 type Flow={accountId?:string;wallet?:string;cookieHash:string;expires:number};
 type Pending=Flow&{identity:TwitchIdentity};
 export class TwitchAuth {
@@ -13,7 +14,9 @@ export class TwitchAuth {
   exportState(){return {flows:Object.fromEntries(this.flows),pending:Object.fromEntries(this.pending)};}
   importState(state:ReturnType<TwitchAuth['exportState']>){this.flows=new Map(Object.entries(state.flows));this.pending=new Map(Object.entries(state.pending));}
   get configured(){return !!this.config.clientId&&!!this.config.clientSecret;}
-  get callbackUrl(){return `${this.config.origin}/auth/twitch/callback`;}
+  /** Resolved per call so a request served on a different host never reuses a stale origin. */
+  private get origin(){return typeof this.config.origin==='function'?this.config.origin():this.config.origin;}
+  get callbackUrl(){return `${this.origin}/auth/twitch/callback`;}
   private prune(){for(const map of [this.flows,this.pending])for(const [key,f] of map)if(f.expires<=this.clock())map.delete(key);}
   /** Login (no token) creates the session at complete time; linking keeps the existing account. */
   start(token?:string){
