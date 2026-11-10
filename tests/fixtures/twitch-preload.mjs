@@ -5,8 +5,9 @@ const original=globalThis.fetch;
 globalThis.fetch=async(input,options)=>{
   const url=String(input);
   if(url.startsWith('https://id.twitch.tv/oauth2/')||url.startsWith('https://api.twitch.tv/helix/users')){
-    // E2E tests may write either fixture path (test-results is wiped per run; .e2e-fixtures is stable).
-    let oauthRaw='';try{oauthRaw=await readFile('test-results/twitch-oauth.json','utf8');}catch{/* not written yet */try{oauthRaw=await readFile('.e2e-fixtures/twitch-oauth.json','utf8');}catch{/* neither path seeded */}}
+    // E2E tests may write either fixture path (test-results is wiped per run; .e2e-fixtures is stable):
+    // the most recently written one wins, so tests flipping identities always read their own value.
+    let oauthRaw='';let oauthTime=0;for(const p of ['test-results/twitch-oauth.json','.e2e-fixtures/twitch-oauth.json']){try{const raw=await readFile(p,'utf8');const stat=await (await import('node:fs/promises')).stat(p);if(stat.mtimeMs>=oauthTime){oauthRaw=raw;oauthTime=stat.mtimeMs;}}catch{/* path absent */}}
     const user=JSON.parse(oauthRaw||'{}');
     if(url.endsWith('/token'))return Response.json({access_token:'e2e-access-token',refresh_token:'e2e-refresh-token',token_type:'bearer',expires_in:3600});
     if(url.endsWith('/validate'))return Response.json({client_id:'e2e-client',user_id:user.id,login:user.login,scopes:user.scopes??['channel:bot'],expires_in:3600});
