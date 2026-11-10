@@ -170,8 +170,14 @@ app.get('/auth/twitch/callback',async(req,res)=>{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
     res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/app?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
-  }catch{
-    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});const error=req.query.error==='access_denied'?'canceled':'failed';res.redirect(onboarding?`/onboarding?streamer=1&twitch_error=${error}`:`/app?twitch_error=${error}#streamer`);
+  }catch(e){
+    // Log the OAuth failure server-side (the redirect target stays a fixed internal path).
+    console.error('TWITCH_CALLBACK_FAILED:',String((e as Error).message??'').replace(/[^A-Za-z0-9 :.,_-]/g,'').slice(0,140));
+    res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});
+    // Failure lands on a constant internal path; only a fixed enum token is appended.
+    const error=req.query.error==='access_denied'?'canceled':'failed';
+    if(onboarding){res.redirect(`/onboarding?streamer=1&twitch_error=${error}`);return;}
+    res.redirect(`/app?twitch_error=${error}#streamer`);
   }
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{

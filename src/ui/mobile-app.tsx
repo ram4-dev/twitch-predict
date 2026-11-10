@@ -72,8 +72,9 @@ function FeedTabs({tab,selected,count,onChange}:{tab:'active'|'own';selected:str
 function Profile({snapshot,demo}:{snapshot:AppSnapshot;demo:boolean}){
  const account=snapshot.account;const paid=account?.bets.filter(b=>b.claimed).reduce((sum,bet)=>sum+bet.payout,0)??0;
  // Streamer console: owner/moderator operations for channels this account manages (server-verified capabilities).
+ // Only fetch with a real session: an anonymous profile is not an error worth a 400 round trip.
  const [streamerChannels,setStreamerChannels]=useState<string[]>([]);
- useEffect(()=>{if(demo)return;let active=true;void fetch('/api/streamer/console',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')??''}`}}).then(r=>r.ok?r.json():Promise.reject(new Error('sin consola'))).then((c:{channels:string[]})=>{if(active)setStreamerChannels(c.channels??[]);}).catch(()=>{if(active)setStreamerChannels([]);});return()=>{active=false;};},[demo,account?.id]);
+ useEffect(()=>{if(demo)return;const token=localStorage.getItem('pointsToken');if(!token){setStreamerChannels([]);return;}let active=true;void fetch('/api/streamer/console',{headers:{Authorization:`Bearer ${token}`}}).then(r=>r.ok?r.json():Promise.reject(new Error('sin consola'))).then((c:{channels:string[]})=>{if(active)setStreamerChannels(c.channels??[]);}).catch(()=>{if(active)setStreamerChannels([]);});return()=>{active=false;};},[demo,account?.id]);
  // Provider-aware: Google renders disabled without server configuration instead of a broken button.
  const [googleConfigured,setGoogleConfigured]=useState<boolean|null>(null);
  useEffect(()=>{if(demo)return;let active=true;void fetch('/api/google/config').then(r=>r.json()).then((c:{configured:boolean})=>{if(active)setGoogleConfigured(c.configured);}).catch(()=>{if(active)setGoogleConfigured(false);});return()=>{active=false;};},[demo]);
