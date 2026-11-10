@@ -17,3 +17,11 @@
 .onboarding .streamer-steps li{align-items:stretch;flex-direction:column;gap:12px}
 .onboarding .streamer-steps .plot-button{width:100%;justify-content:center}
 @media(min-width:36rem){.onboarding{padding:36px 24px}.onboarding .auth-card{padding:28px}.onboarding .streamer-steps li{align-items:center;flex-direction:row}.onboarding .streamer-steps .plot-button{width:auto}}
+
+/* Provider buttons: real brand marks, generous spacing, never touching each other. */
+.onboarding .auth-social{display:grid;gap:12px;margin-block-end:20px}
+.onboarding .auth-social .plot-button-content{gap:10px;justify-content:flex-start}
+.onboarding .auth-social .plot-button-content>span{flex:1;text-align:left}
+.onboarding .auth-social svg{flex-shrink:0}
+.onboarding .auth-social .auth-primary .plot-button-content>span{font-weight:600}
+.onboarding .auth-social>p{margin:4px 0 0;text-align:center}

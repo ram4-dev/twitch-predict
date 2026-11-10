@@ -6,6 +6,7 @@ import {createRoot} from 'react-dom/client';
 import {PlotMascot} from './components/plot.js';
 import {Button} from './components/button.js';
 import {ArrowRight,Check,Loader2} from 'lucide-react';
+import {TwitchIcon,GoogleIcon} from './brand-icons.js';
 import {StreamerOnboarding} from './streamer-onboarding.js';
 type Provider={isPhantom?:boolean;connect():Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
 type Login={token:string;account:{wallet:string;id:string};handoff?:{flowId:string;extensionId:string;code:string}};
@@ -76,8 +77,8 @@ function Onboarding(){
   const labels:Record<string,string>={ready:login?'Reintentar vinculación':'Conectar Phantom',connecting:'Conectá tu wallet en Phantom…',signing:'Confirmá el inicio de sesión en Phantom…',linking:'Vinculando tu extensión…',done:'Abriendo tu panel…'};
   return <AuthLayout footer="Al terminar, abrimos tu panel y la extensión queda conectada."><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><PlotMascot/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Entrá con Twitch para tener tus puntos y apuestas desde el chat, la extensión y el panel.</p><div className="auth-benefits"><span>Una misma cuenta en todos lados</span><span>Tu saldo e historial se conservan</span><span>Wallet opcional: solo para BYTE</span></div>
       {!flowId&&<div className="auth-social" role="group" aria-label="Formas de entrar">
-        <Button className="auth-primary" disabled={phase!=='ready'} onClick={()=>void social('twitch')}>{phase==='connecting'?'Abriendo Twitch…':'Continuar con Twitch'}{phase==='connecting'?<Loader2 size={16} className="animate-spin"/>:<ArrowRight size={16}/>}</Button>
-        {googleConfigured!==false&&<Button variant="outline" disabled={phase!=='ready'||googleConfigured===null} onClick={()=>void social('google')}>{googleConfigured===null?'Google…':'Continuar con Google'}</Button>}
+        <Button className="auth-primary" disabled={phase!=='ready'} onClick={()=>void social('twitch')}>{phase==='connecting'?<Loader2 size={16} className="animate-spin"/>:<TwitchIcon size={18}/>}<span>{phase==='connecting'?'Abriendo Twitch…':'Continuar con Twitch'}</span>{phase==='connecting'?null:<ArrowRight size={16}/>}</Button>
+        {googleConfigured!==false&&<Button variant="outline" disabled={phase!=='ready'||googleConfigured===null} onClick={()=>void social('google')}>{googleConfigured===null?<Loader2 size={16} className="animate-spin"/>:<GoogleIcon size={18}/>}<span>{googleConfigured===null?'Google…':'Continuar con Google'}</span></Button>}
         {googleConfigured===false&&<p className="auth-secondary" aria-disabled="true">Google todavía no está disponible.</p>}
       </div>}
       {flowId?(installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={false}/><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>)
