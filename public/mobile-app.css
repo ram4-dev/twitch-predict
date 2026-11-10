@@ -184,3 +184,14 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-streamer-market-options small{color:#b0a8a2;font-size:11px;white-space:nowrap}
 .phone-streamer-market-pool{margin:0;font-size:12px;color:#b0a8a2}
 @media (max-width:22rem){.phone-streamer-market-options li{grid-template-columns:1.4rem 1fr}.phone-streamer-market-options small{grid-column:2}}
+
+/* Section nav and bet tabs already communicate their state with the sliding underline;
+ * the squashed "pressed" scaling is redundant, so it is removed here (underline untouched). */
+.phone-nav>button,.phone-feed-tabs>button,
+.phone-nav>button:hover,.phone-feed-tabs>button:hover,
+.phone-nav>button:active,.phone-feed-tabs>button:active,
+.phone-nav>button:focus-visible,.phone-feed-tabs>button:focus-visible{transform:none!important}
+
+/* Bet choice buttons: the ring marks the selection; drop the fill change so pressing does not repaint them. */
+.phone-app .phone-outcome[aria-pressed=true]:not(:disabled){background-color:transparent}
+.phone-bet-sheet .phone-quick button[aria-pressed=true]{background:transparent;color:inherit}

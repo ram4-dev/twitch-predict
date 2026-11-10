@@ -26,6 +26,18 @@ function Onboarding(){
       location.assign(result.url);
     }catch(e){setError((e as Error).message);setPhase('ready');}
   };
+  // Deep links from the profile land straight on the provider: /onboarding?connect=twitch|phantom|google.
+  // One click on the account row should start that connection, not park the user on a chooser screen.
+  const deepLinkStarted=useRef(false);
+  useEffect(()=>{
+    if(deepLinkStarted.current)return;
+    const wanted=new URLSearchParams(location.search).get('connect');
+    if(!wanted||new URLSearchParams(location.search).has('twitch_ticket')||new URLSearchParams(location.search).has('google_ticket'))return;
+    deepLinkStarted.current=true;
+    if(wanted==='twitch'||wanted==='google'){void social(wanted);return;}
+    if(wanted==='phantom'){void connect();}
+  },[]);
+
   // Returning from the provider callback: consume the ticket and open the panel.
   useEffect(()=>{
     const params=new URLSearchParams(location.search);const ticket=params.get('twitch_ticket')??params.get('google_ticket');const oauthError=params.get('twitch_error')??params.get('google_error');
