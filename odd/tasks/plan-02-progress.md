@@ -67,3 +67,17 @@ Rama: `apply-plan-02`; base: `504d3cb`; worktree: `/home/meeting/projects/twitch
 ## Pendiente (blocker material)
 
 - Sesión 1: la creación directa de moderador por HTTP (`/api/streamer/markets` como MODERADOR — el owner ya funciona) usa la revalidación fresh; el wiring existe, falta su verificación E2E cuando el revalidator consulte la lista real (el fixture cubre el camino server-side; la consulta autoritativa ya corre fuera de la transacción por su corrección 3542b9e).
+
+## Cierre de integración (HEAD 0508d76)
+
+- Merge de los fixes de review de session-1 (43ff07c: publication receipts, viewer bets/list guard, pipes compat, auditoría histórica) — sin conflictos, preservando accountForTwitch, router/bot/cloud revalidator y UI Plan 2.
+- Fix real de integración en /app: el complete de Twitch desde el dashboard iba SIN bearer (authRequest lo exigía → login flow roto) → bearer OPCIONAL: link flow manda sesión, login flow completa sin ella.
+- Consola completa EN LA APP MÓVIL (/app#profile): composer crear, bandeja de propuestas y acciones cerrar/resolver/cancelar por botones (MarketComposer + ProposalInbox + MarketAdminActionsInline en mobile-app.tsx).
+- Fixtures OAuth/GQL con precedencia mtime entre test-results y .e2e-fixtures (los tests que alternan identidades leen su propio valor).
+- E2E actualizados a comportamiento autorizado: cancelación acredita AUTO (sin botón Cobrar, claim repetido 400), scopes del bot con moderation:read, botón social 'Entrar con Phantom'.
+- E2E nuevo tests/console-ui.e2e.ts: consola completa POR BOTONES desde /app#profile (crear→cerrar→resolver→cancelar con reembolso automático; viewer sin consola). Nota: resolver un mercado sin apuestas produce phase void con winnerId (comportamiento autorizado Plan 1).
+
+## Verificación final
+
+- npm test: 161 tests / 148 pass / 0 fail (13 skipped E2E). typecheck/lint limpios. build OK.
+- E2E combinado (server propio puerto interno 14622, launcher aislado): 15/15 PASS en una corrida — console-ui, moderator-evidence (revocación/outage sin chat), points (refund auto + MV3), proposals (flujo completo), social-entry, twitch-auth (4), twitch-plot-chat.
