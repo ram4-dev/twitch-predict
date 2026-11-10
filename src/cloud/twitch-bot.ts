@@ -5,6 +5,7 @@ import {Points,CHAT_BET_POINTS} from '../points.js';
 import {closesAt,type Prediction} from '../prediction.js';
 import {TwitchSource} from '../twitch-source.js';
 import {joinPath} from '../public-paths.js';
+import {splitChatReply} from '../chat-format.js';
 import type {Documents} from './documents.js';
 
 type OriginSource=string|(()=>string);
@@ -184,7 +185,14 @@ export class CloudTwitchBot {
       }else reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id,verifiedModerator)).text:plotChatHelp;
 
      }catch(e){reply=(e as Error).message;}
-    s.events[id]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`${reply.slice(0,499-this.channelUrl(channel.login).length)} ${this.channelUrl(channel.login)}`,createdAt:this.now(),status:'pending'};
+    s.events[id]=this.now();
+    // A market list becomes one short message per market (Twitch has no line breaks and caps at 500
+    // characters); the channel link is appended once, on the last message.
+    const messages=splitChatReply(reply,this.channelUrl(channel.login));
+    messages.forEach((message,index)=>{
+      const messageKey=messages.length>1?`${key}:${index+1}`:key;
+      s.outbox[messageKey]={id:messageKey,channelId:channel.id,epoch:channel.epoch,text:message.text,createdAt:this.now()+index,status:'pending'};
+    });
    });
    return {status:204,body:''};
   }
