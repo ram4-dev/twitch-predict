@@ -204,7 +204,7 @@ export class CloudTwitchBot {
   return {status:204,body:''};
  }
  private prune(s:Runtime){for(const [key,at] of Object.entries(s.events))if(at<this.now()-600_000)delete s.events[key];const events=Object.entries(s.events).sort((a,b)=>b[1]-a[1]);for(const [key] of events.slice(5000))delete s.events[key];for(const [key,job] of Object.entries(s.outbox))if(!key.startsWith('welcome:')&&job.createdAt<this.now()-86400_000)delete s.outbox[key];}
- private channelUrl(login:string){return `${this.config.origin}${joinPath('twitch',login)}`;}
+ private channelUrl(login:string){return `${this.resolve(this.config.origin)}${joinPath('twitch',login)}`;}
  /** Resolves the channel's open prediction and places the internal-balance bet for a linked viewer. */
  private async chatBet(p:Points,channel:Channel,chatterId:string,outcome:string,messageId:string):Promise<string>{
   try{
