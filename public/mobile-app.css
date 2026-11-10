@@ -158,3 +158,8 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-connected-action{grid-row:1 / span 2;grid-column:3;align-self:center;display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:0 14px;border-radius:999px;border:1px solid rgb(255 255 255 / .22);color:var(--foreground,#fff)!important;font-size:13px;text-decoration:none;white-space:nowrap}
 .phone-connected-action[aria-disabled="true"]{opacity:.55;border-style:dashed}
 @media (max-width:22rem){.phone-connected-row{grid-template-columns:auto 1fr}.phone-connected-action{grid-row:3;grid-column:1 / -1;width:100%;margin-top:2px}}
+
+/* Disconnect action sits in the same slot as "Conectar" but reads as destructive-neutral. */
+.phone-connected-disconnect{background:transparent;border-color:rgb(255 120 120 / .45);color:#ffb4b4!important;font:inherit;font-size:13px;cursor:pointer}
+.phone-connected-disconnect:disabled{opacity:.6;cursor:progress}
+.phone-connected-disconnect:hover:not(:disabled){background:rgb(255 120 120 / .12)}
