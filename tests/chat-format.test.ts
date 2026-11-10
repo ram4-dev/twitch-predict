@@ -10,11 +10,12 @@ test('a two-market list becomes one message per market, link only on the last',(
                row('NL','esperando resultado','Cuantas kills vamos a hacer?','!1 mas de 8 · !2 menos de 8')].join(' | ');
   const messages=splitChatReply(reply,link);
   assert.equal(messages.length,2);
-  // Each message stays short and readable: code, phase, title, numbered options.
-  assert.match(messages[0].text,/^#FY · esperando resultado · Cuantas kills vamos a hacer\? · 1 mas de 8 · 2 menos de 8$/);
+  // Each message stays short and readable: code, phase, title, numbered options with a bar each.
+  // A market with no bets still shows empty bars (0%) instead of falling back to the old plain list.
+  assert.match(messages[0].text,/^#FY esperando resultado · Cuantas kills vamos a hacer\? · 1 mas de 8 ░{10} 0% · 2 menos de 8 ░{10} 0%$/);
   assert.ok(!messages[0].text.includes('|'),'no pipe separators');
   assert.ok(!messages[0].text.includes('http'),'link only on the last message');
-  assert.match(messages[1].text,/^#NL · esperando resultado/);
+  assert.match(messages[1].text,/^#NL esperando resultado/);
   assert.ok(messages[1].text.endsWith(link),'link closes the last message');
 });
 

@@ -101,8 +101,9 @@ export function parseMarketList(text: string): ParsedMarket[] {
 
 /** One line per market: `#FY · esperando resultado · ¿Cuántas kills? · 1 más de 8 · 2 menos de 8` */
 export function formatMarketLine(market: ParsedMarket): string {
-  // With shares available, draw aligned bars; otherwise fall back to the plain numbered list.
-  if (market.outcomes.some((outcome) => outcome.share > 0)) {
+  // Always draw bars, including a market with no bets yet: an empty bar (░░░░ 0%) is honest and keeps
+  // the visual language consistent. Falling back to plain text made fresh markets look like the old format.
+  if (market.outcomes.length) {
     return formatMarketWithBars({ code: market.code, phase: market.phase, title: market.title, outcomes: market.outcomes });
   }
   const head = `#${market.code} · ${market.phase}`;
