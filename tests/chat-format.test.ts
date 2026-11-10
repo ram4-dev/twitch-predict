@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {splitChatReply,parseMarketList,formatMarketLine,CHAT_MESSAGE_MAX} from '../src/chat-format.js';
+import {splitChatReply,parseMarketList,formatMarketLine,shareBar,CHAT_MESSAGE_MAX,BAR_CELLS} from '../src/chat-format.js';
 
 const link='https://plot.example/join/twitch/ramitapai';
 const row=(code:string,phase:string,title:string,opts:string)=>`${code} · ${phase} · ${title} · ${opts}`;
@@ -44,7 +44,7 @@ test('titles containing separators survive intact',()=>{
 });
 
 test('a single market still renders as one clean message',()=>{
-  const line=formatMarketLine({code:'FY',phase:'abierta',title:'¿Gana?',options:'1 sí · 2 no'});
+  const line=formatMarketLine({code:'FY',phase:'abierta',title:'¿Gana?',options:'1 sí · 2 no',outcomes:[]});
   assert.equal(line,'#FY · abierta · ¿Gana? · 1 sí · 2 no');
   assert.ok(!line.includes('|'));
 });
@@ -52,4 +52,30 @@ test('a single market still renders as one clean message',()=>{
 test('non-list text is not mistaken for a market list',()=>{
   assert.deepEqual(parseMarketList('No hay predicciones de Plot pendientes en este canal.'),[]);
   assert.deepEqual(parseMarketList('Apuestas cerradas (#FY).'),[]);
+});
+
+test('bars use only the two glyphs measured as equal width in Twitch chat',()=>{
+  // Verified in a real browser: █ and ░ both measure 9.21px in Twitch's proportional font, while
+  // box-drawing (│ 8.13px) and ▓ (9.48px) break the grid. The renderer must never emit those.
+  const bar=shareBar(0.5);
+  const chars=new Set([...bar]);
+  assert.deepEqual([...chars].sort(),['█','░']);
+  for(const message of splitChatReply('FY · abierta · ¿Gana? · !1 sí 50% · !2 no 50%','https://plot.example/join/twitch/x')){
+    assert.ok(!/[┌┐└┘─│├┤▓▒▀▄]/.test(message.text),'message contains a grid-breaking glyph');
+  }
+});
+
+test('share maps to a proportional bar of fixed width',()=>{
+  assert.equal(shareBar(0,4),'░░░░');
+  assert.equal(shareBar(1,4),'████');
+  assert.equal(shareBar(0.5,4),'██░░');
+  assert.equal(shareBar(0.62),'██████░░░░');
+  // Out of range values never produce a bar of the wrong length.
+  for(const value of [-1,2,Number.NaN,Infinity])assert.equal([...shareBar(value)].length,BAR_CELLS);
+});
+
+test('a market list with shares renders aligned bars per option',()=>{
+  const messages=splitChatReply('FY · abierta · ¿Kills? · !1 más de 8 62% · !2 menos de 8 38%','');
+  assert.equal(messages.length,1);
+  assert.match(messages[0].text,/^#FY abierta · ¿Kills\? · 1 más de 8 ██████░░░░ 62% · 2 menos de 8 ████░░░░░░ 38%$/);
 });

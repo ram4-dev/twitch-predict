@@ -256,7 +256,9 @@ export class Points {
         text=`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · Código ${target.shortId} · 100 puntos por apuesta con !plot apostar ${target.shortId}, 1. Abierta 2 minutos.`;
       }else if(command.kind==='list'){
         if(!pending.length)text='No hay predicciones de Plot pendientes en este canal.';
-        else text=pending.map(m=>{const v=this.view(state,m);return `${m.shortId} · ${v.phase==='open'?'abierta':'esperando resultado'} · ${m.prediction.title} · ${m.prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}`;}).join(' | ');
+        else text=pending.map(m=>{const v=this.view(state,m);
+          // Include each option's share so the chat renderer can draw an aligned bar; the token stays parseable.
+          return `${m.shortId} · ${v.phase==='open'?'abierta':'esperando resultado'} · ${m.prediction.title} · ${v.outcomes.map((o,i)=>`!${i+1} ${o.title} ${Math.round(o.share)}%`).join(' · ')}`;}).join(' | ');
       }else{
         target=resolveTarget(command.id);
         if(command.kind==='lock'){

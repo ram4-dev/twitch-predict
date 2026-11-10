@@ -23,6 +23,39 @@ const PHASE_LABEL: Record<string, string> = {
 
 export type ChatReply = { text: string };
 
+/** Width of the bar in cells. Verified against Twitch's proportional chat font: `█` and `░` measure
+ * identically (9.21px each), so bars line up; box-drawing frames do NOT (│ is 8.13px vs ─ 9.21px). */
+export const BAR_CELLS = 10;
+const BAR_FULL = '█';
+const BAR_EMPTY = '░';
+
+/** Renders a share (0..1) as a solid/empty bar. Only █ and ░ are used: mixing ▓ or │ breaks the grid. */
+export function shareBar(share: number, cells = BAR_CELLS): string {
+  const clamped = Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0;
+  const filled = Math.round(clamped * cells);
+  return BAR_FULL.repeat(filled) + BAR_EMPTY.repeat(cells - filled);
+}
+
+const percent = (share: number) => `${Math.round((Number.isFinite(share) ? share : 0) * 100)}%`;
+
+/**
+ * One market as a single readable chat line, with a bar per option:
+ * `#FY abierta · ¿Cuántas kills? · 1 más de 8 ████████████ 62% · 2 menos de 8 █████ 38%`
+ * Bars sit inline so no column alignment depends on the reader's font.
+ */
+export function formatMarketWithBars(market: {
+  code: string; phase: string; title: string;
+  outcomes: { title: string; share: number }[];
+}, maxOptions = 6): string {
+  const options = market.outcomes.slice(0, maxOptions).map((outcome, index) => {
+    const share = Number.isFinite(outcome.share) ? outcome.share / 100 : 0;
+    return `${index + 1} ${outcome.title} ${shareBar(share)} ${percent(share)}`;
+  });
+  const extra = market.outcomes.length > maxOptions ? ` · +${market.outcomes.length - maxOptions} más` : '';
+  return truncate(`#${market.code} ${market.phase} · ${market.title} · ${options.join(' · ')}${extra}`, CHAT_MESSAGE_MAX);
+}
+
+
 const truncate = (value: string, max: number) =>
   value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 
@@ -36,7 +69,9 @@ export function formatOptions(outcomes: string[]): string {
  * `FY · esperando resultado · Title · !1 a · !2 b | NL · ...`
  * Returns [] when the text is not a market list, so callers can fall back to a plain reply.
  */
-export function parseMarketList(text: string): { code: string; phase: string; title: string; options: string }[] {
+export type ParsedMarket = { code: string; phase: string; title: string; options: string; outcomes: { title: string; share: number }[] };
+
+export function parseMarketList(text: string): ParsedMarket[] {
   const rows = text.split(' | ').map((row) => row.trim()).filter(Boolean);
   const parsed = rows.map((row) => {
     const parts = row.split(' · ').map((part) => part.trim());
@@ -48,18 +83,28 @@ export function parseMarketList(text: string): { code: string; phase: string; ti
     const optionParts = optionStart < 0 ? [] : rest.slice(optionStart);
     const title = titleParts.join(' · ').trim();
     if (!code || !title) return undefined;
+    // Options arrive as `!1 más de 8 62%`: split the trailing share from the label.
+    const outcomes = optionParts.map((part) => {
+      const match = /^!(\d+)\s+(.*?)(?:\s+(\d+)%)?$/.exec(part);
+      return match ? { title: match[2].trim(), share: match[3] ? Number(match[3]) : 0 } : undefined;
+    }).filter((outcome): outcome is { title: string; share: number } => !!outcome);
     return {
       code,
       phase: PHASE_LABEL[phase] ?? phase,
       title,
-      options: optionParts.map((part) => part.replace(/^!(\d)\s+/, '$1 ')).join(' · '),
+      options: outcomes.map((outcome, index) => `${index + 1} ${outcome.title}`).join(' · '),
+      outcomes,
     };
   });
   return parsed.filter((row): row is NonNullable<typeof row> => !!row);
 }
 
 /** One line per market: `#FY · esperando resultado · ¿Cuántas kills? · 1 más de 8 · 2 menos de 8` */
-export function formatMarketLine(market: { code: string; phase: string; title: string; options: string }): string {
+export function formatMarketLine(market: ParsedMarket): string {
+  // With shares available, draw aligned bars; otherwise fall back to the plain numbered list.
+  if (market.outcomes.some((outcome) => outcome.share > 0)) {
+    return formatMarketWithBars({ code: market.code, phase: market.phase, title: market.title, outcomes: market.outcomes });
+  }
   const head = `#${market.code} · ${market.phase}`;
   const body = market.options ? `${truncate(market.title, 180)} · ${market.options}` : truncate(market.title, 200);
   return truncate(`${head} · ${body}`, CHAT_MESSAGE_MAX - 4);
