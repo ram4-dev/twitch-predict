@@ -38,7 +38,12 @@ export class TwitchAuth {
   async callback(state:string,cookie:string,code:string|undefined,denied=false){return this.exchange(this.consume(state,cookie,code,denied),code!);}
   async exchange(flow:Flow,code:string){
     const response=await this.request('https://id.twitch.tv/oauth2/token',{method:'POST',body:new URLSearchParams({client_id:this.config.clientId,client_secret:this.config.clientSecret,code,grant_type:'authorization_code',redirect_uri:this.callbackUrl}),signal:AbortSignal.timeout(10000)});
-    if(!response.ok)throw new Error('Twitch no pudo confirmar el acceso. Volvé a conectar.');
+    if(!response.ok){
+      // Diagnostic: capture Twitch's own reason (no secrets in the payload).
+      const detail=await response.clone().text().catch(()=>'');
+      let reason=detail.slice(0,120);try{reason=(JSON.parse(detail) as {message?:string}).message??reason;}catch{/* plain-text body: keep the snippet */}
+      throw new Error(`Twitch no pudo confirmar el acceso (${response.status}${reason?`: ${reason}`:''}). Volvé a conectar.`);
+    }
     const tokens=z.object({access_token:z.string().min(1),token_type:z.string()}).parse(await response.json());
     try{
       const validation=await this.request('https://id.twitch.tv/oauth2/validate',{headers:{Authorization:`OAuth ${tokens.access_token}`},signal:AbortSignal.timeout(10000)});
