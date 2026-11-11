@@ -251,3 +251,12 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-app .phone-outcome,
 .phone-app .phone-outcome[data-chosen="true"],
 .phone-app .phone-outcome .plot-button-content{border-radius:8px!important}
+
+/* Resolution uses the extension card at the width of its web container. */
+.phone-app .plot-resolution{container-type:inline-size}
+.phone-app .plot-resolution.count .resolution-net{font-size:clamp(48px,16cqw,80px)}
+.phone-app .plot-resolution .points-claim{width:100%;min-height:44px}
+.phone-app .plot-resolution .resolution-detail-toggle{min-height:44px}
+.market-detail .phone-bets{grid-template-columns:minmax(0,1fr)}
+.phone-app .plot-resolution .resolution-net{color:inherit!important}
+.phone-app .plot-resolution .resolution-detail-toggle{border-radius:0;border:0;border-top:1px solid #ffffff20;background:transparent;box-shadow:none}

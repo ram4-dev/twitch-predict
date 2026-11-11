@@ -11,6 +11,7 @@ import {Button} from './components/button.js';
 import {LiquidGlass} from './vendor/opaline/liquid-glass.js';
 import {useActiveIndicator} from './vendor/opaline/use-active-indicator.js';
 import {createPointsClient,number} from './points-ui.js';
+import {PointsResolution} from './points-resolution.js';
 import {enhancePointerGlow} from '@/components/ui/spotlight-card';
 import {appThemes,applyDemoBet,demoSnapshot,isAppTheme,type AppMarket,type AppSnapshot,type AppTheme} from './mobile-app-data.js';
 import {MarketComposer,ProposalInbox} from './proposals-ui.js';
@@ -95,7 +96,7 @@ function Profile({snapshot,demo,onRefresh}:{snapshot:AppSnapshot;demo:boolean;on
  }}/>
  <ProposalInbox client={httpProposalsClient()} channelId={streamerChannels[0]}/>
  {snapshot.markets.filter(m=>m.source==='plot'&&streamerChannels.includes(m.prediction.channel)).map(m=>
-  <div key={m.key} className="phone-streamer-market" data-streamer-key={m.key} data-phase={m.phase}>
+  ['resolved','void'].includes(m.phase)?<div key={m.key} data-streamer-key={m.key} data-phase={m.phase}><PointsResolution market={m} account={account} onClaim={async()=>{await client.claim({key:m.key,requestId:crypto.randomUUID()});await onRefresh();}}/></div>:<div key={m.key} className="phone-streamer-market" data-streamer-key={m.key} data-phase={m.phase}>
    <div className="phone-streamer-market-head">
     {m.shortId&&<span className="phone-market-code" title={`Código para el chat: !plot cerrar ${m.shortId}`}>#{m.shortId}</span>}
     <span className="phone-streamer-market-channel">@{m.prediction.channel}</span>
@@ -135,6 +136,7 @@ function OwnBets({snapshot,demo,onClaim,onDetail,theme='ember'}:{snapshot:AppSna
  const grouped=[...new Set(snapshot.account?.bets.map(b=>b.marketKey)??[])].reverse().map(key=>({key,bets:snapshot.account!.bets.filter(b=>b.marketKey===key),market:snapshot.markets.find(m=>m.key===key)}));
  return <div className="phone-bets">{error&&<p role="alert">{error}</p>}{!grouped.length&&<p className="phone-empty">Todavía no hay jugadas.</p>}{grouped.map(({key,bets,market})=>{
   const stake=bets.reduce((sum,b)=>sum+b.amount,0),payout=bets.reduce((sum,b)=>sum+b.payout,0),pending=bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ended=['resolved','void'].includes(bets[0].phase);
+  if(ended&&market)return <div key={key} data-position-key={key} className="phone-position phone-position-wrap"><PointsResolution market={market} account={snapshot.account} demo={demo} onClaim={()=>onClaim(key)} onDetail={onDetail?()=>onDetail(key):undefined}/></div>;
   // Same card as the active feed: the option you took stays highlighted in its own colour, with the stake.
   const chosenOutcome=bets[bets.length-1].outcomeId,chosenStake=bets.filter(b=>b.outcomeId===chosenOutcome).reduce((sum,b)=>sum+b.amount,0);
   // Listing view (onDetail present): the same card as the active feed. Detail view (no onDetail):
