@@ -14,7 +14,7 @@ async function fixture(work:(p:Points,dir:string)=>Promise<void>){
 }
 
 test('audit reports pending historical refunds without writing anything; repeated runs are stable',()=>fixture(async(p,dir)=>{
- const a=await p.createAccount(),b=await p.createAccount();
+ const a=await p.walletLogin(`fixture-${randomUUID()}`),b=await p.walletLogin(`fixture-${randomUUID()}`);
  const m=await p.accept(demoPrediction(),true);
  await p.bet(a.token,m.key,'victory',300,randomUUID());
  await p.bet(b.token,m.key,'defeat',700,randomUUID());
@@ -37,7 +37,7 @@ test('audit reports pending historical refunds without writing anything; repeate
 }));
 
 test('already credited and claimed positions are not reported; contradictions land in conflicts',()=>fixture(async(p,dir)=>{
- const a=await p.createAccount();
+ const a=await p.walletLogin(`fixture-${randomUUID()}`);
  const m=await p.accept(demoPrediction(),true);
  await p.bet(a.token,m.key,'victory',500,randomUUID());
  await p.demoResolve(m.key,null);
@@ -55,7 +55,7 @@ test('already credited and claimed positions are not reported; contradictions la
  assert.equal(report.pending.length,0);assert.equal(report.conflicts.length,1);
 }));
 test('ordinary resolved, claim/distribution history, same-account aggregates: real refund arithmetic',()=>fixture(async(p,dir)=>{
- const a=await p.createAccount(),b=await p.createAccount();
+ const a=await p.walletLogin(`fixture-${randomUUID()}`),b=await p.walletLogin(`fixture-${randomUUID()}`);
  // Ordinary resolved market with a winner and a loser: neither is a refund debt.
  const m1=await p.accept(demoPrediction(),true);
  await p.bet(a.token,m1.key,'victory',300,randomUUID());

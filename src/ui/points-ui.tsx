@@ -6,10 +6,11 @@ import {Button} from './components/button.js';
 import {Input} from './components/input.js';
 import {enableSpotlight} from './components/materials.js';
 import {EmptyState} from './components/plot.js';
-import {Resolution} from './components/resolution.js';
+import {PointsResolution} from './points-resolution.js';
 import {Badge} from './components/badge.js';
 import type {Points} from '../points.js';
 type Market=ReturnType<Points['market']>;
+import {PointsFees} from './components/points-fees.js';
 type Account=ReturnType<Points['me']>;
 type Form={amount:number|string;busy:boolean;message:string;failed:boolean;pending?:{fingerprint:string;id:string}};
 type Action={type:'render'}|{type:'bet'|'claim';market:Market;form:Form;outcomeId?:string;amount?:number};
@@ -17,13 +18,14 @@ type Client=ReturnType<typeof createPointsClient>;
 const roots=new Map<string,{root:Root;node:HTMLElement;generation:number}>();
 let generation=0;
 export const number=(n:number|null|undefined)=>new Intl.NumberFormat('es-AR').format(n??0);
-export function createPointsClient(base:string,storage:{get():Promise<string|null|undefined>;set(token:string):Promise<void>},english=false) {
+export {hasPointsIdentity} from '../points-identity.js';
+export function createPointsClient(base:string,storage:{get():Promise<string|null|undefined>;set(token:string):Promise<void>;clear?():Promise<void>},english=false) {
   const request=async<T=unknown>(path:string,body?:unknown,token?:string):Promise<T>=>{
     const response=await fetch(`${base}${path}`,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
-    const data=await response.json();if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);return data;
+    const data=await response.json();if(!response.ok)throw Object.assign(new Error(data.error||`HTTP ${response.status}`),{status:response.status});return data;
   };
-  const ensure=async()=>{const token=await storage.get();if(!token)throw new Error(english?'Connect Phantom to access your points.':'Conectá Phantom para acceder a tus puntos.');return token;};
-  return {request,authRequest:async<T=unknown>(path:string,body?:unknown)=>request<T>(path,body,await ensure()),me:async()=>request<Account>('/api/points/me',undefined,await ensure()),bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
+  const ensure=async()=>{const token=await storage.get();if(!token)throw new Error(english?'Sign in with Twitch or Phantom to access your points.':'Iniciá sesión con Twitch o Phantom para acceder a tus puntos.');return token;};
+  return {request,authRequest:async<T=unknown>(path:string,body?:unknown)=>request<T>(path,body,await ensure()),me:async()=>{try{return await request<Account>('/api/points/me',undefined,await ensure());}catch(error){if((error as {status?:number}).status===401)await storage.clear?.();throw error;}},bet:async(body:unknown)=>request<{amount:number}>('/api/points/bet',body,await ensure()),claim:async(body:unknown)=>request<{paid:number}>('/api/points/claim',body,await ensure())};
 }
 // Reconcile retained markets instead of replacing a focused input on every poll.
 // The callers render synchronously; prune only roots not reused in this generation.
@@ -54,15 +56,7 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
     :{open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:market.source==='plot'?'Esperando resultado del streamer':'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
   const change=(value:string)=>{setAmount(value);form.amount=value;form.pending=undefined;};
   const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message=extension?'Enter a whole amount within your balance.':'Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
-  if(extension&&['resolved','void'].includes(market.phase)){
-    const payout=own.reduce((n,b)=>n+b.payout,0);
-    return <Resolution english key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}>
-      {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recover':'Claim'} {fmt(pending)} pts<ArrowUpRight size={16}/></Button>}
-      {payout>0&&pending===0&&<p className="resolution-credited">{market.phase==='void'?'Refund credited':'Payout credited'} · {fmt(payout)} pts</p>}
-      {market.reason&&<p className="points-rule">{market.reason}</p>}
-      {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?'Saving…':form.message}</p>}
-    </Resolution>;
-  }
+  if(['resolved','void'].includes(market.phase))return <PointsResolution key={`${market.key}:${market.phase}`} market={market} account={account} english={extension} busy={form.busy} message={form.message} failed={form.failed} onClaim={()=>onAction({type:'claim',market,form})}/>;
   return <>
     <div className="points-market-head"><span className={`points-status ${market.canBet?'live':''}`}><span className="status-mark"/>{status[market.phase]}</span><Badge variant="secondary">{market.demo?(extension?'Example':'Ejemplo'):(extension?'Internal points':'Puntos internos')}</Badge></div>
     <div className="pool-summary"><div className="points-pool"><span>{extension?'Community pool':'Pozo de la comunidad'}</span><strong>{(extension?fmt:number)(market.totalPoints)} <small>pts</small></strong></div><div className="pool-people"><span>{(extension?fmt:number)(market.participants)} {market.participants===1?(extension?'player':'jugador'):(extension?'players':'jugadores')}</span><span>{(extension?fmt:number)(market.totalBets)} {market.totalBets===1?(extension?'stake':'apuesta'):(extension?'stakes':'apuestas')}</span></div></div>
@@ -86,7 +80,7 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
     {market.phase==='resolved'&&stake>0&&!own.some(b=>b.payout)&&<p className="points-position">{extension?'Your option did not win. There are no points to claim.':'Tu opción no ganó. No hay puntos para cobrar.'}</p>}
     {market.reason&&<p className="points-rule">{market.reason}</p>}
     {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?<><Loader2 size={14} className="animate-spin"/> {extension?'Saving…':'Guardando operación…'}</>:form.message}</p>}
-    <p className="points-rule">{extension?'The pool is split among the winners, in proportion to the points they staked. No fee.':'El pozo se reparte entre quienes ganan, según sus puntos apostados. Sin comisión.'}</p>
+    <PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical={market.phase==='resolved'} english={extension}/>
   </>;
 }
 export async function performPointsAction(action:Action,client:Client,refresh:()=>Promise<void>,english=false){

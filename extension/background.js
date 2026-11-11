@@ -104,7 +104,7 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
     reply(await beginSession(base));
   })().catch(e=>reply({error:e.message}));return true;
 });
-async function startAuth(){
+async function startAuth(provider){
   await cloudReady;
   const stored=await chrome.storage.local.get(['bridgeUrl','pointsToken','pendingAuth']);
   let base=appUrl(stored.bridgeUrl);
@@ -115,11 +115,11 @@ async function startAuth(){
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not open access');
   await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
-  if(byteMode)await chrome.windows.create({url:`${base}/onboarding?extension=1#flow=${result.flowId}`,type:'popup',width:480,height:700});else await chrome.tabs.create({url:`${base}/onboarding#flow=${result.flowId}`});return {ok:true};
+  if(byteMode)await chrome.windows.create({url:`${base}/onboarding?extension=1#flow=${result.flowId}`,type:'popup',width:480,height:700});else await chrome.tabs.create({url:`${base}/onboarding${provider==='twitch'?'?connect=twitch':''}#flow=${result.flowId}`});return {ok:true};
 }
 chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
-  if(message.type!=='CONNECT_PHANTOM')return;
-  const task=authStart??=startAuth().finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
+  if(!['CONNECT_PHANTOM','CONNECT_TWITCH'].includes(message.type))return;
+  const task=authStart??=startAuth(message.type==='CONNECT_TWITCH'?'twitch':undefined).finally(()=>{authStart=undefined;});task.then(reply).catch(e=>reply({error:e.message}));return true;
 });
 async function migrateCloudConfig(){
   if(new URL(defaultBridge).protocol!=='https:'||new URL(defaultBridge).hostname.endsWith('.localhost'))return;
@@ -142,7 +142,7 @@ chrome.runtime.onMessageExternal.addListener((message,sender,reply)=>{
     if(typeof message.code!=='string'||!/^[a-f0-9]{64}$/.test(message.code))throw new Error('Invalid access code');
     const response=await fetch(`${pending.base}/api/auth/extension/complete`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({flowId:pending.flowId,state:pending.state,extensionId:chrome.runtime.id,code:message.code}),signal:AbortSignal.timeout(12000)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not link the extension');
-    await chrome.storage.local.set({...(stored.pointsToken?{previousPointsToken:stored.pointsToken}:{}),pointsToken:result.token,walletAddress:result.account.wallet,bridgeToken:result.bridgeToken??null,bridgeUrl:pending.base,pendingAuth:null,lastAuthFlow:message.flowId,authError:null});
+    await chrome.storage.local.set({...(stored.pointsToken?{previousPointsToken:stored.pointsToken}:{}),pointsToken:result.token,walletAddress:result.account.wallet??null,bridgeToken:result.bridgeToken??null,bridgeUrl:pending.base,pendingAuth:null,lastAuthFlow:message.flowId,authError:null});
     reply({ok:true});
   })().catch(e=>reply({error:e.message}));return true;
 });

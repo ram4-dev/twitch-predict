@@ -1,4 +1,6 @@
-import {type PlotCommand} from './plot-chat.js';
+import {pointFees,type PointFees} from './point-fees.js';
+import {hasPointsIdentity,PointsSessionError} from './points-identity.js';
+import {PlotCommandError,type PlotCommand} from './plot-chat.js';
 import type {Documents} from './cloud/documents.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -13,11 +15,11 @@ export type TwitchIdentity={id:string;login:string;displayName:string;linkedAt:s
 type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; google?:{id:string;email?:string;displayName:string;linkedAt:string}; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'|'refund'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
-type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
+type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; fees?:PointFees; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
-type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'; delta:number; balance:number; marketKey?:string; createdAt:string };
+type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'|'streamer_fee'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
-type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
+type State = { version:1; platformRevenue?:{balance:number;credits:{marketKey:string;amount:number;at:string}[]}; pendingStreamerFees?:Record<string,{channel:string;twitchId?:string;amount:number}>; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
 /** Dated moderator evidence: the bot adapter refreshes it; HTTP publication revalidates inside its window. */
 export type ChannelModeratorEvidence={users:string[];verifiedAt:string};
 /** Positive moderator evidence lives this long; expiry denies rather than trusting a stale list. */
@@ -118,7 +120,7 @@ export class Points {
   }
   private account(state:State, token:string) {
     const digest=hash(token);const account=state.accounts[state.sessions[digest]]??Object.values(state.accounts).find(a=>!a.wallet&&a.tokenHash===digest);
-    if(!account) throw new Error('Sesión inválida. Volvé a conectar tu cuenta.');return account;
+    if(!account) throw new PointsSessionError('Sesión inválida. Volvé a conectar tu cuenta.');return account;
   }
   /** Moderator evidence comes only from the signed chat event via the adapter, never from HTTP payloads. */
   private verifiedModeratorOf(state:State,channel:MarketChannel,actor:MarketActor,clock:()=>number=Date.now):boolean {
@@ -140,17 +142,59 @@ export class Points {
       return {count:evidence.users.length,verifiedAt:evidence.verifiedAt};
     });
   }
+  private managedChannels(state:State,account:Account){
+    return Object.values(state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel);
+  }
+  private requireViewer(state:State,account:Account){
+    if(!hasPointsIdentity(account))throw new PlotCommandError('Iniciá sesión con Twitch o Phantom para apostar con tus puntos.');
+    if(this.managedChannels(state,account).length)throw new PlotCommandError('Las cuentas de streamer no pueden apostar.');
+  }
   /** Shared debit used by chat bets and API bets on an open draft; receipts guard replay. */
   private betOnDraft(state:State,account:Account,m:Market,outcomeId:string,amount:number) {
-    if(!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
-    if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
-    const pool=state.bets.filter(b=>b.marketKey===m.key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
+    this.requireViewer(state,account);
+    if(!this.view(state,m).canBet)throw new PlotCommandError('La apuesta está cerrada o falta actualizar Twitch');
+    if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new PlotCommandError('Opción inválida');
+    const pool=state.bets.filter(b=>b.marketKey===m.key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new PlotCommandError('El pozo alcanzó el límite');
     this.ledger(state,account,'bet',-amount,m.key);
     const bet:Bet={id:randomUUID(),accountId:account.id,wallet:account.wallet,marketKey:m.key,outcomeId,amount,payout:0,claimed:false,createdAt:now()};state.bets.push(bet);
   }
   private ledger(state:State, account:Account, kind:LedgerEntry['kind'], delta:number, marketKey?:string) {
-    if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new Error('Saldo insuficiente');
+    if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new PlotCommandError('Saldo insuficiente');
     account.balance+=delta;state.ledger.push({id:randomUUID(),accountId:account.id,kind,delta,balance:account.balance,marketKey,createdAt:now()});
+  }
+  /** Settle platform and broadcaster shares in the same transaction as winner payouts. */
+  private creditFees(state:State,m:Market,fees:PointFees){
+    const treasury=state.platformRevenue??=( {balance:0,credits:[]} );
+    if(!Number.isSafeInteger(treasury.balance+fees.platform))throw new Error('El saldo de Plot alcanzó el límite');
+    if(fees.platform){treasury.balance+=fees.platform;treasury.credits.push({marketKey:m.key,amount:fees.platform,at:now()});}
+    if(!fees.streamer)return;
+    const channel=m.prediction.channel.toLowerCase(),registration=state.streamers[channel];
+    const twitchId=m.ownerTwitchId??registration?.twitchId;
+    const owner=Object.values(state.accounts).find(a=>twitchId?a.twitch?.id===twitchId:registration?.wallet?a.wallet===registration.wallet:a.twitch?.login===channel);
+    if(owner)this.ledger(state,owner,'streamer_fee',fees.streamer,m.key);
+    else (state.pendingStreamerFees??={})[m.key]={channel,twitchId,amount:fees.streamer};
+  }
+  /** Only a server-verified Twitch identity (or the demo operator's wallet assignment) releases escrow. */
+  private collectStreamerFees(state:State,account:Account){
+    for(const [key,credit] of Object.entries(state.pendingStreamerFees??{})){
+      const entitled=credit.twitchId?account.twitch?.id===credit.twitchId:account.twitch?.login===credit.channel||(credit.channel==='demo_streamer'&&!!account.wallet&&state.streamers[credit.channel]?.wallet===account.wallet);
+      if(!entitled)continue;
+      this.ledger(state,account,'streamer_fee',credit.amount,key);
+      delete state.pendingStreamerFees![key];
+    }
+  }
+  private grantStartingPoints(state:State,account:Account){
+    if(hasPointsIdentity(account)&&!state.ledger.some(entry=>entry.accountId===account.id&&entry.kind==='welcome'))this.ledger(state,account,'welcome',STARTING_POINTS);
+  }
+  /** Issues a session only after Auth's one-time extension flow verified the existing account. */
+  async identitySession(accountId:string){
+    const token=randomBytes(32).toString('hex');
+    return this.transaction(state=>{
+      const account=state.accounts[accountId];
+      if(!account||!hasPointsIdentity(account))throw new Error('Conectá Twitch o Phantom para iniciar sesión.');
+      state.sessions[hash(token)]=account.id;
+      return {token,account:{id:account.id,wallet:account.wallet??null,name:account.name,balance:account.balance}};
+    });
   }
   /** Twitch-first login: resumes the account already linked to this identity, or creates one exactly once. */
   async loginWithTwitch(identity:TwitchIdentity):Promise<{token:string;account:{id:string;name:string;balance:number};created:boolean}>{
@@ -158,9 +202,9 @@ export class Points {
     const token=randomBytes(32).toString('hex');
     return this.transaction(state=>{
       const existing=Object.values(state.accounts).find(a=>a.twitch?.id===identity.id);
-      if(existing){state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
+      if(existing){this.collectStreamerFees(state,existing);state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
       const id=randomUUID();const account:Account={id,name:identity.displayName,tokenHash:hash(token),balance:0,createdAt:now(),twitch:identity};
-      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.ledger(state,account,'welcome',STARTING_POINTS);
+      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.grantStartingPoints(state,account);this.collectStreamerFees(state,account);
       return {token,account:{id,name:account.name,balance:account.balance},created:true};
     });
   }
@@ -172,7 +216,7 @@ export class Points {
       const existing=Object.values(state.accounts).find(a=>a.google?.id===identity.id);
       if(existing){state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
       const id=randomUUID();const account:Account={id,name:identity.displayName,tokenHash:hash(token),balance:0,createdAt:now(),google:identity};
-      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.ledger(state,account,'welcome',STARTING_POINTS);
+      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.grantStartingPoints(state,account);
       return {token,account:{id,name:account.name,balance:account.balance},created:true};
     });
   }
@@ -180,7 +224,7 @@ export class Points {
     const token=randomBytes(32).toString('hex');
     return this.transaction(state=>{
       const id=randomUUID();const account:Account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};
-      state.accounts[id]=account;this.ledger(state,account,'welcome',STARTING_POINTS);
+      state.accounts[id]=account;this.grantStartingPoints(state,account);
       return {token,account:{id,name:account.name,balance:account.balance}};
     });
   }
@@ -189,8 +233,8 @@ export class Points {
     return this.transaction(state=>{
       let account=Object.values(state.accounts).find(a=>a.wallet===wallet);
       if(!account&&preferredToken){const preferred=this.account(state,preferredToken);if(!preferred.wallet)account=preferred;}
-      if(!account){const id=randomUUID();account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};state.accounts[id]=account;this.ledger(state,account,'welcome',STARTING_POINTS);}
-      account.wallet=wallet;state.sessions[hash(token)]=account.id;
+      if(!account){const id=randomUUID();account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};state.accounts[id]=account;this.grantStartingPoints(state,account);}
+      account.wallet=wallet;this.grantStartingPoints(state,account);state.sessions[hash(token)]=account.id;
       for(const bet of state.bets)if(bet.accountId===account.id)bet.wallet??=wallet;
       return {token,account:{id:account.id,wallet,name:account.name,balance:account.balance}};
     });
@@ -201,13 +245,14 @@ export class Points {
     return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,google:account.google??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,channel:this.state.markets[b.marketKey].prediction.channel,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-100).reverse().map(l=>({...l,title:l.marketKey?this.state.markets[l.marketKey]?.prediction.title:undefined})),
-      streamerChannels:Object.values(this.state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel)};
+      streamerEarnings:this.state.ledger.filter(l=>l.accountId===account.id&&l.kind==='streamer_fee').reduce((sum,l)=>sum+l.delta,0),
+      streamerChannels:this.managedChannels(this.state,account)};
   }
   private view(state:State, m:Market) {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const total=bets.reduce((n,b)=>n+b.amount,0);
     const sourceFresh=m.demo||m.source==='plot'||Date.now()-Date.parse(m.sourceCheckedAt)<SOURCE_MAX_AGE;
     const phase=m.phase==='open'&&closesAt(m.prediction)<=Date.now()?'locked':m.phase;
-    return {...m,phase,network:'offchain',canBet:phase==='open'&&m.prediction.status==='ACTIVE'&&closesAt(m.prediction)>Date.now()&&sourceFresh,
+    return {...m,...(m.phase==='void'&&m.winnerId?{reason:bets.length?'No hubo apuestas a la opción ganadora. Todas las apuestas fueron reembolsadas.':'La predicción no recibió apuestas.'}:{}),phase,network:'offchain',canBet:phase==='open'&&m.prediction.status==='ACTIVE'&&closesAt(m.prediction)>Date.now()&&sourceFresh,
       sourceFresh,totalPoints:total,totalBets:bets.length,participants:new Set(bets.map(b=>b.accountId)).size,
       outcomes:m.prediction.outcomes.map(o=>{const own=bets.filter(b=>b.outcomeId===o.id);const points=own.reduce((n,b)=>n+b.amount,0);return {id:o.id,title:o.title,color:o.color,points,bets:own.length,share:total?points/total*100:0};})};
   }
@@ -237,20 +282,20 @@ export class Points {
       // Viewers with a valid Twitch identity may bet and list; only the owner locks, resolves or
       // cancels; a verified moderator may only create. The dispatch below enforces the rest.
       const privileged=owner||(verifiedModerator&&command.kind==='create');
-      if(!privileged&&!['bet','list'].includes(command.kind))throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
-      if(!owner&&command.kind==='create'&&!verifiedModerator)throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
+      if(!privileged&&!['bet','list'].includes(command.kind))throw new PlotCommandError('No tenés permisos. Solo el dueño del canal puede cerrar, resolver o cancelar predicciones; los viewers pueden proponer con !plot crear.');
+      if(!owner&&command.kind==='create'&&!verifiedModerator)throw new PlotCommandError('No tenés permisos. Solo el dueño del canal puede cerrar, resolver o cancelar predicciones; los viewers pueden proponer con !plot crear.');
       const receiptId=`plot-command:${channelId}:${eventId}`,fingerprint=JSON.stringify([actorId,command]);
-      const previous=state.receipts[receiptId];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de evento reutilizado con otros datos');return previous.result as {key:string;text:string};}
+      const previous=state.receipts[receiptId];if(previous){if(previous.fingerprint!==fingerprint)throw new PlotCommandError('ID de evento reutilizado con otros datos');return previous.result as {key:string;text:string};}
       const channel=account?.twitch?.login??'unknown';
       const pending=Object.values(state.markets).filter(m=>m.source==='plot'&&m.prediction.channel===channel&&!['resolved','void'].includes(m.phase));
-      const byCode=(code:string)=>{const matches=pending.filter(m=>m.shortId===code);if(!matches.length)throw new Error(`No hay un mercado pendiente con código ${code} en este canal. Usá !plot mercados para verlos.`);return matches[0];};
+      const byCode=(code:string)=>{const matches=pending.filter(m=>m.shortId===code);if(!matches.length)throw new PlotCommandError(`No hay un mercado pendiente con código ${code} en este canal. Usá !plot mercados para verlos.`);return matches[0];};
       // Ambiguity guard: never debit points or mutate a market guessed from position or recency.
-      const resolveTarget=(id?:string,extra?:(m:Market)=>boolean)=>{const candidates=extra?pending.filter(extra):pending;if(id)return byCode(id);if(candidates.length===1)return candidates[0];throw new Error(candidates.length?'Hay varios mercados pendientes. Indicá el código: usá !plot mercados para verlos.':'No hay una predicción de Plot pendiente en este canal.');};
+      const resolveTarget=(id?:string,extra?:(m:Market)=>boolean)=>{const candidates=extra?pending.filter(extra):pending;if(id)return byCode(id);if(candidates.length===1)return candidates[0];throw new PlotCommandError(candidates.length?'Hay varios mercados pendientes. Indicá el código: usá !plot mercados para verlos.':'No hay una predicción de Plot pendiente en este canal.');};
       let text:string;let target:Market|undefined;
       if(command.kind==='create'){
         const id=`plot-${createHash('sha256').update(channelId+':'+eventId).digest('hex').slice(0,32)}`,stamp=now();
         const prediction=predictionSchema.parse({id,channel,title:command.title,status:'ACTIVE',createdAt:stamp,predictionWindowSeconds:120,outcomes:command.options.map((title,i)=>({id:String(i+1),title}))});
-        if(new Set(prediction.outcomes.map(o=>o.title.toLocaleLowerCase())).size!==prediction.outcomes.length||prediction.outcomes.length>6)throw new Error('Ingresá entre 2 y 6 opciones distintas.');
+        if(new Set(prediction.outcomes.map(o=>o.title.toLocaleLowerCase())).size!==prediction.outcomes.length||prediction.outcomes.length>6)throw new PlotCommandError('Ingresá entre 2 y 6 opciones distintas.');
         target={key:`plot:${channel}:${id}`,prediction,phase:'open',demo:false,source:'plot',ownerTwitchId:channelId,creatorTwitchId:owner?channelId:actorId,shortId:this.nextShortId(state,channel),version:1,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
         state.markets[target.key]=target;
         text=`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · Código ${target.shortId} · 100 puntos por apuesta con !plot apostar ${target.shortId}, 1. Abierta 2 minutos.`;
@@ -262,13 +307,13 @@ export class Points {
       }else{
         target=resolveTarget(command.id);
         if(command.kind==='lock'){
-          if(target.phase!=='open')throw new Error('Las apuestas de ese mercado ya están cerradas.');
+          if(target.phase!=='open')throw new PlotCommandError('Las apuestas de ese mercado ya están cerradas.');
           target.phase='locked';target.operatorLockedAt??=now();target.operatorLockedBy??=account?.wallet;target.prediction.status='LOCKED';target.prediction.lockedAt??=now();
           text=`Apuestas cerradas (${target.shortId}). Usá !plot resolver ${target.shortId}, 1 (número ganador) o !plot cancelar ${target.shortId}.`;
         }else if(command.kind==='resolve'){
-          if(this.view(state,target).phase!=='locked')throw new Error('Primero cerrá las apuestas con !plot cerrar.');
+          if(this.view(state,target).phase!=='locked')throw new PlotCommandError('Primero cerrá las apuestas con !plot cerrar.');
           const chosen=target.prediction.outcomes[command.option-1];
-          if(!chosen)throw new Error('Esa opción no existe en esta predicción.');
+          if(!chosen)throw new PlotCommandError('Esa opción no existe en esta predicción.');
           this.settle(state,target,chosen.id,'Resultado confirmado por el streamer');
           target.settlement={source:'streamer',wallet:account?.wallet,at:now()};target.prediction.status='RESOLVED';target.prediction.winningOutcomeId=chosen.id;target.prediction.endedAt=now();
           text=`Resultado (${target.shortId}): ${chosen.title}. Revisá tus puntos en Plot.`;
@@ -277,11 +322,11 @@ export class Points {
           target.settlement={source:'streamer',wallet:account?.wallet,at:now()};target.prediction.status='CANCELED';target.prediction.winningOutcomeId=null;target.prediction.endedAt=now();
           text=`Predicción ${target.shortId} cancelada: devolvimos tus puntos automáticamente.`;
         }else{
-          if(command.kind!=='bet')throw new Error('Operación no soportada');
+          if(command.kind!=='bet')throw new PlotCommandError('Operación no soportada');
           const chosen=target.prediction.outcomes[command.option-1];
-          if(!chosen)throw new Error(`Esa opción no existe. Opciones: ${target.prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}.`);
+          if(!chosen)throw new PlotCommandError(`Esa opción no existe. Opciones: ${target.prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}.`);
           const actorAccount=Object.values(state.accounts).find(a=>a.twitch?.id===actorId);
-          if(!actorAccount)throw new Error('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
+          if(!actorAccount)throw new PlotCommandError('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
           this.betOnDraft(state,actorAccount,target,chosen.id,CHAT_BET_POINTS);
           text=`Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}" (${target.shortId}).`;
         }
@@ -303,7 +348,7 @@ export class Points {
         if(original.status==='RESOLVED'&&p.winningOutcomeId!==original.winningOutcomeId)throw new Error('Twitch informó otro ganador para un mercado liquidado');
       } else {
         if(p.status!=='ACTIVE'||closesAt(p)<=Date.now()||Date.parse(p.createdAt)>Date.now()+30_000)throw new Error('La predicción no está abierta');
-        m={key,prediction:p,phase:'open',demo,version:1,createdAt:now(),updatedAt:now(),sourceCheckedAt:now()};state.markets[key]=m;
+        m={key,prediction:p,ownerTwitchId:state.streamers[p.channel.toLowerCase()]?.twitchId??Object.values(state.accounts).find(a=>a.twitch?.login===p.channel.toLowerCase())?.twitch?.id,phase:'open',demo,version:1,createdAt:now(),updatedAt:now(),sourceCheckedAt:now()};state.markets[key]=m;
       }
       m.prediction=p;m.updatedAt=now();m.sourceCheckedAt=now();
       if(!['resolved','void'].includes(m.phase)) {
@@ -322,7 +367,7 @@ export class Points {
     m.winnerId=winner??undefined;m.reason=reason;m.settlement={source:m.demo?'demo':'twitch',at:now()};
     if(!winner||!winningPool) {
       // Automatic refund: credited inside the same transaction, once per position, even for offline accounts.
-      if(winner)m.reason='Sin apuestas al ganador: se devuelve cada apuesta';
+      if(winner)m.reason=bets.length?'No hubo apuestas a la opción ganadora. Todas las apuestas fueron reembolsadas.':'La predicción no recibió apuestas.';
       // Terminal refunded phase: winnerId/reason still distinguish an owner resolve with no winning bets from a cancellation.
       m.phase='void';
       const groups=new Map<string,Bet[]>();
@@ -332,9 +377,10 @@ export class Points {
       for(const [accountId,group] of groups){const amount=group.reduce((n,b)=>n+b.amount,0);if(amount>0)this.ledger(state,state.accounts[accountId],'refund',amount,m.key);}
       return;
     }
-    // Largest remainder allocation conserves every integer point without floating point arithmetic.
-    const allocation=winners.map(b=>{const numerator=BigInt(b.amount)*BigInt(pool);return {bet:b,paid:Number(numerator/BigInt(winningPool)),remainder:numerator%BigInt(winningPool)};});
-    let remaining=pool-allocation.reduce((sum,a)=>sum+a.paid,0);
+    const fees=pointFees(pool);this.creditFees(state,m,fees);m.fees=fees;
+    // Largest remainder allocation conserves every distributable point after the two shares.
+    const allocation=winners.map(b=>{const numerator=BigInt(b.amount)*BigInt(fees.winners);return {bet:b,paid:Number(numerator/BigInt(winningPool)),remainder:numerator%BigInt(winningPool)};});
+    let remaining=fees.winners-allocation.reduce((sum,a)=>sum+a.paid,0);
     allocation.sort((a,b)=>a.remainder===b.remainder?a.bet.id.localeCompare(b.bet.id):a.remainder>b.remainder?-1:1);
       for(const a of allocation){if(remaining>0){a.paid++;remaining--;}a.bet.payout=a.paid;}
     m.phase='resolved';
@@ -344,6 +390,7 @@ export class Points {
     return this.transaction(state=>{
       const account=this.account(state,token);const id=`${account.id}:${requestId}`;const fingerprint=JSON.stringify(['bet',key,outcomeId,amount]);
       const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');return previous.result;}
+      this.requireViewer(state,account);
       const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
       if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
       const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
@@ -367,13 +414,14 @@ export class Points {
   async chatBet(twitchId:string,key:string,outcomeId:string,requestId:string) {
     return this.transaction<{betId:string;amount:number;outcomeId:string;balance:number}>(state=>{
       const account=Object.values(state.accounts).find(a=>a.twitch?.id===twitchId);
-      if(!account)throw new Error('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
+      if(!account)throw new PlotCommandError('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
       const id=`${account.id}:${requestId}`,fingerprint=JSON.stringify(['chatBet',key,outcomeId]);
-      const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');return previous.result as {betId:string;amount:number;outcomeId:string;balance:number};}
-      const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
-      if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
+      const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new PlotCommandError('ID de operación reutilizado con otros datos');return previous.result as {betId:string;amount:number;outcomeId:string;balance:number};}
+      this.requireViewer(state,account);
+      const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new PlotCommandError('La apuesta está cerrada o falta actualizar Twitch');
+      if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new PlotCommandError('Opción inválida');
       const amount=CHAT_BET_POINTS;
-      const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
+      const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new PlotCommandError('El pozo alcanzó el límite');
       this.ledger(state,account,'bet',-amount,key);
       const bet:Bet={id:randomUUID(),accountId:account.id,wallet:account.wallet,marketKey:key,outcomeId,amount,payout:0,claimed:false,createdAt:now()};state.bets.push(bet);
       const result={betId:bet.id,amount,outcomeId,balance:account.balance};state.receipts[id]={fingerprint,result};return result;
@@ -387,7 +435,7 @@ export class Points {
       if(!Object.values(state.accounts).some(a=>a.wallet===wallet))throw new Error('La wallet debe iniciar sesión primero');
       const name=channel.toLowerCase();const previous=state.streamers[name];
       if(previous&&previous.wallet!==wallet)throw new Error('El canal ya tiene una wallet de streamer asignada');
-      return state.streamers[name]??=( {channel:name,wallet,assignedAt:now()} );
+      const registration=state.streamers[name]??=( {channel:name,wallet,assignedAt:now()} );this.collectStreamerFees(state,Object.values(state.accounts).find(a=>a.wallet===wallet)!);return registration;
     });
   }
   async linkTwitch(token:string,identity:TwitchIdentity){
@@ -406,6 +454,7 @@ export class Points {
       // Channel registration is a streamer capability: only wallet-backed accounts claim channels.
       if(a.wallet&&!state.channels.includes(identity.login))state.channels.push(identity.login);
       if(a.wallet)state.streamers[identity.login]={channel:identity.login,wallet:a.wallet,twitchId:identity.id,assignedAt:now()};
+      this.grantStartingPoints(state,a);this.collectStreamerFees(state,a);
       return {twitch:a.twitch,channel:identity.login};
     });
   }
@@ -431,7 +480,7 @@ export class Points {
   exportStateJson():string {return JSON.stringify(this.state);}
   private streamer(state:State,token:string,key?:string){
     const a=this.account(state,token);// Real channels require the linked Twitch identity; the demo channel stays with its assigned wallet.
-    const channels=Object.values(state.streamers).filter(s=>(a.twitch&&s.twitchId===a.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===a.wallet)).map(s=>s.channel);
+    const channels=this.managedChannels(state,a);
     if(key&&!channels.includes(state.markets[key]?.prediction.channel.toLowerCase()))throw new Error('No tenés permisos sobre este mercado');
     return {account:a,channels};
   }
@@ -449,7 +498,7 @@ export class Points {
     if(['resolved','void'].includes(m.phase))throw new Error('El mercado ya está resuelto');
     if(winnerId!==null&&!m.prediction.outcomes.some(o=>o.id===winnerId))throw new Error('Opción inválida');
     if(this.view(state,m).phase!=='locked')throw new Error('Cerrá las apuestas antes de resolver');
-    this.settle(state,m,winnerId,'Vista previa');return {phase:m.phase,reason:m.reason,pool:this.view(state,m).totalPoints,bets:this.roster(state,m)};
+    this.settle(state,m,winnerId,'Vista previa');return {phase:m.phase,reason:m.reason,pool:this.view(state,m).totalPoints,fees:m.fees,bets:this.roster(state,m)};
   }
   async streamerAction(token:string,input:StreamerAction){
     return this.transaction(state=>{

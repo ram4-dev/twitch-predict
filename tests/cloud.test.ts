@@ -84,7 +84,7 @@ test('authenticated viewers enqueue channels outside the seed list once, without
  const server=cloudApp(docs,env).listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
  const watch=(channel:string,token=login.token)=>fetch(base+'/api/byte/twitch/watch',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({channel})});
  try{
-  assert.equal((await watch('new_streamer','invalid-session')).status,400);
+  assert.equal((await watch('new_streamer','invalid-session')).status,401);
   assert.equal((await watch('https://evil.example')).status,400);
   assert.equal((await watch('missing_streamer')).status,400);
   const results=await Promise.all([watch('NEW_STREAMER'),watch('new_streamer')]);
@@ -112,4 +112,17 @@ test('cloud waitlist stores public signups durably, deduplicates concurrent requ
   await docs.pool.query("INSERT INTO plot_private.request_limits(namespace,name,window_start,requests) VALUES($1,'waitlist',date_trunc('minute',now()),120) ON CONFLICT(namespace,name) DO UPDATE SET window_start=excluded.window_start,requests=excluded.requests",[docs.namespace]);
   assert.equal((await signup('limited@example.com')).status,429);
  }finally{app.locals.liveMarkets.close();await new Promise<void>(r=>server.close(()=>r()));}
+}));
+
+test('PostgreSQL settlement reserves both commission shares atomically across concurrent instances',options,()=>fixture(async docs=>{
+ const p=new Points('',docs);await p.load();const owner=await p.walletLogin('fee-owner');await p.assignStreamer('demo_streamer','fee-owner');
+ const viewer=await p.walletLogin('fee-viewer'),m=await p.accept((await import('../src/mirror.js')).demoPrediction(),true);
+ await p.bet(viewer.token,m.key,'victory',1000,randomUUID());await p.streamerAction(owner.token,{key:m.key,action:'lock',requestId:randomUUID()});
+ const second=new Points('',docs);await second.load();const intent={key:m.key,action:'resolve' as const,winnerId:'victory',requestId:randomUUID()};
+ await Promise.all([p.streamerAction(owner.token,intent),second.streamerAction(owner.token,intent)]);
+ await p.load();assert.equal(p.me(owner.token).streamerEarnings,20);assert.equal(p.me(viewer.token).claimable,960);
+ const saved=JSON.parse(p.exportStateJson());assert.equal(saved.platformRevenue.balance,20);assert.equal(saved.platformRevenue.credits.length,1);
+ await Promise.allSettled([p.claim(viewer.token,m.key,randomUUID()),second.streamerAction(owner.token,{key:m.key,action:'distribute',requestId:randomUUID()})]);
+ await p.load();assert.equal(p.me(viewer.token).balance,9960);assert.equal(p.me(owner.token).balance,10020);
+ assert.equal(p.me(viewer.token).balance+p.me(owner.token).balance+saved.platformRevenue.balance,20000);
 }));

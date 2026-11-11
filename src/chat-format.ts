@@ -82,7 +82,7 @@ export function parseMarketList(text: string): ParsedMarket[] {
     const titleParts = optionStart < 0 ? rest : rest.slice(0, optionStart);
     const optionParts = optionStart < 0 ? [] : rest.slice(optionStart);
     const title = titleParts.join(' · ').trim();
-    if (!code || !title) return undefined;
+    if (!/^[A-Z0-9]{2,8}$/.test(code) || !(Object.hasOwn(PHASE_LABEL, phase) || Object.values(PHASE_LABEL).includes(phase)) || !title) return undefined;
     // Options arrive as `!1 más de 8 62%`: split the trailing share from the label.
     const outcomes = optionParts.map((part) => {
       const match = /^!(\d+)\s+(.*?)(?:\s+(\d+)%)?$/.exec(part);

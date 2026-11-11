@@ -50,19 +50,19 @@ test('unconfigured provider is declared unavailable, never a functional button',
   assert.throws(()=>auth.start(),/todavía no está configurado/);
 }));
 
-test('google login creates the account once and resumes it without a second bonus',()=>fixture(async p=>{
+test('Google login creates an unfunded account; Twitch or Phantom is needed for points',()=>fixture(async p=>{
   const auth=new GoogleAuth(p,config,request,()=>clock);
   const first=auth.start();
   nonceByCode.set('code-1',new URL(first.url).searchParams.get('nonce')!);
   const ticket1=await auth.callback(new URL(first.url).searchParams.get('state')!,first.cookie,'code-1');
   const login=await auth.complete(undefined,ticket1,first.cookie) as {token:string;created:boolean};
-  assert.equal(login.created,true);assert.equal(p.me(login.token).balance,10000);
+  assert.equal(login.created,true);assert.equal(p.me(login.token).balance,0);
   // Repeat login resumes the same account: new session token, same balance.
   const second=auth.start();
   nonceByCode.set('code-2',new URL(second.url).searchParams.get('nonce')!);
   const ticket2=await auth.callback(new URL(second.url).searchParams.get('state')!,second.cookie,'code-2');
   const resume=await auth.complete(undefined,ticket2,second.cookie) as {created:boolean;token:string};
-  assert.equal(resume.created,false);assert.equal(p.me(resume.token).balance,10000);
+  assert.equal(resume.created,false);assert.equal(p.me(resume.token).balance,0);
   assert.notEqual(resume.token,login.token);
 }));
 

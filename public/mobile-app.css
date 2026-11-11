@@ -251,3 +251,92 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-app .phone-outcome,
 .phone-app .phone-outcome[data-chosen="true"],
 .phone-app .phone-outcome .plot-button-content{border-radius:8px!important}
+/* Streamer workspace: the same market cards as the feed, one column in the popup.
+   At 700px: 24 + 652 + 24 = 700. At 360px: 16 + 328 + 16 = 360. */
+.phone-manager{display:grid;gap:12px;padding-bottom:16px;min-width:0}
+.phone-manager-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.phone-manager-heading h2{font-size:23px;margin:0}
+.phone-manager-heading p{margin:6px 0 0;color:#c3b9b2;font-size:14px;overflow-wrap:anywhere}
+.phone-manager-heading>div{min-width:0}
+.phone-manager-heading>button{flex-shrink:0}
+.phone-manager :is(button,input,select){min-height:44px;border-radius:8px}
+.phone-manager .plot-button{height:auto;white-space:normal;padding:10px 14px;box-shadow:none}
+.phone-manager .plot-button-content{gap:8px}
+.phone-manager .button-secondary{background:#302b28;color:#f4f0ed;border:1px solid #59514c}
+.phone-manager :is(input,select){width:100%;min-width:0;padding:10px 12px;background:#181614;color:#f4f0ed;border:1px solid #60564e;font:inherit}
+.phone-manager :is(input,select):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.phone-manager label{display:grid;gap:8px;min-width:0;font-size:14px}
+.phone-manager-heading label{margin-top:8px}
+.phone-manager-panel{padding:18px;border-radius:var(--panel-radius);background:#1b1816;border:1px solid #3b3430}
+.phone-manager-panel h2{font-size:20px;margin:0 0 20px}
+.phone-manager .market-composer{display:grid;gap:18px;margin:0}
+.phone-manager .market-composer fieldset{margin:0;padding:0;border:0;display:grid;gap:10px;min-width:0}
+.phone-manager .market-composer legend{font-size:14px;padding:0;margin-bottom:10px}
+.phone-manager .composer-option{display:flex;align-items:center;gap:8px}
+.phone-manager .composer-option input{flex:1}
+.phone-manager .composer-option>span{min-width:16px;color:#c3b9b2}
+.phone-manager .fine{font-size:13px;color:#c3b9b2;margin:0;line-height:1.5}
+.phone-manager-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.phone-manager-tabs{display:flex;gap:20px}
+.phone-manager-tabs>button{position:relative;border:0;border-radius:0;background:transparent;padding:8px 0;color:#bdb3ac}
+.phone-manager-tabs>button[aria-pressed=true]{color:#f4f0ed}
+.phone-manager-tabs>button[aria-pressed=true]::after{content:'';height:2px;position:absolute;bottom:0;inset-inline:0;background:var(--accent)}
+.phone-manager-markets{display:grid;gap:20px;min-width:0}
+.phone-manager .phone-market{width:100%;display:block}
+.phone-manager .phone-market h2{max-width:none;margin-block:12px 16px}
+.phone-manager .phone-outcomes{grid-template-columns:repeat(2,minmax(0,1fr))}
+.phone-manager .phone-market .phone-outcome{opacity:1;filter:none;padding:12px;min-height:48px}
+.phone-manager .phone-outcome:disabled{cursor:default}
+.phone-manager .phone-outcome:disabled:not([data-chosen=true]){background:#26221f;color:#ddd4cd}
+.phone-manager .phone-outcome[aria-pressed=true]{outline:2px solid var(--choice-ink,var(--accent));outline-offset:2px}
+.phone-manager-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px;padding-top:16px;border-top:1px solid #39322c}
+.phone-manager-actions>p{flex-basis:100%;font-size:14px;line-height:1.5;margin:0;color:#c3b9b2}
+.phone-manager-actions>.plot-button{flex:1 1 180px}
+.phone-manager-confirm{flex-basis:100%;padding:16px;background:#25201c;border-radius:12px;display:grid;gap:12px;min-width:0}
+.phone-manager-confirm h3{font-size:16px;margin:0;color:#f4f0ed;overflow-wrap:anywhere}
+.phone-manager-confirm p{font-size:14px;margin:0;color:#e2d8d0}
+.phone-manager-confirm .phone-receipt{margin:0}
+.phone-manager-confirm-buttons{display:flex;gap:12px;flex-wrap:wrap}
+.phone-manager-confirm-buttons>.plot-button{flex:1 1 140px}
+.phone-manager-preview{display:grid;gap:12px;max-height:180px;overflow:auto}
+.phone-manager-preview p{display:grid;gap:4px;font-size:13px}
+.phone-manager-empty,.phone-manager-notice,.phone-manager-external{font-size:14px;line-height:1.5;margin:0;color:#c3b9b2}
+.phone-manager-empty{padding:18px;background:#1b1816;border-radius:12px}
+.phone-manager .proposal-inbox,.phone-manager .proposal-list{display:grid;gap:20px}
+.phone-manager .console-section-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.phone-manager .console-section-title h2{font-size:20px}
+.phone-manager .proposal-card{padding:18px;border-radius:var(--panel-radius);background:#1b1816;border:1px solid #3b3430;min-width:0}
+.phone-manager .proposal-card h3{font:600 20px/1.3 Fraunces,Georgia,serif;overflow-wrap:anywhere}
+.phone-manager .proposal-meta{font-size:12px;color:#c3b9b2}
+.phone-manager .proposal-options{padding-left:20px;font-size:14px}
+.phone-manager .proposal-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
+@container phone (max-width:22.5rem){.phone-manager-heading{gap:12px}.phone-manager-heading h2{font-size:21px}.phone-manager-heading>.plot-button{padding-inline:10px}}
+
+.phone-manager-toolbar .phone-icon-button svg{width:17px;height:17px;flex:none}
+.phone-manager .phone-market-meta{margin-bottom:12px}
+.phone-manager .phone-pool-split{margin-bottom:14px}
+/* Management choices have no stake subline; keep the result mark beside the option. */
+.phone-market[data-management=true] .phone-outcome[data-chosen=true] .phone-outcome-name{display:block}
+
+/* Entry card shares the app's surface, typography and controls. */
+.phone-nav[hidden],.phone-balance[hidden]{display:none}
+.phone-sign-in{padding:24px;background:var(--surface,#161616);border:1px solid rgb(255 255 255 / .15);border-radius:20px;text-align:left}
+.phone-sign-in h2{margin:0 0 12px;font-size:24px;line-height:1.2}
+.phone-sign-in p{margin:0 0 24px;font-size:14px;line-height:1.5;max-width:38ch}
+.phone-sign-in-actions{display:grid;gap:12px}
+.phone-sign-in-actions [data-slot=button]{width:100%;min-height:48px;justify-content:center}
+.phone-bet-sheet .phone-sign-in{margin-top:20px}
+
+.phone-app[data-signed-in=false] .phone-content{padding-top:96px;scroll-padding-top:96px}
+
+.points-fees{padding:14px 0;font-size:13px}.points-fees dl{display:grid;gap:8px;margin:0}.points-fees dl>div{display:flex;justify-content:space-between;gap:16px}.points-fees dt{font-weight:400}.points-fees dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}.points-fees dl>div:last-child{font-weight:600}.points-fees p,.points-fee-note{font-size:12px;line-height:1.5;margin:12px 0 0}.phone-bet-sheet .points-fees{max-height:180px;overflow:auto}
+.phone-bet-sheet .phone-confirm{position:sticky;bottom:0;z-index:2}
+
+/* Resolution uses the extension card at the width of its web container. */
+.phone-app .plot-resolution{container-type:inline-size}
+.phone-app .plot-resolution.count .resolution-net{font-size:clamp(48px,16cqw,80px)}
+.phone-app .plot-resolution .points-claim{width:100%;min-height:44px}
+.phone-app .plot-resolution .resolution-detail-toggle{min-height:44px}
+.market-detail .phone-bets{grid-template-columns:minmax(0,1fr)}
+.phone-app .plot-resolution .resolution-net{color:inherit!important}
+.phone-app .plot-resolution .resolution-detail-toggle{border-radius:0;border:0;border-top:1px solid #ffffff20;background:transparent;box-shadow:none}

@@ -1,4 +1,4 @@
-import {parsePlotCommand,plotChatHelp} from '../plot-chat.js';
+import {parsePlotCommand,plotChatHelp,PlotCommandError,type PlotCommand} from '../plot-chat.js';
 import {createHash,createHmac,randomBytes,timingSafeEqual} from 'node:crypto';
 import {z} from 'zod';
 import {Points,CHAT_BET_POINTS} from '../points.js';
@@ -6,7 +6,15 @@ import {closesAt,type Prediction} from '../prediction.js';
 import {TwitchSource} from '../twitch-source.js';
 import {joinPath} from '../public-paths.js';
 import {splitChatReply} from '../chat-format.js';
+import {ProposalError} from '../proposals.js';
 import type {Documents} from './documents.js';
+
+/** Publish only deliberate domain messages; storage/network failures may contain private details. */
+function commandError(error:unknown):string{
+ if(error instanceof PlotCommandError||error instanceof ProposalError)return error.message;
+ if(error instanceof z.ZodError)return 'El comando tiene datos inválidos. Consultá !plot ayuda para ver cómo usarlo.';
+ return 'Ocurrió un error al procesar el comando. Probá de nuevo en unos segundos.';
+}
 
 type OriginSource=string|(()=>string);
 type Config={clientId:string;clientSecret:string;origin:OriginSource;webhookOrigin?:OriginSource;login?:string};
@@ -165,26 +173,33 @@ export class CloudTwitchBot {
   const auth=await this.documents.read('twitch-bot-auth',authState),p=await this.points(),channel=p.enabledBotChannels().find(c=>c.id===event.broadcaster_user_id);
   if(!channel||!auth.bot||data.subscription.condition?.user_id!==auth.bot.id||event.chatter_user_id===auth.bot.id)return {status:204,body:''};
   const plotMatch=/^!plot(?:\s+([\s\S]*))?$/i.exec(event.message.text.trim());
-  if(plotMatch?.[1]){
-   // External evidence and account resolution happen BEFORE the runtime update: nested documents.updates
-   // inside this callback deadlock the serial local queue and nest cloud transactions (root finding).
-   const verifiedModerator=event.chatter_user_id!==channel.id&&await this.isModerator(channel,event.chatter_user_id);
-   const linked=event.chatter_user_id!==channel.id&&!verifiedModerator?await p.accountForTwitch(event.chatter_user_id):null;
+  if(plotMatch){
+   // Resolve only evidence needed for this command, before the serial runtime transaction.
+   // isModerator updates documents itself, so calling it inside the callback would deadlock locally.
+   let command:PlotCommand|undefined,verifiedModerator=false,linked:{accountId:string}|null=null,preparationError:string|undefined;
+   try{
+    command=parsePlotCommand(event.message.text);
+    if(command?.kind==='create'&&event.chatter_user_id!==channel.id){
+     verifiedModerator=await this.isModerator(channel,event.chatter_user_id);
+     if(!verifiedModerator&&this.proposals)linked=await this.proposals.accountForTwitch(event.chatter_user_id);
+    }
+   }catch(error){preparationError=commandError(error);}
    await this.documents.update('twitch-bot-runtime',runtime,async s=>{
     this.prune(s);const id=headers['twitch-eventsub-message-id'],key=`command:${id}`;if(s.events[id])return;
-    if(event.chatter_user_id!==channel.id){if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();}
      let reply:string;
-     try{const command=parsePlotCommand(event.message.text);
-      if(command&&command.kind==='create'&&event.chatter_user_id!==channel.id&&!verifiedModerator&&this.proposals){
+     try{
+      if(preparationError)reply=preparationError;
+      else if(command?.kind==='create'&&event.chatter_user_id!==channel.id&&!verifiedModerator){
+       if(!this.proposals)throw new Error('Proposal adapter unavailable');
        // Same !plot crear, viewer role: register a pending proposal for the linked Plot account.
        if(!linked)reply='Iniciá sesión y vinculá tu Twitch con Plot para proponer predicciones.';
        else{
         const proposal=await this.proposals.submit({channel:{id:channel.id,login:channel.login},actor:{accountId:linked.accountId,twitchId:event.chatter_user_id},origin:'chat',intentId:id,input:{title:command.title,options:command.options}});
         reply=proposal.text;
        }
-      }else reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id,verifiedModerator)).text:plotChatHelp;
+      }else reply=command?(await p.plotCommand(channel.id,event.chatter_user_id,command,id,verifiedModerator)).text:plotMatch[1]?plotChatHelp:`Plot: las predicciones de @${channel.login} están acá. Crear o proponer: !plot crear Pregunta, Sí, No · Listar: !plot mercados · Ayuda: !plot ayuda`;
 
-     }catch(e){reply=(e as Error).message;}
+     }catch(e){reply=commandError(e);}
     s.events[id]=this.now();
     // A market list becomes one short message per market (Twitch has no line breaks and caps at 500
     // characters); the channel link is appended once, on the last message.
@@ -203,12 +218,6 @@ export class CloudTwitchBot {
    await this.documents.update('twitch-bot-runtime',runtime,s=>{this.prune(s);const key=`chat:${headers['twitch-eventsub-message-id']}`;if(s.events[key])return;s.events[key]=this.now();s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`@${event.chatter_user_id}: ${reply}`.slice(0,500),createdAt:this.now(),status:'pending'};});
    return {status:204,body:''};
   }
-  if(!/^!plot(?:\s|$)/i.test(event.message.text))return {status:204,body:''};
-  await this.documents.update('twitch-bot-runtime',runtime,s=>{
-   this.prune(s);const id=headers['twitch-eventsub-message-id'];if(s.events[id])return;s.events[id]=this.now();
-   if(this.now()-(s.cooldowns[channel.id]??0)<30_000)return;s.cooldowns[channel.id]=this.now();
-   const key=`command:${id}`;s.outbox[key]={id:key,channelId:channel.id,epoch:channel.epoch,text:`Plot: las predicciones de @${channel.login} están acá: ${this.channelUrl(channel.login)} · Crear: !plot crear Pregunta, Sí, No · Ayuda: !plot ayuda`,createdAt:this.now(),status:'pending'};
-  });
   return {status:204,body:''};
  }
  private prune(s:Runtime){for(const [key,at] of Object.entries(s.events))if(at<this.now()-600_000)delete s.events[key];const events=Object.entries(s.events).sort((a,b)=>b[1]-a[1]);for(const [key] of events.slice(5000))delete s.events[key];for(const [key,job] of Object.entries(s.outbox))if(!key.startsWith('welcome:')&&job.createdAt<this.now()-86400_000)delete s.outbox[key];}
@@ -230,8 +239,8 @@ export class CloudTwitchBot {
    if(!own.length)await p.accept(open);
    // Each new intentional chat event is a new bet; a replayed EventSub message hits the same receipt and does not double-debit.
    await p.chatBet(chatterId,key,chosen.id,`chat:${messageId}:${chatterId}:${open.id}:${chosen.id}`);
-   return `Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}". Revisá tus predicciones en ${this.channelUrl(channel.login)}.`;
-  }catch(e){return (e as Error).message.slice(0,300);}
+   return `Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}". Del pozo se descuenta 2% para el streamer y 2% para Plot. Revisá tus predicciones en ${this.channelUrl(channel.login)}.`;
+  }catch(e){return commandError(e);}
  }
  private async accessToken(){
   if(this.appToken&&this.appToken.expires>this.now()+60_000)return this.appToken.value;

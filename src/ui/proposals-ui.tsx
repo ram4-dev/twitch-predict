@@ -1,6 +1,6 @@
 /** Plan 2 — proposal components shared by the streamer inbox and the author's "Mis propuestas".
  * Accessible by default: no hover-only information, no color-only state, keyboard reachable, reduced-motion safe. */
-import {useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from './components/button.js';
 import {Badge} from './components/badge.js';
 import type {ProposalsClient,ProposalItem} from './proposals-client.js';
@@ -32,8 +32,18 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
   const [loaded,setLoaded]=useState(initial?.loaded??false);
   const [busy,setBusy]=useState<string>();
   const [message,setMessage]=useState('');
-  const refresh=async()=>{try{const data=await client.forChannel(channelId);setProposals(data.proposals);setLoaded(true);}catch(e){setMessage((e as Error).message);}};
-  if(!loaded)void refresh();
+  const [loadError,setLoadError]=useState('');
+  const requestSequence=useRef(0);
+  const refresh=useCallback(async()=>{
+    const sequence=++requestSequence.current;
+    try{const data=await client.forChannel(channelId);if(sequence!==requestSequence.current)return;setProposals(data.proposals);setLoaded(true);setLoadError('');}
+    catch(e){if(sequence!==requestSequence.current)return;setLoaded(true);setLoadError((e as Error).message);}
+  },[client,channelId]);
+  useEffect(()=>{
+    if(!initial?.loaded)void refresh();
+    const timer=setInterval(()=>void refresh(),5000);
+    return ()=>{clearInterval(timer);requestSequence.current++;};
+  },[refresh,initial?.loaded]);
   const act=async(action:'accept'|'reject'|'withdraw',proposal:ProposalItem)=>{
     setBusy(proposal.id);setMessage('');
     try{
@@ -48,7 +58,9 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
   return <section className="proposal-inbox" aria-label="Bandeja de propuestas">
     <div className="console-section-title"><h2>Propuestas</h2><Badge variant="secondary">{pending.length} pendientes</Badge></div>
     {message&&<p role="status">{message}</p>}
-    {loaded&&!proposals.length&&<p className="console-empty">Todavía no hay propuestas para este canal.</p>}
+    {loadError&&<p role="alert">{loadError} <Button variant="ghost" onClick={()=>void refresh()}>Reintentar</Button></p>}
+    {!loaded&&<p role="status">Cargando propuestas…</p>}
+    {loaded&&!loadError&&!proposals.length&&<p className="console-empty">Todavía no hay propuestas para este canal.</p>}
     <div className="proposal-list">{proposals.map(p=><ProposalCard key={p.id} proposal={p}>{p.status==='pending'&&
       <div className="proposal-actions">
         <Button className="console-primary" disabled={busy===p.id} onClick={()=>void act('accept',p)}>{busy===p.id?'Publicando…':'Aceptar y publicar'}</Button>
@@ -86,6 +98,7 @@ export function MarketComposer({mode,onSubmit,channelLabel,defaultDuration=120}:
     const cleaned=options.map(o=>o.trim()).filter(Boolean);
     if(!title.trim()||cleaned.length<2)return setMessage('Completá la pregunta y al menos dos opciones.');
     if(new Set(cleaned.map(o=>o.toLocaleLowerCase())).size!==cleaned.length)return setMessage('Las opciones deben ser distintas entre sí.');
+    if(!Number.isInteger(Number(duration))||Number(duration)<30||Number(duration)>1800)return setMessage('Usá una duración entre 30 y 1800 segundos.');
     setBusy(true);
     try{const result=await onSubmit({title:title.trim(),options:cleaned,durationSeconds:Number(duration)||defaultDuration});
       setOk(mode==='propose'?`Propuesta ${result.shortId??''} enviada; pendiente de aprobación.`:'Mercado publicado.');
@@ -100,7 +113,7 @@ export function MarketComposer({mode,onSubmit,channelLabel,defaultDuration=120}:
         {options.length>2&&i>=2&&<Button type="button" variant="ghost" aria-label={`Quitar opción ${i+1}`} onClick={()=>setOptions(c=>c.filter((_,j)=>j!==i))}>×</Button>}</label>)}
       {options.length<6&&<Button type="button" variant="ghost" onClick={()=>setOptions(c=>[...c,''])}>Agregar opción</Button>}
     </fieldset>
-    <label>Duración de apuestas (segundos)<input type="number" min={30} max={86400} value={duration} onChange={e=>setDuration(e.target.value)}/></label>
+    <label>Duración de apuestas (segundos)<input type="number" min={30} max={1800} value={duration} onChange={e=>setDuration(e.target.value)}/></label>
     <p className="fine">Canal: {channelLabel} · {mode==='propose'?'Se envía como propuesta para aprobación del streamer.':'Se publica según tu rol en el canal.'}</p>
     {message&&<p role="alert">{message}</p>}
     {ok&&<p role="status">{ok}</p>}
