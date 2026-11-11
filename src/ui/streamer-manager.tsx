@@ -4,6 +4,7 @@ import type {Points} from '../points.js';
 import type {AppAccount,AppMarket,AppTheme} from './mobile-app-data.js';
 import {UserMarketCard} from './components/user-market-card.js';
 import {Resolution} from './components/resolution.js';
+import {StreamerMarketState} from './components/streamer-market-state.js';
 import {PointsFees} from './components/points-fees.js';
 import {Button} from './components/button.js';
 import {MarketComposer,ProposalInbox} from './proposals-ui.js';
@@ -78,7 +79,7 @@ function ManagedMarket({market:m,account,theme,onChanged}:{market:AppMarket;acco
   const own=account.bets.filter(b=>b.marketKey===m.key);
   const stake=own.reduce((sum,b)=>sum+b.amount,0),payout=own.reduce((sum,b)=>sum+b.payout,0),pending=own.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0);
   const earned=account.ledger.filter(entry=>entry.kind==='streamer_fee'&&entry.marketKey===m.key).reduce((sum,entry)=>sum+entry.delta,0);
-  return <div data-streamer-key={m.key} data-phase={m.phase}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} reason={m.phase==='void'?m.reason:undefined} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} spectatorMessage={earned?`Recibiste ${number(earned)} pts de comisión.`:m.fees?.streamer?'La comisión del streamer se registra por separado.':undefined} material="count"><PointsFees pool={m.totalPoints} fees={m.fees} canceled={m.phase==='void'} historical/>{pending>0&&<Button disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></div>;
+  return <div data-streamer-key={m.key} data-phase={m.phase}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} reason={m.phase==='void'?m.reason:undefined} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} spectatorMessage={earned?`Recibiste ${number(earned)} pts de comisión.`:m.fees?.streamer?'La comisión del streamer se registra por separado.':undefined} material="count" resultContent={<StreamerMarketState market={m}/>}><PointsFees pool={m.totalPoints} fees={m.fees} canceled={m.phase==='void'} historical/>{pending>0&&<Button disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></div>;
  }
  const canManage=m.source==='plot';
  return <div data-streamer-key={m.key} data-phase={m.phase}><UserMarketCard market={m} theme={theme} management chosenOutcome={m.winnerId??winner} onDetail={()=>{}} onChoose={({outcome})=>{if(!busy&&canManage){setWinner(outcome);setPreview(undefined);setError('');}}}>

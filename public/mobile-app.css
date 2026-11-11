@@ -360,3 +360,11 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 
 .phone-manager .phone-market[data-management] .phone-outcome:focus-visible{outline:2px solid #ff9c78;outline-offset:3px}
 @container phone (max-width:30rem){.phone-manager .phone-outcomes{grid-template-columns:minmax(0,1fr)}}
+
+.phone-manager .manager-market-state[data-state=resolved]{background:#193a29}
+.phone-manager .manager-market-state[data-state=resolved] .manager-state-title{color:#91e4b5}
+.phone-manager .manager-market-state[data-state=void]{background:#352d1d}
+.phone-manager .manager-market-state[data-state=void] .manager-state-title{color:#f2cc86}
+.phone-manager .manager-state-loser{display:flex;align-items:flex-start;gap:8px;font-size:16px;line-height:1.4;margin:0;color:#ffabb8!important;overflow-wrap:anywhere}
+.phone-manager .manager-state-loser svg{flex:none;margin-top:3px}
+.phone-manager .plot-resolution .manager-market-state{margin-top:16px;margin-bottom:0}

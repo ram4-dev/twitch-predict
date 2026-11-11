@@ -30,3 +30,31 @@ test('state-first manager clearly separates open, pending choice and external re
  market.source=undefined;await page.reload();await expect(state.locator('.manager-state-title')).toHaveText('Esperando resultado');await expect(state).toContainText('Twitch confirmará el resultado.');await expect(blue).toBeDisabled();await expect(card.getByRole('button',{name:'Revisar resultado',exact:true})).toHaveCount(0);
  expect(writes).toEqual(['/api/streamer/action']);expect(errors).toEqual([]);
 });
+
+test('finished streamer markets show the confirmed winner or annulment prominently, without live writes',async({page})=>{
+ const data=demoSnapshot(),market=data.markets[0],account=data.account!;
+ account.streamerChannels=['ramitapai'];account.bets=[];market.source='plot';market.phase='resolved';market.canBet=false;market.winnerId='yes';
+ const writes:string[]=[];page.on('request',r=>{if(r.method()!=='GET')writes.push(r.url());});
+ await page.addInitScript(()=>localStorage.setItem('pointsToken','finished-state-fixture'));
+ await page.route('**/api/**',route=>{
+  const path=new URL(route.request().url()).pathname;
+  return route.fulfill({json:path==='/api/points/me'?account:path==='/api/streamer/console'?{channels:['ramitapai'],markets:[market]}:path==='/api/markets'?[market]:path==='/api/channels'?{channels:['ramitapai']}:{proposals:[]}});
+ });
+ for(const phase of ['resolved','void'] as const){
+  market.phase=phase;market.reason=phase==='void'?'No hubo apuestas a la opción ganadora. Todas las apuestas fueron reembolsadas.':undefined;
+  await page.goto('/app');const card=page.locator('[data-streamer-key]'),state=card.getByRole('status',{name:'Estado del mercado'});
+  await expect(state).toHaveAttribute('data-state',phase);
+  if(phase==='resolved'){
+   await expect(state.locator('.manager-state-title')).toHaveText('Ganó Sí');await expect(state.locator('.manager-state-title')).toHaveCSS('color','rgb(145, 228, 181)');await expect(state.locator('.manager-state-loser')).toHaveText('Perdió No');await expect(state.locator('.manager-state-loser')).toHaveCSS('color','rgb(255, 171, 184)');
+  }else{
+   await expect(state.locator('.manager-state-title')).toHaveText('Mercado anulado');await expect(state.locator('.manager-state-title')).toHaveCSS('color','rgb(242, 204, 134)');await expect(state.locator('.manager-state-loser')).toHaveCount(0);await expect(card.locator('.resolution-reason')).toContainText('No hubo apuestas a la opción ganadora');await expect(state).not.toContainText('Ganó');
+  }
+  await expect(card.locator('.resolution-result')).toHaveCount(0);await expect(card.getByRole('button',{name:/Elegir ganador|Confirmar ganador|Revisar resultado/})).toHaveCount(0);
+  for(const width of [360,700,1440]){
+   await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   expect(await state.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);expect(await state.locator('.manager-state-title').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(28);
+   await page.screenshot({path:`test-results/streamer-finished-${phase}-${width}.png`});
+  }
+ }
+ expect(writes).toEqual([]);
+});
