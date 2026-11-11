@@ -49,6 +49,7 @@ test('finished streamer markets show the confirmed winner or annulment prominent
   }else{
    await expect(state.locator('.manager-state-title')).toHaveText('Mercado anulado');await expect(state.locator('.manager-state-title')).toHaveCSS('color','rgb(242, 204, 134)');await expect(state.locator('.manager-state-loser')).toHaveCount(0);await expect(card.locator('.resolution-reason')).toContainText('No hubo apuestas a la opción ganadora');await expect(state).not.toContainText('Ganó');
   }
+  await expect(card.getByRole('region',{name:'Ganancia del streamer'})).toContainText('0pts');for(const text of ['No participaste','No se modificó tu saldo.','Liquidado antes de aplicar comisiones.'])await expect(card).not.toContainText(text);
   await expect(card.locator('.resolution-result')).toHaveCount(0);await expect(card.getByRole('button',{name:/Elegir ganador|Confirmar ganador|Revisar resultado/})).toHaveCount(0);
   for(const width of [360,700,1440]){
    await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
