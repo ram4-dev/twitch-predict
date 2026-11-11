@@ -340,3 +340,23 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .market-detail .phone-bets{grid-template-columns:minmax(0,1fr)}
 .phone-app .plot-resolution .resolution-net{color:inherit!important}
 .phone-app .plot-resolution .resolution-detail-toggle{border-radius:0;border:0;border-top:1px solid #ffffff20;background:transparent;box-shadow:none}
+
+/* State-first market cards in the streamer workspace. */
+.phone-manager .manager-market-state{display:grid;gap:10px;padding:18px;margin:0 0 16px;border-radius:8px;background:#262626;min-width:0}
+.phone-manager .manager-market-state[data-state=open]{background:#183126}
+.phone-manager .manager-market-state[data-state=locked],.phone-manager .manager-market-state[data-state=waiting]{background:#352d1d}
+.phone-manager .manager-market-state[data-state=selected]{background:#193a29}
+.phone-manager .manager-state-label{display:flex;align-items:center;gap:8px;font-size:13px;margin:0;color:#c8c8c8!important}
+.phone-manager .manager-state-title{font-size:clamp(28px,5cqw,36px);line-height:1.15;letter-spacing:-.04em;font-weight:650;overflow-wrap:anywhere;color:#f4f4f4}
+.phone-manager .manager-market-state:is([data-state=open],[data-state=selected]) .manager-state-title{color:#91e4b5}
+.phone-manager .manager-market-state:is([data-state=locked],[data-state=waiting]) .manager-state-title{color:#f2cc86}
+.phone-manager .manager-state-caption{font-size:13px;line-height:1.5;margin:0;color:#d0d0d0!important}
+.phone-manager .phone-market[data-management] .phone-outcome{background:#252525;box-shadow:none;border:1px solid #494949;border-radius:8px;justify-content:flex-start;text-align:left}
+.phone-manager .phone-market[data-management] .phone-outcome-name{font-size:21px;font-weight:600;line-height:1.2;letter-spacing:-.02em;overflow-wrap:anywhere}
+.phone-manager .phone-market[data-management] .phone-percentage{font-size:13px;font-weight:400}
+.phone-manager .phone-market[data-management] .phone-outcome[data-chosen=true]{background:#193a29;border-color:#91e4b5;outline:none}
+.phone-manager .phone-market[data-management] .phone-outcome[data-chosen=true] .phone-outcome-name{color:#91e4b5!important}
+@container phone (max-width:22.5rem){.phone-manager .manager-market-state{padding:16px}.phone-manager .phone-market[data-management] .phone-outcome-name{font-size:19px}}
+
+.phone-manager .phone-market[data-management] .phone-outcome:focus-visible{outline:2px solid #ff9c78;outline-offset:3px}
+@container phone (max-width:30rem){.phone-manager .phone-outcomes{grid-template-columns:minmax(0,1fr)}}

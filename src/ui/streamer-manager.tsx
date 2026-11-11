@@ -83,7 +83,6 @@ function ManagedMarket({market:m,account,theme,onChanged}:{market:AppMarket;acco
  const canManage=m.source==='plot';
  return <div data-streamer-key={m.key} data-phase={m.phase}><UserMarketCard market={m} theme={theme} management chosenOutcome={m.winnerId??winner} onDetail={()=>{}} onChoose={({outcome})=>{if(!busy&&canManage){setWinner(outcome);setPreview(undefined);setError('');}}}>
   {canManage?<div className="phone-manager-actions">
-   <p>{m.phase==='open'?'Cerrá las apuestas para elegir el ganador.':'Elegí la opción ganadora.'}</p>
    {m.phase==='open'?<Button variant="secondary" disabled={busy} onClick={()=>void run('lock')}>{busy?'Cerrando…':'Cerrar apuestas'}</Button>:<>
     <Button variant="secondary" disabled={busy||!winner} onClick={()=>void prepare('resolve')}>{busy?'Calculando…':'Revisar resultado'}</Button>
     <Button variant="ghost" disabled={busy} onClick={()=>void prepare('cancel')}>Cancelar y reembolsar</Button>
