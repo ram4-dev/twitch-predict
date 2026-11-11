@@ -68,7 +68,7 @@ test('native chat bets settle and claim with existing point conservation and rec
  await assert.rejects(p.chatBet('456',key,'1','after-close'),/cerrada/);
  await p.plotCommand('123','123',{kind:'resolve',option:1},'resolve');
  assert.equal(p.market(key).winnerId,'1');assert.equal(p.market(key).phase,'resolved');
- const paid=await p.claim(viewer,key,randomUUID()) as {paid:number};assert.equal(paid.paid,200);assert.equal(p.me(viewer).balance,10100);assert.equal(p.me(owner).balance,10000);assert.equal(p.me(losingViewer.token).balance,9900);
+ const paid=await p.claim(viewer,key,randomUUID()) as {paid:number};assert.equal(paid.paid,192);assert.equal(p.me(viewer).balance,10092);assert.equal(p.me(owner).balance,10004);assert.equal(p.me(losingViewer.token).balance,9900);
  await p.plotCommand('123','123',{kind:'resolve',option:1},'resolve');
  await assert.rejects(p.plotCommand('123','123',{kind:'resolve',option:2},'change-winner'),/No hay/);
 }));

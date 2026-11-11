@@ -29,11 +29,11 @@ test('batch distribution and consumer claims race safely, credit offline wallets
   await action(p,owner.token,m.key,'lock');await action(p,owner.token,m.key,'resolve','victory');
   const request={key:m.key,action:'distribute' as const,requestId:randomUUID()};
   await Promise.allSettled([p.claim(a.token,m.key,randomUUID()),p.streamerAction(owner.token,request),p.streamerAction(owner.token,request)]);
-  assert.equal(p.me(a.token).balance,10150);assert.equal(p.me(b.token).balance,10450);assert.equal(p.me(c.token).balance,9400);
-  assert.equal(p.streamerConsole(owner.token).markets[0].pending,0);assert.equal(p.streamerConsole(owner.token).markets[0].credited,1000);
+  assert.equal(p.me(a.token).balance,10140);assert.equal(p.me(b.token).balance,10420);assert.equal(p.me(c.token).balance,9400);
+  assert.equal(p.streamerConsole(owner.token).markets[0].pending,0);assert.equal(p.streamerConsole(owner.token).markets[0].credited,960);
   await assert.rejects(p.claim(b.token,m.key,randomUUID()),/pendientes/);assert.equal((await action(p,owner.token,m.key,'distribute')).paid,0);
-  const loaded=new Points(dir);await loaded.load();await loaded.streamerAction(owner.token,request);assert.equal(loaded.me(b.token).balance,10450);assert.equal(loaded.me(b.token).ledger.filter(l=>l.kind==='distribution').length,1);
-  assert.equal([a,b,c].reduce((n,x)=>n+loaded.me(x.token).balance,0),30000);
+  const loaded=new Points(dir);await loaded.load();await loaded.streamerAction(owner.token,request);assert.equal(loaded.me(b.token).balance,10420);assert.equal(loaded.me(b.token).ledger.filter(l=>l.kind==='distribution').length,1);
+  assert.equal([a,b,c].reduce((n,x)=>n+loaded.me(x.token).balance,0),29960);
 }));
 test('cancel and no winning bets refund every wallet and repeated distributions are harmless',()=>fixture(async p=>{
   const owner=await p.walletLogin('owner'),a=await p.walletLogin('a');await p.assignStreamer('demo_streamer','owner');
@@ -49,10 +49,10 @@ test('cancel and no winning bets refund every wallet and repeated distributions 
 test('Twitch automatic resolution is visible to streamer and can be distributed without changing winner',()=>fixture(async p=>{
   const owner=await p.walletLogin('owner'),a=await p.walletLogin('a');const source=demoPrediction();await p.assignStreamer(source.channel,'owner');const m=await p.accept(source);
   await p.bet(a.token,m.key,'victory',300,randomUUID());await p.accept({...source,status:'RESOLVED',winningOutcomeId:'victory'});
-  assert.equal(p.market(m.key).settlement?.source,'twitch');await assert.rejects(action(p,owner.token,m.key,'cancel'),/resuelto/);await action(p,owner.token,m.key,'distribute');assert.equal(p.me(a.token).balance,10000);
+  assert.equal(p.market(m.key).settlement?.source,'twitch');await assert.rejects(action(p,owner.token,m.key,'cancel'),/resuelto/);await action(p,owner.token,m.key,'distribute');assert.equal(p.me(a.token).balance,9988);
 }));
 test('failed batch persistence credits nobody and successful retry credits exactly once',()=>fixture(async(p,dir)=>{
   const owner=await p.walletLogin('owner'),a=await p.walletLogin('a');const source=demoPrediction();await p.assignStreamer(source.channel,'owner');const m=await p.accept(source,true);await p.bet(a.token,m.key,'victory',500,randomUUID());await p.demoResolve(m.key,'victory');
-  await rename(`${dir}/points.json`,`${dir}/points.backup`);await mkdir(`${dir}/points.json`);await assert.rejects(action(p,owner.token,m.key,'distribute'));assert.equal(p.me(a.token).balance,9500);assert.equal(p.me(a.token).claimable,500);
-  await rm(`${dir}/points.json`,{recursive:true});await rename(`${dir}/points.backup`,`${dir}/points.json`);await action(p,owner.token,m.key,'distribute');assert.equal(p.me(a.token).balance,10000);
+  await rename(`${dir}/points.json`,`${dir}/points.backup`);await mkdir(`${dir}/points.json`);await assert.rejects(action(p,owner.token,m.key,'distribute'));assert.equal(p.me(a.token).balance,9500);assert.equal(p.me(a.token).claimable,480);
+  await rm(`${dir}/points.json`,{recursive:true});await rename(`${dir}/points.backup`,`${dir}/points.json`);await action(p,owner.token,m.key,'distribute');assert.equal(p.me(a.token).balance,9980);
 }));

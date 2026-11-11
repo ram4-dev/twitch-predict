@@ -239,7 +239,7 @@ export class CloudTwitchBot {
    if(!own.length)await p.accept(open);
    // Each new intentional chat event is a new bet; a replayed EventSub message hits the same receipt and does not double-debit.
    await p.chatBet(chatterId,key,chosen.id,`chat:${messageId}:${chatterId}:${open.id}:${chosen.id}`);
-   return `Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}". Revisá tus predicciones en ${this.channelUrl(channel.login)}.`;
+   return `Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}". Del pozo se descuenta 2% para el streamer y 2% para Plot. Revisá tus predicciones en ${this.channelUrl(channel.login)}.`;
   }catch(e){return commandError(e);}
  }
  private async accessToken(){

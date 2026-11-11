@@ -46,6 +46,6 @@ test('streamer creates a Plot prediction in chat; viewer stakes on the public pa
   await send('!plot cerrar');await send('!plot resolver 1');
   await viewer.reload();await expect(viewer.getByText('¿Ganamos la partida?',{exact:true})).toBeVisible();
   const claim=await viewer.evaluate(async key=>{const r=await fetch('/api/points/claim',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')}`},body:JSON.stringify({key,requestId:crypto.randomUUID()})});return {status:r.status,body:await r.json()};},native[0].key);
-  expect(claim.status).toBe(200);expect(claim.body.paid).toBe(100);expect(claim.body.balance).toBe(10000);
+  expect(claim.status).toBe(200);expect(claim.body.paid).toBe(96);expect(claim.body.balance).toBe(9996);
  }finally{await viewerContext.close();}
 });

@@ -19,7 +19,7 @@ test('Twitch is a first-class login: no wallet required for points, bets or clai
  assert.equal(p.me(viewer.token).balance,9500);
  await p.demoResolve(m.key,'victory');
  const claim=await p.claim(viewer.token,m.key,randomUUID()) as {paid:number};
- assert.equal(claim.paid,500);assert.equal(p.me(viewer.token).balance,10000);
+ assert.equal(claim.paid,480);assert.equal(p.me(viewer.token).balance,9980);
  assert.equal(p.me(viewer.token).wallet,null);
 }));
 

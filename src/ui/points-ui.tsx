@@ -10,6 +10,7 @@ import {Resolution} from './components/resolution.js';
 import {Badge} from './components/badge.js';
 import type {Points} from '../points.js';
 type Market=ReturnType<Points['market']>;
+import {PointsFees} from './components/points-fees.js';
 type Account=ReturnType<Points['me']>;
 type Form={amount:number|string;busy:boolean;message:string;failed:boolean;pending?:{fingerprint:string;id:string}};
 type Action={type:'render'}|{type:'bet'|'claim';market:Market;form:Form;outcomeId?:string;amount?:number};
@@ -57,7 +58,7 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
   const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message=extension?'Enter a whole amount within your balance.':'Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
   if(extension&&['resolved','void'].includes(market.phase)){
     const payout=own.reduce((n,b)=>n+b.payout,0);
-    return <Resolution english key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} reason={market.phase==='void'?market.reason:undefined} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}>
+    return <Resolution english key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} reason={market.phase==='void'?market.reason:undefined} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}><PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical english/>
       {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recover':'Claim'} {fmt(pending)} pts<ArrowUpRight size={16}/></Button>}
       {payout>0&&pending===0&&<p className="resolution-credited">{market.phase==='void'?'Refund credited':'Payout credited'} · {fmt(payout)} pts</p>}
       {market.reason&&<p className="points-rule">{market.reason}</p>}
@@ -87,7 +88,7 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
     {market.phase==='resolved'&&stake>0&&!own.some(b=>b.payout)&&<p className="points-position">{extension?'Your option did not win. There are no points to claim.':'Tu opción no ganó. No hay puntos para cobrar.'}</p>}
     {market.reason&&<p className="points-rule">{market.reason}</p>}
     {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?<><Loader2 size={14} className="animate-spin"/> {extension?'Saving…':'Guardando operación…'}</>:form.message}</p>}
-    <p className="points-rule">{extension?'The pool is split among the winners, in proportion to the points they staked. No fee.':'El pozo se reparte entre quienes ganan, según sus puntos apostados. Sin comisión.'}</p>
+    <PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical={market.phase==='resolved'} english={extension}/>
   </>;
 }
 export async function performPointsAction(action:Action,client:Client,refresh:()=>Promise<void>,english=false){

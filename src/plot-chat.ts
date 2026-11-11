@@ -9,7 +9,7 @@ export type PlotCommand={kind:'create';title:string;options:string[]}
  |{kind:'list'}
  |{kind:'bet';id?:string;option:number};
 
-export const plotChatHelp='Crear o proponer: !plot crear Pregunta, Sí, No · Listar: !plot mercados · Apostar: !plot apostar M7K2, 1 · Cerrar: !plot cerrar M7K2 · Resolver: !plot resolver M7K2, 1 · Cancelar: !plot cancelar M7K2 (usá "comillas" si el texto tiene comas)';
+export const plotChatHelp='Crear o proponer: !plot crear Pregunta, Sí, No · Listar: !plot mercados · Apostar: !plot apostar M7K2, 1 · Cerrar: !plot cerrar M7K2 · Resolver: !plot resolver M7K2, 1 · Cancelar: !plot cancelar M7K2 (usá "comillas" si el texto tiene comas). Comisión del pozo: 2% streamer + 2% Plot; sin comisión al reembolsar.';
 
 /** Splits on commas or pipes outside double quotes; a quoted field keeps its separators. */
 function fields(argument:string):string[] {

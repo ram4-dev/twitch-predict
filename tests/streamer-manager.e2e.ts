@@ -29,7 +29,7 @@ test('streamer workspace replaces betting tabs, creates a real market and confir
  const viewer=await browser.newPage();await signIn(viewer);await api(viewer,'/api/points/bet',{key,outcomeId:'1',amount:120,requestId:randomUUID()});await viewer.close();
  await card.getByRole('button',{name:'Cerrar apuestas',exact:true}).click();await expect(card).toHaveAttribute('data-phase','locked');await expect(card.getByRole('button',{name:'Revisar resultado',exact:true})).toBeDisabled();
  await card.getByRole('button',{name:'Elegir ganador: Equipo Rojo',exact:true}).click();await expect(card.getByRole('button',{name:'Elegir ganador: Equipo Rojo',exact:true})).toHaveAttribute('aria-pressed','true');await card.getByRole('button',{name:'Revisar resultado',exact:true}).click();
- const preview=card.getByRole('region',{name:'Confirmar liquidación'});await expect(preview).toContainText('Ganador: Equipo Rojo');await expect(preview).toContainText('120 pts');await expect(preview).toContainText('Cobro total 120 pts · Neto 0 pts');
+ const preview=card.getByRole('region',{name:'Confirmar liquidación'});await expect(preview).toContainText('Ganador: Equipo Rojo');await expect(preview).toContainText('120 pts');await expect(preview).toContainText('Cobro total 116 pts · Neto -4 pts');
  for(const [width,height] of [[700,600],[360,800],[320,740]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);for(const button of await page.getByRole('navigation',{name:'Secciones'}).getByRole('button').all()){expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);}await card.scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/manager-preview-${width}.png`});}
  await page.emulateMedia({reducedMotion:'reduce'});await expect(page.locator('.phone-nav-indicator')).toHaveCSS('transition-duration','0s');await preview.getByRole('button',{name:'Confirmar ganador',exact:true}).click();await expect(card).toHaveAttribute('data-phase','resolved');await expect(card.locator('.phone-result')).toHaveCount(0);await expect(card).not.toContainText('Ganó');await expect(card).not.toContainText('Perdió');await expect(card.locator('.plot-resolution.count')).toHaveAttribute('data-state','spectator');await expect(card.locator('.resolution-result')).toHaveText('Resultado: Equipo Rojo');await expect(card).toContainText('No participaste');await expect(card.locator('.phone-market')).toHaveCount(0);await expect(card.getByRole('button',{name:/^Elegir ganador:/})).toHaveCount(0);for(const [width,height] of [[700,600],[360,800]]){await page.setViewportSize({width,height});await card.scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/streamer-footer-${width}.png`});}await expect(card.getByRole('button',{name:'Confirmar ganador',exact:true})).toHaveCount(0);await page.reload();await expect(page.getByRole('button',{name:'Mis apuestas',exact:true})).toHaveAttribute('aria-current','page');await expect(page.locator('[data-streamer-key]').filter({hasText:'¿Quién gana la final?'})).toContainText('Resuelta');await card.getByRole('button',{name:'Ver detalle',exact:true}).click();await expect(card.locator('.resolution-detail')).toContainText('No tenías una apuesta');await card.getByRole('button',{name:'Ocultar detalle',exact:true}).click();for(const hash of ['history','streamer']){await page.goto(`/app?market=${encodeURIComponent(key!)}#${hash}`);await expect(page.getByRole('region',{name:'Consola del streamer'})).toBeVisible();await expect(page.getByRole('group',{name:'Ver apuestas'})).toHaveCount(0);await expect(page.getByRole('button',{name:/^Apostar a/})).toHaveCount(0);await expect(page).toHaveURL(/#markets$/);}expect(errors).toEqual([]);
 });
@@ -59,9 +59,9 @@ test('resolution card preserves real stake, total payout and net for historical 
  await page.route('https://id.twitch.tv/oauth2/authorize?**',async route=>{const u=new URL(route.request().url()),callback=new URL(u.searchParams.get('redirect_uri')!);callback.searchParams.set('state',u.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');await route.fulfill({status:302,headers:{location:callback.href}});});
  const start=await api(page,'/api/twitch/start',{});await page.goto(start.url);await page.getByRole('button',{name:'Mis apuestas',exact:true}).click();
  const card=page.locator(`[data-streamer-key="${key}"]`);await card.getByRole('button',{name:'Cerrar apuestas',exact:true}).click();await expect(card).toHaveAttribute('data-phase','locked');await card.getByRole('button',{name:'Elegir ganador: Equipo Rojo',exact:true}).click();await card.getByRole('button',{name:'Revisar resultado',exact:true}).click();await card.getByRole('button',{name:'Confirmar ganador',exact:true}).click();
- await expect(card.locator('.plot-resolution.count')).toHaveAttribute('data-state','won');await expect(card.locator('.resolution-count')).toHaveAttribute('data-complete','true');await expect(card.locator('.resolution-net')).toHaveAttribute('aria-label','+200 pts');await expect(card.locator('.resolution-receipt')).toContainText('Tu apuesta100 pts');await expect(card.locator('.resolution-receipt')).toContainText('Cobro total300 pts');await expect(card.locator('.phone-market')).toHaveCount(0);
+ await expect(card.locator('.plot-resolution.count')).toHaveAttribute('data-state','won');await expect(card.locator('.resolution-count')).toHaveAttribute('data-complete','true');await expect(card.locator('.resolution-net')).toHaveAttribute('aria-label','+188 pts');await expect(card.locator('.resolution-receipt')).toContainText('Tu apuesta100 pts');await expect(card.locator('.resolution-receipt')).toContainText('Cobro total288 pts');await expect(card.locator('.phone-market')).toHaveCount(0);
  for(const [width,height] of [[700,600],[360,800]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await card.scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/streamer-resolution-personal-${width}.png`});}
- await card.getByRole('button',{name:'Cobrar 300 pts',exact:true}).click();await expect(card.getByRole('button',{name:'Cobrar 300 pts',exact:true})).toHaveCount(0);await expect(page.locator('#own-balance')).toContainText('10.200');
+ await card.getByRole('button',{name:'Cobrar 288 pts',exact:true}).click();await expect(card.getByRole('button',{name:'Cobrar 288 pts',exact:true})).toHaveCount(0);await expect(page.locator('#own-balance')).toContainText('10.194');
 });
 
 test('automatic cancellation explains missing winning bets before and after confirmation',async({page,browser})=>{
@@ -86,5 +86,35 @@ test('automatic cancellation explains missing winning bets before and after conf
    const me=await api(viewer,'/api/points/me');expect(me.balance).toBe(10000);
    expect(me.ledger.filter((entry:{kind:string;marketKey:string})=>entry.kind==='refund'&&entry.marketKey===key)).toHaveLength(withBet?1:0);
   }
+ }finally{await viewer.close();}
+});
+
+test('the pool split is disclosed before betting and settlement, credited once and retained after reload',async({page,browser})=>{
+ await page.setViewportSize({width:700,height:600});const login=await owner(page),card=await create(page,'¿Repartimos 1000 puntos?');
+ const key=await card.getAttribute('data-streamer-key');const viewer=await browser.newPage();
+ try{
+  await signIn(viewer);await viewer.goto(`/app?channel=${login}`);
+  const viewerCard=viewer.locator(`[data-key="${key}"]`);await viewerCard.getByRole('button',{name:'Apostar a Equipo Rojo',exact:true}).click();
+  const dialog=viewer.getByRole('dialog');await dialog.getByLabel('Puntos a apostar',{exact:true}).fill('1000');
+  const fee=dialog.getByRole('region',{name:'Reparto del pozo'});await expect(fee).toContainText('Streamer · 2%20 pts');await expect(fee).toContainText('Plot · 2%20 pts');await expect(fee).toContainText('Para ganadores960 pts');
+  for(const width of [700,360]){
+   await viewer.setViewportSize({width,height:600});await dialog.getByRole('button',{name:'Confirmar apuesta',exact:false}).scrollIntoViewIfNeeded();
+   expect(await viewer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+   await viewer.screenshot({path:`test-results/point-fees-bet-${width}.png`});
+  }
+  await dialog.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(dialog).toHaveCount(0);
+  const before=(await api(page,'/api/points/me')).balance;
+  await card.getByRole('button',{name:'Cerrar apuestas',exact:true}).click();await card.getByRole('button',{name:'Elegir ganador: Equipo Rojo',exact:true}).click();await card.getByRole('button',{name:'Revisar resultado',exact:true}).click();
+  const preview=card.getByRole('region',{name:'Confirmar liquidación'});await expect(preview.getByRole('region',{name:'Reparto del pozo'})).toContainText('Para ganadores960 pts');
+  expect((await api(page,'/api/points/me')).balance).toBe(before);
+  await card.getByRole('button',{name:'Confirmar ganador',exact:true}).click();await expect(card).toHaveAttribute('data-phase','resolved');
+  await expect(card.getByRole('region',{name:'Reparto del pozo'})).toContainText('Plot · 2%20 pts');await expect(card).toContainText('Recibiste 20 pts de comisión.');await expect(card).not.toContainText('No se modificó tu saldo.');
+  const me=await api(page,'/api/points/me');expect(me.balance).toBe(before+20);expect(me.streamerEarnings).toBe(20);
+  const winner=await api(viewer,'/api/points/me');expect(winner.claimable).toBe(960);
+  const claim=await api(viewer,'/api/points/claim',{key,requestId:randomUUID()});expect(claim.paid).toBe(960);expect(claim.balance).toBe(9960);
+  await page.reload();await expect(card.getByRole('region',{name:'Reparto del pozo'})).toContainText('Para ganadores960 pts');
+  expect((await api(page,'/api/points/me')).streamerEarnings).toBe(20);
+  for(const width of [700,360]){await page.setViewportSize({width,height:600});await card.scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/point-fees-resolved-${width}.png`});}
+  await page.getByRole('button',{name:'Mi perfil',exact:true}).click();await expect(page.locator('.phone-profile-stats')).toContainText('Comisiones20 pts');
  }finally{await viewer.close();}
 });

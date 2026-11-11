@@ -12,13 +12,13 @@ test('separate accounts debit atomically, settle a shared pool, persist and cann
   const id=randomUUID();await Promise.all(Array.from({length:5},()=>p.bet(a.token,m.key,'victory',300,id)));
   await p.bet(b.token,m.key,'defeat',700,randomUUID());assert.equal(p.market(m.key).totalPoints,1000);assert.equal(p.me(a.token).balance,9700);
   await assert.rejects(p.bet(a.token,m.key,'defeat',300,id),/reutilizado/);
-  await p.demoResolve(m.key,'victory');assert.equal(p.me(a.token).claimable,1000);assert.equal(p.me(b.token).claimable,0);
+  await p.demoResolve(m.key,'victory');assert.equal(p.me(a.token).claimable,960);assert.equal(p.me(b.token).claimable,0);
   const claimId=randomUUID();await Promise.all(Array.from({length:5},()=>p.claim(a.token,m.key,claimId)));
-  assert.equal(p.me(a.token).balance,10700);assert.equal(p.me(b.token).balance,9300);
+  assert.equal(p.me(a.token).balance,10660);assert.equal(p.me(b.token).balance,9300);
   await assert.rejects(p.claim(a.token,m.key,randomUUID()),/pendientes/);
-  const loaded=new Points(dir);await loaded.load();assert.equal(loaded.me(a.token).balance,10700);assert.equal(loaded.me(a.token).bets[0].claimed,true);
-  await loaded.claim(a.token,m.key,claimId);assert.equal(loaded.me(a.token).balance,10700);
-  assert.equal(loaded.me(a.token).balance+loaded.me(b.token).balance,2*STARTING_POINTS);
+  const loaded=new Points(dir);await loaded.load();assert.equal(loaded.me(a.token).balance,10660);assert.equal(loaded.me(a.token).bets[0].claimed,true);
+  await loaded.claim(a.token,m.key,claimId);assert.equal(loaded.me(a.token).balance,10660);
+  assert.equal(loaded.me(a.token).balance+loaded.me(b.token).balance,2*STARTING_POINTS-40);
 }));
 test('concurrent spend never overdraws, rejects fractional/negative points and bad identities',()=>fixture(async p=>{
   const a=await p.walletLogin(`fixture-${randomUUID()}`);const m=await p.accept(demoPrediction(),true);

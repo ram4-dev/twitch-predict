@@ -1,3 +1,4 @@
+import {pointFees,type PointFees} from './point-fees.js';
 import {hasPointsIdentity,PointsSessionError} from './points-identity.js';
 import {PlotCommandError,type PlotCommand} from './plot-chat.js';
 import type {Documents} from './cloud/documents.js';
@@ -14,11 +15,11 @@ export type TwitchIdentity={id:string;login:string;displayName:string;linkedAt:s
 type Account = { id:string; name:string; tokenHash:string; wallet?:string; twitch?:TwitchIdentity; google?:{id:string;email?:string;displayName:string;linkedAt:string}; botEnabled?:boolean; botEpoch?:string; balance:number; createdAt:string };
 type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outcomeId:string; amount:number; payout:number; claimed:boolean; creditedAt?:string; creditMethod?:'claim'|'distribution'|'refund'; createdAt:string };
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
-type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
+type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; fees?:PointFees; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
-type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'; delta:number; balance:number; marketKey?:string; createdAt:string };
+type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'|'streamer_fee'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
-type State = { version:1; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
+type State = { version:1; platformRevenue?:{balance:number;credits:{marketKey:string;amount:number;at:string}[]}; pendingStreamerFees?:Record<string,{channel:string;twitchId?:string;amount:number}>; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
 /** Dated moderator evidence: the bot adapter refreshes it; HTTP publication revalidates inside its window. */
 export type ChannelModeratorEvidence={users:string[];verifiedAt:string};
 /** Positive moderator evidence lives this long; expiry denies rather than trusting a stale list. */
@@ -161,6 +162,27 @@ export class Points {
     if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new PlotCommandError('Saldo insuficiente');
     account.balance+=delta;state.ledger.push({id:randomUUID(),accountId:account.id,kind,delta,balance:account.balance,marketKey,createdAt:now()});
   }
+  /** Settle platform and broadcaster shares in the same transaction as winner payouts. */
+  private creditFees(state:State,m:Market,fees:PointFees){
+    const treasury=state.platformRevenue??=( {balance:0,credits:[]} );
+    if(!Number.isSafeInteger(treasury.balance+fees.platform))throw new Error('El saldo de Plot alcanzó el límite');
+    if(fees.platform){treasury.balance+=fees.platform;treasury.credits.push({marketKey:m.key,amount:fees.platform,at:now()});}
+    if(!fees.streamer)return;
+    const channel=m.prediction.channel.toLowerCase(),registration=state.streamers[channel];
+    const twitchId=m.ownerTwitchId??registration?.twitchId;
+    const owner=Object.values(state.accounts).find(a=>twitchId?a.twitch?.id===twitchId:registration?.wallet?a.wallet===registration.wallet:a.twitch?.login===channel);
+    if(owner)this.ledger(state,owner,'streamer_fee',fees.streamer,m.key);
+    else (state.pendingStreamerFees??={})[m.key]={channel,twitchId,amount:fees.streamer};
+  }
+  /** Only a server-verified Twitch identity (or the demo operator's wallet assignment) releases escrow. */
+  private collectStreamerFees(state:State,account:Account){
+    for(const [key,credit] of Object.entries(state.pendingStreamerFees??{})){
+      const entitled=credit.twitchId?account.twitch?.id===credit.twitchId:account.twitch?.login===credit.channel||(credit.channel==='demo_streamer'&&!!account.wallet&&state.streamers[credit.channel]?.wallet===account.wallet);
+      if(!entitled)continue;
+      this.ledger(state,account,'streamer_fee',credit.amount,key);
+      delete state.pendingStreamerFees![key];
+    }
+  }
   private grantStartingPoints(state:State,account:Account){
     if(hasPointsIdentity(account)&&!state.ledger.some(entry=>entry.accountId===account.id&&entry.kind==='welcome'))this.ledger(state,account,'welcome',STARTING_POINTS);
   }
@@ -180,9 +202,9 @@ export class Points {
     const token=randomBytes(32).toString('hex');
     return this.transaction(state=>{
       const existing=Object.values(state.accounts).find(a=>a.twitch?.id===identity.id);
-      if(existing){state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
+      if(existing){this.collectStreamerFees(state,existing);state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
       const id=randomUUID();const account:Account={id,name:identity.displayName,tokenHash:hash(token),balance:0,createdAt:now(),twitch:identity};
-      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.grantStartingPoints(state,account);
+      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.grantStartingPoints(state,account);this.collectStreamerFees(state,account);
       return {token,account:{id,name:account.name,balance:account.balance},created:true};
     });
   }
@@ -223,6 +245,7 @@ export class Points {
     return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,google:account.google??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,channel:this.state.markets[b.marketKey].prediction.channel,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-100).reverse().map(l=>({...l,title:l.marketKey?this.state.markets[l.marketKey]?.prediction.title:undefined})),
+      streamerEarnings:this.state.ledger.filter(l=>l.accountId===account.id&&l.kind==='streamer_fee').reduce((sum,l)=>sum+l.delta,0),
       streamerChannels:this.managedChannels(this.state,account)};
   }
   private view(state:State, m:Market) {
@@ -325,7 +348,7 @@ export class Points {
         if(original.status==='RESOLVED'&&p.winningOutcomeId!==original.winningOutcomeId)throw new Error('Twitch informó otro ganador para un mercado liquidado');
       } else {
         if(p.status!=='ACTIVE'||closesAt(p)<=Date.now()||Date.parse(p.createdAt)>Date.now()+30_000)throw new Error('La predicción no está abierta');
-        m={key,prediction:p,phase:'open',demo,version:1,createdAt:now(),updatedAt:now(),sourceCheckedAt:now()};state.markets[key]=m;
+        m={key,prediction:p,ownerTwitchId:state.streamers[p.channel.toLowerCase()]?.twitchId??Object.values(state.accounts).find(a=>a.twitch?.login===p.channel.toLowerCase())?.twitch?.id,phase:'open',demo,version:1,createdAt:now(),updatedAt:now(),sourceCheckedAt:now()};state.markets[key]=m;
       }
       m.prediction=p;m.updatedAt=now();m.sourceCheckedAt=now();
       if(!['resolved','void'].includes(m.phase)) {
@@ -354,9 +377,10 @@ export class Points {
       for(const [accountId,group] of groups){const amount=group.reduce((n,b)=>n+b.amount,0);if(amount>0)this.ledger(state,state.accounts[accountId],'refund',amount,m.key);}
       return;
     }
-    // Largest remainder allocation conserves every integer point without floating point arithmetic.
-    const allocation=winners.map(b=>{const numerator=BigInt(b.amount)*BigInt(pool);return {bet:b,paid:Number(numerator/BigInt(winningPool)),remainder:numerator%BigInt(winningPool)};});
-    let remaining=pool-allocation.reduce((sum,a)=>sum+a.paid,0);
+    const fees=pointFees(pool);this.creditFees(state,m,fees);m.fees=fees;
+    // Largest remainder allocation conserves every distributable point after the two shares.
+    const allocation=winners.map(b=>{const numerator=BigInt(b.amount)*BigInt(fees.winners);return {bet:b,paid:Number(numerator/BigInt(winningPool)),remainder:numerator%BigInt(winningPool)};});
+    let remaining=fees.winners-allocation.reduce((sum,a)=>sum+a.paid,0);
     allocation.sort((a,b)=>a.remainder===b.remainder?a.bet.id.localeCompare(b.bet.id):a.remainder>b.remainder?-1:1);
       for(const a of allocation){if(remaining>0){a.paid++;remaining--;}a.bet.payout=a.paid;}
     m.phase='resolved';
@@ -411,7 +435,7 @@ export class Points {
       if(!Object.values(state.accounts).some(a=>a.wallet===wallet))throw new Error('La wallet debe iniciar sesión primero');
       const name=channel.toLowerCase();const previous=state.streamers[name];
       if(previous&&previous.wallet!==wallet)throw new Error('El canal ya tiene una wallet de streamer asignada');
-      return state.streamers[name]??=( {channel:name,wallet,assignedAt:now()} );
+      const registration=state.streamers[name]??=( {channel:name,wallet,assignedAt:now()} );this.collectStreamerFees(state,Object.values(state.accounts).find(a=>a.wallet===wallet)!);return registration;
     });
   }
   async linkTwitch(token:string,identity:TwitchIdentity){
@@ -430,7 +454,7 @@ export class Points {
       // Channel registration is a streamer capability: only wallet-backed accounts claim channels.
       if(a.wallet&&!state.channels.includes(identity.login))state.channels.push(identity.login);
       if(a.wallet)state.streamers[identity.login]={channel:identity.login,wallet:a.wallet,twitchId:identity.id,assignedAt:now()};
-      this.grantStartingPoints(state,a);
+      this.grantStartingPoints(state,a);this.collectStreamerFees(state,a);
       return {twitch:a.twitch,channel:identity.login};
     });
   }
@@ -474,7 +498,7 @@ export class Points {
     if(['resolved','void'].includes(m.phase))throw new Error('El mercado ya está resuelto');
     if(winnerId!==null&&!m.prediction.outcomes.some(o=>o.id===winnerId))throw new Error('Opción inválida');
     if(this.view(state,m).phase!=='locked')throw new Error('Cerrá las apuestas antes de resolver');
-    this.settle(state,m,winnerId,'Vista previa');return {phase:m.phase,reason:m.reason,pool:this.view(state,m).totalPoints,bets:this.roster(state,m)};
+    this.settle(state,m,winnerId,'Vista previa');return {phase:m.phase,reason:m.reason,pool:this.view(state,m).totalPoints,fees:m.fees,bets:this.roster(state,m)};
   }
   async streamerAction(token:string,input:StreamerAction){
     return this.transaction(state=>{
