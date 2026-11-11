@@ -371,11 +371,11 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-manager .plot-resolution .manager-market-state{margin-top:16px;margin-bottom:0}
 
 .phone-manager .manager-earnings{display:grid;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid #ffffff20}
-.phone-manager .manager-earnings>span{font-size:13px;color:#c7c7c7}
+.phone-manager .manager-earnings>span{font-size:16px;color:#c7c7c7}
 .phone-manager .manager-earnings p{display:flex;align-items:baseline;gap:8px;margin:0;font-variant-numeric:tabular-nums}
-.phone-manager .manager-earnings strong{font:600 36px/1.15 "Space Grotesk",Inter,sans-serif;letter-spacing:-.04em;color:#ddd}
+.phone-manager .manager-earnings strong{font:600 clamp(36px,7cqi,48px)/1.15 "Space Grotesk",Inter,sans-serif;letter-spacing:-.04em;color:#ddd}
 .phone-manager .manager-earnings[data-positive=true] strong{color:#91e9bd}
-.phone-manager .manager-earnings p>span{font-size:15px;color:#bbb}
+.phone-manager .manager-earnings p>span{font-size:18px;color:#bbb}
 
 /* Proposal cards use the active-market glass shell and its choice palette. */
 .phone-app.theme-ember .proposal-card[data-proposal-state=pending]{--choice-rgb:242 204 134;--choice-ink:#f2cc86}

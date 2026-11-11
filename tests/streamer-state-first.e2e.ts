@@ -49,7 +49,7 @@ test('finished streamer markets show the confirmed winner or annulment prominent
   }else{
    await expect(state.locator('.manager-state-title')).toHaveText('Mercado anulado');await expect(state.locator('.manager-state-title')).toHaveCSS('color','rgb(242, 204, 134)');await expect(state.locator('.manager-state-loser')).toHaveCount(0);await expect(card.locator('.resolution-reason')).toContainText('No hubo apuestas a la opción ganadora');await expect(state).not.toContainText('Ganó');
   }
-  await expect(card.getByRole('region',{name:'Ganancia del streamer'})).toHaveCount(0);for(const text of ['No participaste','No se modificó tu saldo.','Liquidado antes de aplicar comisiones.'])await expect(card).not.toContainText(text);
+  await expect(card.getByRole('region',{name:'Ganancia del streamer'})).toHaveText('Ganaste0pts');for(const text of ['No participaste','No se modificó tu saldo.','Liquidado antes de aplicar comisiones.'])await expect(card).not.toContainText(text);
   await expect(card.locator('.resolution-result')).toHaveCount(0);await expect(card.getByRole('button',{name:/Elegir ganador|Confirmar ganador|Revisar resultado/})).toHaveCount(0);
   for(const width of [360,700,1440]){
    await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -57,5 +57,18 @@ test('finished streamer markets show the confirmed winner or annulment prominent
    await page.screenshot({path:`test-results/streamer-finished-${phase}-${width}.png`});
   }
  }
+ expect(writes).toEqual([]);
+});
+
+test('streamer earned amount uses only that market persisted fee or ledger credit and void stays zero',async({page})=>{
+ const data=demoSnapshot(),account=data.account!;account.streamerChannels=['ramitapai'];account.bets=[];
+ const markets=['fees','ledger','unknown','void'].map(kind=>({...structuredClone(data.markets[0]),key:`earned-${kind}`,totalPoints:750,totalBets:2,participants:2,outcomes:data.markets[0].outcomes.map((o,i)=>({...o,points:i===0?500:250,bets:1,share:(i===0?500:250)/750*100})),source:'plot' as const,phase:kind==='void'?'void' as const:'resolved' as const,canBet:false,winnerId:'yes',fees:kind==='fees'||kind==='void'?{version:1 as const,pool:750,streamer:15,platform:15,winners:720}:undefined}));
+ account.ledger=[['earned-fees',15],['earned-ledger',7],['earned-void',15],['another-market',99]].map(([marketKey,delta],i)=>({id:`fee-${i}`,kind:'streamer_fee' as const,marketKey:marketKey as string,delta:delta as number,balance:account.balance,title:undefined,accountId:account.id,createdAt:new Date().toISOString()}));
+ const writes:string[]=[];await page.addInitScript(()=>localStorage.setItem('pointsToken','streamer-earned-fixture'));
+ await page.route('**/api/**',route=>{const path=new URL(route.request().url()).pathname;if(route.request().method()!=='GET')writes.push(path);return route.fulfill({json:path==='/api/points/me'?account:path==='/api/streamer/console'?{channels:['ramitapai'],markets}:path==='/api/markets'?markets:path==='/api/channels'?{channels:['ramitapai']}:{proposals:[]}});});
+ await page.goto('/app');
+ for(const [kind,amount] of [['fees',15],['ledger',7],['unknown',0],['void',0]] as const){const card=page.locator(`[data-streamer-key="earned-${kind}"]`);await expect(card.getByRole('region',{name:'Ganancia del streamer'})).toHaveText(`Ganaste${amount}pts`);await expect(card.locator('.points-fees,.points-fee-note')).toHaveCount(0);}
+ const card=page.locator('[data-streamer-key="earned-fees"]');
+ for(const width of [360,700,1440]){await page.setViewportSize({width,height:width===700?600:900});const earnings=card.locator('.manager-earnings');expect(await earnings.locator('strong').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))).toBeGreaterThanOrEqual(36);expect(await card.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);await card.locator('.phone-market').screenshot({path:`test-results/streamer-earned-${width}.png`,animations:'disabled'});}
  expect(writes).toEqual([]);
 });
