@@ -240,3 +240,14 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
   box-shadow:0 0 0 2px rgb(var(--choice-rgb, 255 255 255) / .55)!important;
   transform:scale(1.03);position:relative;z-index:1;font-weight:600;
 }
+
+/* The wrapper keeps the `phone-position` class for compatibility, but its inherited 16-20px padding
+ * shrank the card 40px narrower than the active feed. Neutralise it so both listings match exactly. */
+.phone-position-wrap{padding:0!important;border-radius:0!important;background:none!important;border:0!important}
+.phone-position-wrap>.phone-market{width:100%}
+
+/* Option buttons: rectangular, not pill-shaped. --radius-control is 999px in this theme, so the
+ * corner radius is set explicitly instead of inheriting that token. */
+.phone-app .phone-outcome,
+.phone-app .phone-outcome[data-chosen="true"],
+.phone-app .phone-outcome .plot-button-content{border-radius:8px!important}
