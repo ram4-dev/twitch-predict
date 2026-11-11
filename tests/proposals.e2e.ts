@@ -109,7 +109,8 @@ test('full flow: viewer proposes, owner accepts -> one published market; withdra
   const card=page.locator(`[data-proposal-id="${proposal.id}"]`);await expect(card).toBeVisible();
   let acceptWrites=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname===`/api/proposals/${proposal.id}/accept`)acceptWrites++;});
   await card.getByRole('button',{name:'Aceptar y publicar',exact:true}).click();
-  await expect(card.locator('[data-proposal-status]')).toHaveAttribute('data-proposal-status','accepted');
+  await expect(card).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('Propuesta aceptada y mercado publicado.');
   await expect(card.getByRole('button',{name:'Aceptar y publicar',exact:true})).toHaveCount(0);await expect(page.getByRole('dialog')).toHaveCount(0);expect(acceptWrites).toBe(1);
   // An API replay returns the same published market receipt.
   const accept=await request.post(`/api/proposals/${proposal.id}/accept`,

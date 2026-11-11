@@ -55,22 +55,24 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
       if(action==='accept')await client.accept(proposal.id,`inbox-${proposal.id}-${Date.now()}`);
       else if(action==='reject')await client.reject(proposal.id,`inbox-${proposal.id}-${Date.now()}`);
       else await client.withdraw(proposal.id,`inbox-${proposal.id}-${Date.now()}`);
+      requestSequence.current++;
+      setProposals(current=>current.filter(item=>item.id!==proposal.id));
       setMessage(action==='accept'?'Propuesta aceptada y mercado publicado.':action==='reject'?'Propuesta rechazada.':'Propuesta retirada.');
       await refresh();onChanged?.();
     }catch(e){setMessage((e as Error).message);}finally{actionPending.current=false;setBusy(undefined);}
   };
-  const pending=proposals.filter(p=>p.status==='pending');
+  const pending=proposals.filter(p=>p.status==='pending').sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
   return <section className="proposal-inbox" aria-label="Bandeja de propuestas">
     <div className="console-section-title"><h2>Propuestas</h2><Badge variant="secondary">{pending.length} pendientes</Badge></div>
     {message&&<p role="status">{message}</p>}
     {loadError&&<p role="alert">{loadError} <Button variant="ghost" onClick={()=>void refresh()}>Reintentar</Button></p>}
     {!loaded&&<p role="status">Cargando propuestas…</p>}
-    {loaded&&!loadError&&!proposals.length&&<p className="console-empty">Todavía no hay propuestas para este canal.</p>}
-    <div className="proposal-list">{proposals.map(p=><ProposalCard key={p.id} proposal={p} management>{p.status==='pending'&&
+    {loaded&&!loadError&&!pending.length&&<p className="console-empty">No hay propuestas pendientes para este canal.</p>}
+    <div className="proposal-list">{pending.map(p=><ProposalCard key={p.id} proposal={p} management>
       <div className="proposal-actions">
         <Button tone="positive" disabled={!!busy} onClick={()=>void act('accept',p)}>{busy===p.id?'Publicando…':'Aceptar y publicar'}</Button>
         <Button tone="negative" disabled={!!busy} onClick={()=>void act('reject',p)}>Rechazar</Button>
-      </div>}</ProposalCard>)}</div>
+      </div></ProposalCard>)}</div>
   </section>;
 }
 

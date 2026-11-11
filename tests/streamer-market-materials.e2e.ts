@@ -15,11 +15,11 @@ test('all streamer market phases share proposal glass, result frames and action 
  await page.addInitScript(()=>localStorage.setItem('pointsToken','market-materials-fixture'));
  await page.route('**/api/**',route=>{
   const path=new URL(route.request().url()).pathname;if(route.request().method()!=='GET')writes.push(path);
-  return route.fulfill({json:path==='/api/points/me'?account:path==='/api/markets'?markets:path==='/api/streamer/console'?{channels:['ramitapai'],markets}:path==='/api/channels'?{channels:['ramitapai']}:path.startsWith('/api/proposals/channels/')?{proposals:[{id:'proposal-frame',shortId:'P1',channelId:'ramitapai',status:'accepted',acceptedMarketId:'material-resolved',input:{title:'¿Gana la próxima partida?',options:['Sí','No'],durationSeconds:120},createdAt:'2026-11-11T18:10:00Z'}]}:[]});
+  return route.fulfill({json:path==='/api/points/me'?account:path==='/api/markets'?markets:path==='/api/streamer/console'?{channels:['ramitapai'],markets}:path==='/api/channels'?{channels:['ramitapai']}:path.startsWith('/api/proposals/channels/')?{proposals:[{id:'proposal-frame',shortId:'P1',channelId:'ramitapai',status:'pending',input:{title:'¿Gana la próxima partida?',options:['Sí','No'],durationSeconds:120},createdAt:'2026-11-11T18:10:00Z'}]}:[]});
  });
  await page.goto('/app');await expect(page.locator('[data-streamer-key]')).toHaveCount(4);
  await page.getByRole('button',{name:'Propuestas',exact:true}).click();const proposal=page.locator('.proposal-card');await expect(proposal).toBeVisible();const proposalGlass=await glass(proposal);
- const positive=await proposal.locator('.liquid-metal-surface[data-tone=positive]').evaluate(e=>getComputedStyle(e).backgroundImage);
+ const positive=await proposal.locator('.proposal-options .liquid-metal-surface[data-tone=positive]').evaluate(e=>getComputedStyle(e).backgroundImage);
  await page.getByRole('button',{name:'Mercados',exact:true}).click();
  for(const phase of phases){
   const card=page.locator(`[data-streamer-key="material-${phase}"]`),shell=card.locator('.phone-market');
