@@ -1,9 +1,8 @@
-import {useState,type ReactNode} from 'react';
-import {ArrowUpRight,Check,RotateCcw,ShieldCheck,Trophy,X,Minus} from 'lucide-react';
+import {type ReactNode} from 'react';
+import {Check,RotateCcw,ShieldCheck,Trophy,X,Minus} from 'lucide-react';
 import {CountingAmount} from './counting-amount.js';
-type Props={hideEmptyPersonal?:boolean;resultContent?:ReactNode;showOutcomeSummary?:boolean;title:string;channel:string;outcomes:{id:string;title:string}[];winnerId?:string;canceled:boolean;reason?:string;stake?:number;payout?:number;accountKnown?:boolean;unavailableMessage?:string;spectatorMessage?:string;hit?:boolean;material?:'solid'|'glass'|'liquid'|'count';english?:boolean;children?:ReactNode};
-export function Resolution({title,channel,outcomes,winnerId,canceled,reason,stake=0,payout=0,accountKnown=true,unavailableMessage,spectatorMessage,hit=false,material='count',english=false,showOutcomeSummary=false,resultContent,hideEmptyPersonal=false,children}:Props){
- const [expanded,setExpanded]=useState(false);
+type Props={titleLink?:ReactNode;hideEmptyPersonal?:boolean;resultContent?:ReactNode;showOutcomeSummary?:boolean;title:string;channel:string;outcomes:{id:string;title:string}[];winnerId?:string;canceled:boolean;reason?:string;stake?:number;payout?:number;accountKnown?:boolean;unavailableMessage?:string;spectatorMessage?:string;hit?:boolean;material?:'solid'|'glass'|'liquid'|'count';english?:boolean;children?:ReactNode};
+export function Resolution({title,titleLink,channel,outcomes,winnerId,canceled,reason,stake=0,payout=0,accountKnown=true,unavailableMessage,spectatorMessage,hit=false,material='count',english=false,showOutcomeSummary=false,resultContent,hideEmptyPersonal=false,children}:Props){
  const played=accountKnown&&stake>0,net=payout-stake,locale=english?'en-US':'es-AR';
  const fmt=(n:number)=>new Intl.NumberFormat(locale).format(n);
  const pts=(n:number)=>`${fmt(n)} pts`;
@@ -13,9 +12,9 @@ export function Resolution({title,channel,outcomes,winnerId,canceled,reason,stak
  const Icon=canceled?RotateCcw:hit?Trophy:played?X:Minus;
  const label=material==='count'&&played?(canceled?(english?'Stake refunded':'Apuesta reembolsada'):net>0?(english?'Net gain':'Ganancia neta'):net<0?(english?'Net loss':'Pérdida neta'):(english?'No net gain or loss':'Sin ganancia ni pérdida')):!accountKnown?(unavailableMessage??(english?'Connect your account to see your result':'Conectá tu cuenta para ver tu resultado')):!played?(english?'You did not take part':'No participaste'):canceled?(english?'Stake refunded':'Apuesta reembolsada'):hit?(english?'You called it':'Acertaste'):(english?'Not this time':'Esta vez no acertaste');
  const signedNet=`${net>0?'+':net<0?'−':''}${fmt(Math.abs(net))}`;
- return <article className={`plot-resolution ${material}`} data-state={state} aria-label={english?`Resolution ${material==='count'?'Count':material==='liquid'?'Liquid glass':material==='glass'?'Glass':'Solid'}`:`Resolución ${material==='count'?'Conteo':material==='liquid'?'Liquid glass':material==='glass'?'Glass':'Sólido'}`}>
+ return <article className={`plot-resolution ${material}${titleLink?' resolution-clickable':''}`} data-state={state} aria-label={english?`Resolution ${material==='count'?'Count':material==='liquid'?'Liquid glass':material==='glass'?'Glass':'Solid'}`:`Resolución ${material==='count'?'Conteo':material==='liquid'?'Liquid glass':material==='glass'?'Glass':'Sólido'}`}>
   <div className="resolution-content"><div className="resolution-meta"><span>@{channel}</span><span><ShieldCheck size={13}/>{canceled?(english?'Voided':'Anulada'):(english?'Resolved':'Resuelta')}</span></div>
-   <h3>{title}</h3>
+   <h3>{titleLink??title}</h3>
    {resultContent??(material==='count'?<p className="resolution-result">{canceled?(english?'Round voided':'Ronda anulada'):winner?<>{showOutcomeSummary?(english?'Won':'Ganó'):(english?'Result:':'Resultado:')} <strong>{winner.title}</strong>{showOutcomeSummary&&outcomes.some(o=>o.id!==winnerId)&&<> · {english?'Lost':'Perdió'} {outcomes.filter(o=>o.id!==winnerId).map(o=>o.title).join(', ')}</>}</>:(english?'Result confirmed':'Resultado confirmado')}</p>:<div className="resolution-outcomes" aria-label={english?'Prediction result':'Resultado de la predicción'}>{outcomes.map(o=><div className={`resolution-outcome ${canceled?'neutral':o.id===winnerId?'winner':'loser'}`} key={o.id}><span>{canceled?<Minus size={16}/>:o.id===winnerId?<Check size={16}/>:<X size={16}/>}<strong>{o.title}</strong></span><span>{canceled?(english?'No result':'Sin resultado'):o.id===winnerId?(english?'Won':'Ganó'):(english?'Lost':'Perdió')}</span></div>)}</div>)}
    {reason&&<p className="resolution-reason">{reason}</p>}
    {showPersonal&&<section className={`resolution-personal ${played&&!canceled?(net>0?'positive':net<0?'negative':'neutral'):'neutral'}`} aria-label={english?'Your result':'Tu resultado'}><div className="resolution-label">{material!=='count'&&<Icon size={18}/>}<span>{label}</span></div>
@@ -23,8 +22,6 @@ export function Resolution({title,channel,outcomes,winnerId,canceled,reason,stak
    </section>}
    {played&&<dl className="resolution-receipt"><div><dt>{english?'Your stake':'Tu apuesta'}</dt><dd>{pts(stake)}</dd></div><div><dt>{canceled?(english?'Total refund':'Reembolso total'):(english?'Total payout':'Cobro total')}</dt><dd>{pts(payout)}</dd></div></dl>}
    {children}
-   {showPersonal&&<button type="button" className="resolution-detail-toggle" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}>{expanded?(english?'Hide details':'Ocultar detalle'):(english?'Show details':'Ver detalle')}<ArrowUpRight size={15}/></button>}
-   {showPersonal&&expanded&&<div className="resolution-detail">{played?(english?`${pts(payout)} ${canceled?'refunded':'paid out'} − ${pts(stake)} staked = ${signedNet} pts net. ${canceled?'You get the full stake back.':payout>0?'The payout includes the points returned from your stake.':'Your option did not win. There are no points to claim.'}`:`${pts(payout)} de ${canceled?'reembolso':'cobro'} − ${pts(stake)} de apuesta = ${signedNet} pts netos. ${canceled?'Recuperás el total apostado.':payout>0?'El cobro incluye los puntos recuperados de tu apuesta.':'Tu opción no ganó. No hay puntos para cobrar.'}`):accountKnown?(english?'You had no stake on this prediction.':'No tenías una apuesta en esta predicción.'):(unavailableMessage??(english?'Connect your account to check your stakes and payouts.':'Conectá tu cuenta para consultar tus apuestas y cobros.'))}{!canceled&&winner&&` ${material==='count'?(english?'Result:':'Resultado:'):(english?'Won':'Ganó')} ${winner.title}.`}</div>}
   </div>
  </article>;
 }

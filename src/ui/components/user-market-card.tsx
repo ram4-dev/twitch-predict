@@ -4,12 +4,11 @@ import {hasPointsIdentity} from '../../points-identity.js';
 import {PointsSignIn} from './points-sign-in.js';
 import {StreamerMarketState} from './streamer-market-state.js';
 import {Button} from './button.js';
+import {marketHref,navigateMarket} from './market-navigation.js';
 import {PhoneGlass as Glass} from './phone-glass.js';
 import {number} from '../points-ui.js';
 import type {AppMarket,AppAccount,AppTheme} from '../mobile-app-data.js';
 export type Selection={market:AppMarket;outcome:string};
-const marketHref=(key:string)=>{const url=new URL(location.href);url.searchParams.set('market',key);return url.href;};
-function navigateMarket(event:React.MouseEvent<HTMLAnchorElement>,open:()=>void){if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();open();}
 export function UserMarketCard({market,theme,chosenOutcome,chosenStake=0,onChoose,onDetail,management=false,children}:{market:AppMarket;theme:AppTheme;chosenOutcome?:string;chosenStake?:number;onDetail:()=>void;onChoose:(selection:Selection)=>void;management?:boolean;children?:React.ReactNode}){
  const locked=management?(market.phase!=='locked'||market.source!=='plot'):!market.canBet;const [expanded,setExpanded]=useState(false),[hovered,setHovered]=useState<string>(),[focused,setFocused]=useState<string>();
  const active=hovered??focused??chosenOutcome;const activeIndex=market.outcomes.findIndex(o=>o.id===active);const tone=management?(market.phase==='open'||chosenOutcome?'positive':'neutral'):activeIndex<0?'neutral':activeIndex===0?'positive':'negative';
