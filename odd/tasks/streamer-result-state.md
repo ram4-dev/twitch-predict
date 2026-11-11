@@ -14,4 +14,10 @@ The user still saw the old cards on the preview because every visible market was
 - Verified both resolved and void states, confirmed winner/loser text and colors, large result typography, absence of old compact result, absence of management actions after settlement, retained reason, historical stakes/claims/fees and unchanged extension defaults.
 - Opened final screenshots for both finished states at 360, 700 and 1440 px. Retained local screenshots and logs under artifacts/streamer-result-state/.
 
-Preview activation follows verification; retain this worktree and leave main unchanged.
+## Live preview activation
+
+After verification, updated the existing 90-streamer-state-first.conf drop-in for plot-streamer-manager-preview.service to this worktree and restarted only that service. The data directory, vault-env secret injection, authentication origin, Portless backend and HTTPS URL remain unchanged. The service is active with zero restarts.
+
+Verified https://plot-dev.tailfb789f.ts.net:8444 through the T3 browser: health, JS and CSS returned 200; the finished-state labels/styles were present; JS and CSS SHA-256 matched the verified local build exactly. The browser profile has no signed-in account, so authenticated visual validation is supplied by the E2E tests and reviewed screenshots above. The check tab was closed after verification.
+
+Preview runs from this worktree. Retain it; leave main and unrelated user work untouched. Implementation commit: 6f74d8a. No merge or push was performed.
