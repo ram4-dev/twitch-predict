@@ -1,3 +1,4 @@
+import {PointsResolution} from './points-resolution.js';
 import {hasPointsIdentity} from '../points-identity.js';
 import {PointsFees} from './components/points-fees.js';
 import {PointsSignIn} from './components/points-sign-in.js';
@@ -92,6 +93,7 @@ function OwnBets({snapshot,demo,onClaim,onDetail,theme='ember'}:{snapshot:AppSna
  const grouped=[...new Set(snapshot.account?.bets.map(b=>b.marketKey)??[])].reverse().map(key=>({key,bets:snapshot.account!.bets.filter(b=>b.marketKey===key),market:snapshot.markets.find(m=>m.key===key)}));
  return <div className="phone-bets">{error&&<p role="alert">{error}</p>}{!grouped.length&&<p className="phone-empty">Todavía no hay jugadas.</p>}{grouped.map(({key,bets,market})=>{
   const stake=bets.reduce((sum,b)=>sum+b.amount,0),payout=bets.reduce((sum,b)=>sum+b.payout,0),pending=bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ended=['resolved','void'].includes(bets[0].phase);
+  if(ended&&market)return <div key={key} data-position-key={key} className="phone-position phone-position-wrap"><PointsResolution market={market} account={snapshot.account} demo={demo} onClaim={()=>onClaim(key)} onDetail={onDetail?()=>onDetail(key):undefined}/></div>;
   // Same card as the active feed: the option you took stays highlighted in its own colour, with the stake.
   const chosenOutcome=bets[bets.length-1].outcomeId,chosenStake=bets.filter(b=>b.outcomeId===chosenOutcome).reduce((sum,b)=>sum+b.amount,0);
   // Listing view (onDetail present): the same card as the active feed. Detail view (no onDetail):

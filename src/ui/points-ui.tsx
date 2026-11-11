@@ -6,7 +6,7 @@ import {Button} from './components/button.js';
 import {Input} from './components/input.js';
 import {enableSpotlight} from './components/materials.js';
 import {EmptyState} from './components/plot.js';
-import {Resolution} from './components/resolution.js';
+import {PointsResolution} from './points-resolution.js';
 import {Badge} from './components/badge.js';
 import type {Points} from '../points.js';
 type Market=ReturnType<Points['market']>;
@@ -56,15 +56,7 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
     :{open:market.canBet?'Apuestas abiertas':market.sourceFresh?'Apuestas cerradas':'Esperando confirmación de Twitch',locked:market.source==='plot'?'Esperando resultado del streamer':'Esperando resultado de Twitch',resolved:'Resultado confirmado',void:'Reembolso disponible'};
   const change=(value:string)=>{setAmount(value);form.amount=value;form.pending=undefined;};
   const bet=(outcomeId:string)=>{const value=Number(form.amount);if(!Number.isSafeInteger(value)||value<1||value>(account?.balance??0)){form.message=extension?'Enter a whole amount within your balance.':'Ingresá una cantidad entera dentro de tu saldo.';form.failed=true;onAction({type:'render'});return;}void onAction({type:'bet',market,form,outcomeId,amount:value});};
-  if(extension&&['resolved','void'].includes(market.phase)){
-    const payout=own.reduce((n,b)=>n+b.payout,0);
-    return <Resolution english key={`${market.key}:${market.phase}`} title={market.prediction.title} channel={market.prediction.channel} outcomes={market.outcomes} winnerId={market.winnerId} canceled={market.phase==='void'} reason={market.phase==='void'?market.reason:undefined} stake={stake} payout={payout} accountKnown={!!account} hit={own.some(b=>b.outcomeId===market.winnerId)}><PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical english/>
-      {pending>0&&<Button type="button" className="points-claim" disabled={form.busy} onClick={()=>void onAction({type:'claim',market,form})}>{market.phase==='void'?'Recover':'Claim'} {fmt(pending)} pts<ArrowUpRight size={16}/></Button>}
-      {payout>0&&pending===0&&<p className="resolution-credited">{market.phase==='void'?'Refund credited':'Payout credited'} · {fmt(payout)} pts</p>}
-      {market.reason&&<p className="points-rule">{market.reason}</p>}
-      {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?'Saving…':form.message}</p>}
-    </Resolution>;
-  }
+  if(['resolved','void'].includes(market.phase))return <PointsResolution key={`${market.key}:${market.phase}`} market={market} account={account} english={extension} busy={form.busy} message={form.message} failed={form.failed} onClaim={()=>onAction({type:'claim',market,form})}/>;
   return <>
     <div className="points-market-head"><span className={`points-status ${market.canBet?'live':''}`}><span className="status-mark"/>{status[market.phase]}</span><Badge variant="secondary">{market.demo?(extension?'Example':'Ejemplo'):(extension?'Internal points':'Puntos internos')}</Badge></div>
     <div className="pool-summary"><div className="points-pool"><span>{extension?'Community pool':'Pozo de la comunidad'}</span><strong>{(extension?fmt:number)(market.totalPoints)} <small>pts</small></strong></div><div className="pool-people"><span>{(extension?fmt:number)(market.participants)} {market.participants===1?(extension?'player':'jugador'):(extension?'players':'jugadores')}</span><span>{(extension?fmt:number)(market.totalBets)} {market.totalBets===1?(extension?'stake':'apuesta'):(extension?'stakes':'apuestas')}</span></div></div>

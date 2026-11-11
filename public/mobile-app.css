@@ -331,3 +331,12 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 
 .points-fees{padding:14px 0;font-size:13px}.points-fees dl{display:grid;gap:8px;margin:0}.points-fees dl>div{display:flex;justify-content:space-between;gap:16px}.points-fees dt{font-weight:400}.points-fees dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}.points-fees dl>div:last-child{font-weight:600}.points-fees p,.points-fee-note{font-size:12px;line-height:1.5;margin:12px 0 0}.phone-bet-sheet .points-fees{max-height:180px;overflow:auto}
 .phone-bet-sheet .phone-confirm{position:sticky;bottom:0;z-index:2}
+
+/* Resolution uses the extension card at the width of its web container. */
+.phone-app .plot-resolution{container-type:inline-size}
+.phone-app .plot-resolution.count .resolution-net{font-size:clamp(48px,16cqw,80px)}
+.phone-app .plot-resolution .points-claim{width:100%;min-height:44px}
+.phone-app .plot-resolution .resolution-detail-toggle{min-height:44px}
+.market-detail .phone-bets{grid-template-columns:minmax(0,1fr)}
+.phone-app .plot-resolution .resolution-net{color:inherit!important}
+.phone-app .plot-resolution .resolution-detail-toggle{border-radius:0;border:0;border-top:1px solid #ffffff20;background:transparent;box-shadow:none}
