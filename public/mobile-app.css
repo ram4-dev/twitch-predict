@@ -185,13 +185,43 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-streamer-market-pool{margin:0;font-size:12px;color:#b0a8a2}
 @media (max-width:22rem){.phone-streamer-market-options li{grid-template-columns:1.4rem 1fr}.phone-streamer-market-options small{grid-column:2}}
 
-/* Section nav and bet tabs already communicate their state with the sliding underline;
- * the squashed "pressed" scaling is redundant, so it is removed here (underline untouched). */
+/* Section nav and bet tabs already communicate their state with the sliding underline.
+ * Two inherited effects fought it: a squashed "pressed" scaling and a global button:hover background
+ * (which sticks after a tap on touch screens and paints over the underline). Both are removed here.
+ * The underline itself (.phone-nav-indicator / .phone-feed-indicator) is untouched. */
 .phone-nav>button,.phone-feed-tabs>button,
 .phone-nav>button:hover,.phone-feed-tabs>button:hover,
 .phone-nav>button:active,.phone-feed-tabs>button:active,
-.phone-nav>button:focus-visible,.phone-feed-tabs>button:focus-visible{transform:none!important}
+.phone-nav>button:focus,.phone-feed-tabs>button:focus,
+.phone-nav>button:focus-visible,.phone-feed-tabs>button:focus-visible{
+  transform:none!important;background:transparent!important;background-color:transparent!important;box-shadow:none!important;
+}
+.phone-nav>button[aria-current=page]:hover,.phone-feed-tabs>button[aria-pressed=true]:hover{background:transparent!important}
 
 /* Bet choice buttons: the ring marks the selection; drop the fill change so pressing does not repaint them. */
 .phone-app .phone-outcome[aria-pressed=true]:not(:disabled){background-color:transparent}
 .phone-bet-sheet .phone-quick button[aria-pressed=true]{background:transparent;color:inherit}
+
+/* Your chosen option is the signal: it grows, keeps the accent ring, and states what you staked.
+ * The old "Tu elección: …" sentence is gone — the button itself carries the information. */
+.phone-app .phone-outcome[data-chosen="true"]:not(:disabled),
+.phone-app .phone-outcome.phone-outcome-chosen:not(:disabled){
+  transform:scale(1.03);
+  box-shadow:0 0 0 2px rgb(var(--choice-rgb, 255 255 255) / .55),0 10px 26px rgb(0 0 0 / .35);
+  font-weight:600;
+  z-index:1;
+  position:relative;
+}
+.phone-app .phone-outcome[data-chosen="true"] .phone-outcome-name{display:grid;gap:2px}
+.phone-outcome-stake{font-weight:500;font-size:11px;letter-spacing:.01em;opacity:.85;text-transform:none}
+@media (prefers-reduced-motion:reduce){.phone-app .phone-outcome[data-chosen="true"]:not(:disabled){transform:none}}
+@media (max-width:22rem){
+  .phone-app .phone-outcome[data-chosen="true"]:not(:disabled){transform:scale(1.015)}
+}
+
+/* "Mis jugadas": which option you took, in colour, with the amount staked. */
+.phone-position-choice{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.phone-choice-chip{display:inline-flex;align-items:baseline;gap:7px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;
+  background:rgb(var(--accent-rgb) / .14);color:var(--foreground,#fff);border:1px solid rgb(var(--accent-rgb) / .42)}
+.phone-choice-chip small{font-weight:500;font-size:11px;opacity:.85}
+@media (prefers-reduced-motion:reduce){.phone-choice-chip{transition:none}}
