@@ -29,13 +29,13 @@ test('wallet signature identifies one persistent account across sessions without
   const restored=new Points(dir);await restored.load();assert.equal(restored.me(second.token).wallet,w.address);assert.equal(restored.me(first.token).balance,9700);
 }));
 test('extension handoff binds wallet and existing points/history, then cannot be replayed',()=>fixture(async(p,a)=>{
-  const anon=await p.createAccount();const market=await p.accept(demoPrediction(),true);await p.bet(anon.token,market.key,'victory',500,randomUUID());
+  const anon=await p.loginWithTwitch({id:'97001',login:'handoff_viewer',displayName:'Viewer',linkedAt:new Date().toISOString()});const market=await p.accept(demoPrediction(),true);await p.bet(anon.token,market.key,'victory',500,randomUUID());
   const extensionId='a'.repeat(32),state='b'.repeat(64);const flow=a.start(extensionId,state,anon.token);const w=wallet();const c=a.challenge(w.address,origin,flow.flowId);
   const web=await a.authenticate(c.challengeId,w.signature(c.message),origin);assert.equal(web.account.id,anon.account.id);assert.equal(web.account.balance,9500);assert.equal(p.me(web.token).bets.length,1);
   await assert.rejects(a.complete(flow.flowId,'c'.repeat(64),web.handoff!.code,extensionId),/válida/);
   await assert.rejects(a.complete(flow.flowId,state,web.handoff!.code,'d'.repeat(32)),/válida/);
   const ext=await a.complete(flow.flowId,state,web.handoff!.code,extensionId);assert.equal(ext.account.id,web.account.id);assert.notEqual(ext.token,web.token);assert.equal(p.me(ext.token).balance,9500);
-  assert.throws(()=>p.me(anon.token),/Sesión/);await assert.rejects(a.complete(flow.flowId,state,web.handoff!.code,extensionId),/venció/);
+  assert.equal(p.me(anon.token).id,web.account.id);await assert.rejects(a.complete(flow.flowId,state,web.handoff!.code,extensionId),/venció/);
 }));
 test('wrong signature, wrong origin, expired nonce and replay cannot log in',()=>fixture(async(p,a,_dir,tick)=>{
   const w=wallet(),other=wallet();const c=a.challenge(w.address,origin);
@@ -48,7 +48,7 @@ test('wrong signature, wrong origin, expired nonce and replay cannot log in',()=
 test('concurrent proofs cannot mint duplicate accounts or overwrite an existing wallet account',()=>fixture(async(p,a)=>{
   const w=wallet();const c=a.challenge(w.address,origin);const proofs=await Promise.allSettled([a.authenticate(c.challengeId,w.signature(c.message),origin),a.authenticate(c.challengeId,w.signature(c.message),origin)]);assert.equal(proofs.filter(r=>r.status==='fulfilled').length,1);
   const first=proofs.find(r=>r.status==='fulfilled');if(first?.status!=='fulfilled')throw new Error('No result');
-  const anon=await p.createAccount();const flow=a.start('a'.repeat(32),'b'.repeat(64),anon.token);const c2=a.challenge(w.address,origin,flow.flowId);const known=await a.authenticate(c2.challengeId,w.signature(c2.message),origin);assert.equal(known.account.id,first.value.account.id);assert.notEqual(known.account.id,anon.account.id);assert.equal(p.me(anon.token).balance,10000);
+  const anon=await p.createAccount();const flow=a.start('a'.repeat(32),'b'.repeat(64),anon.token);const c2=a.challenge(w.address,origin,flow.flowId);const known=await a.authenticate(c2.challengeId,w.signature(c2.message),origin);assert.equal(known.account.id,first.value.account.id);assert.notEqual(known.account.id,anon.account.id);assert.equal(p.me(anon.token).balance,0);
 }));
 
 test('authenticated web session links a one-time extension flow bound to its origin and state',()=>fixture(async(p,a,_dir,tick)=>{
@@ -64,4 +64,18 @@ test('authenticated web session links a one-time extension flow bound to its ori
  const linked=await a.complete(flow.flowId,state,handoff.code,extensionId);assert.equal(linked.account.id,web.account.id);assert.notEqual(linked.token,web.token);assert.equal(p.me(linked.token).wallet,w.address);
  await assert.rejects(a.complete(flow.flowId,state,handoff.code,extensionId));
  const expired=a.start(extensionId,state,undefined,origin);tick(30*60_000);assert.throws(()=>a.authorize(expired.flowId,web.token,origin),/venció/);
+}));
+
+test('Twitch-only extension handoff issues an identity session without wallet or a second bonus',()=>fixture(async(p,a)=>{
+ const viewer=await p.loginWithTwitch({id:'97012',login:'twitch_extension',displayName:'Viewer',linkedAt:new Date().toISOString()});
+ const flow=a.start('a'.repeat(32),'b'.repeat(64),undefined,origin);
+ const handoff=a.authorize(flow.flowId,viewer.token,origin);
+ const complete=await a.complete(flow.flowId,'b'.repeat(64),handoff.code,'a'.repeat(32));
+ assert.equal(complete.account.id,viewer.account.id);assert.equal(complete.account.wallet,null);
+ assert.equal(p.me(complete.token).balance,10000);assert.equal(p.me(complete.token).twitch?.id,'97012');
+ await assert.rejects(a.complete(flow.flowId,'b'.repeat(64),handoff.code,'a'.repeat(32)),/venció/);
+ const pending=a.start('a'.repeat(32),'c'.repeat(64),undefined,origin);
+ const proof=a.authorize(pending.flowId,viewer.token,origin);
+ await p.unlinkTwitch(viewer.token);
+ await assert.rejects(a.complete(pending.flowId,'c'.repeat(64),proof.code,'a'.repeat(32)),/Twitch o Phantom/);
 }));

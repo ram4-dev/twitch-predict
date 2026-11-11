@@ -48,3 +48,25 @@ test('re-linking a removed Twitch identity does not resurrect streamer registrat
  // Without a wallet the viewer path never claims the channel again.
  assert.equal(p.channels().includes('channel_owner'),false);
 }));
+
+test('unidentified and Google-only accounts cannot receive starter points or place new bets',()=>fixture(async p=>{
+ const anonymous=await p.createAccount();
+ const google=await p.loginWithGoogle({id:'googleonly',displayName:'Google only',linkedAt:new Date().toISOString()});
+ const market=await p.accept((await import('../src/mirror.js')).demoPrediction(),true);
+ for(const account of [anonymous,google]){
+  assert.equal(p.me(account.token).balance,0);assert.equal(p.me(account.token).ledger.length,0);
+  await assert.rejects(p.bet(account.token,market.key,'victory',100,randomUUID()),/Twitch o Phantom/);
+ }
+ await p.linkTwitch(google.token,identity('97011','google_to_twitch'));
+ assert.equal(p.me(google.token).balance,10000);
+ await p.bet(google.token,market.key,'victory',100,randomUUID());
+ await p.unlinkTwitch(google.token);
+ await assert.rejects(p.bet(google.token,market.key,'victory',100,randomUUID()),/Twitch o Phantom/);
+ await p.linkTwitch(google.token,identity('97011','google_to_twitch'));
+ assert.equal(p.me(google.token).balance,9900);
+ assert.equal(p.me(google.token).ledger.filter(l=>l.kind==='welcome').length,1);
+ const wallet=await p.walletLogin('identity-wallet',anonymous.token);
+ assert.equal(wallet.account.id,anonymous.account.id);assert.equal(wallet.account.balance,10000);
+ await p.bet(wallet.token,market.key,'defeat',100,randomUUID());
+ assert.equal(p.me(wallet.token).balance,9900);
+}));

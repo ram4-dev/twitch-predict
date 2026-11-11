@@ -1,3 +1,4 @@
+import {PointsSessionError} from '../points-identity.js';
 import {LiveMarkets} from './live.js';
 import {Waitlist} from '../waitlist.js';
 import {TwitchChannelSearch} from '../twitch-search.js';
@@ -48,7 +49,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  app.use(express.json({limit:'16kb'}));
  const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
  const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{
-  try{await fn(req,res);}catch(error){res.status('code' in Object(error)?503:400).json({error:error instanceof z.ZodError?'Datos inválidos':'code' in Object(error)?'No se pudo completar la operación':(error as Error).message});}
+  try{await fn(req,res);}catch(error){res.status(error instanceof PointsSessionError?401:'code' in Object(error)?503:400).json({error:error instanceof z.ZodError?'Datos inválidos':'code' in Object(error)?'No se pudo completar la operación':(error as Error).message});}
  };
  const waitlist=new Waitlist('',documents);
  app.post('/api/waitlist',express.urlencoded({extended:false,limit:'2kb'}),async(req,res)=>{
@@ -153,7 +154,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  app.get('/api/streamer/console',route((req,res)=>res.json(context(res).points.streamerConsole(bearer(req)))));
  app.get('/api/markets',(_req,res)=>res.json(context(res).points.markets()));
  app.get('/api/channels',(_req,res)=>res.json({channels:context(res).points.channels(),details:[],sourceError:null}));
- app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Conectá tu wallet para iniciar sesión'}));
+ app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Iniciá sesión con Twitch o Phantom'}));
  app.get('/api/mobile/channels/:channel',route(async(req,res)=>{
   const channel=twitchChannel(String(req.params.channel)),markets=(await context(res).byte.list()).filter(m=>m.notes?.channel===channel&&m.status==='open'&&m.currency==='sol'&&m.bettable&&m.closeMs>Date.now());res.json({channel,markets,checkedAt:Date.now()});
  }));

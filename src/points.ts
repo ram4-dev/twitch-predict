@@ -1,3 +1,4 @@
+import {hasPointsIdentity,PointsSessionError} from './points-identity.js';
 import {PlotCommandError,type PlotCommand} from './plot-chat.js';
 import type {Documents} from './cloud/documents.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -118,7 +119,7 @@ export class Points {
   }
   private account(state:State, token:string) {
     const digest=hash(token);const account=state.accounts[state.sessions[digest]]??Object.values(state.accounts).find(a=>!a.wallet&&a.tokenHash===digest);
-    if(!account) throw new Error('Sesión inválida. Volvé a conectar tu cuenta.');return account;
+    if(!account) throw new PointsSessionError('Sesión inválida. Volvé a conectar tu cuenta.');return account;
   }
   /** Moderator evidence comes only from the signed chat event via the adapter, never from HTTP payloads. */
   private verifiedModeratorOf(state:State,channel:MarketChannel,actor:MarketActor,clock:()=>number=Date.now):boolean {
@@ -144,6 +145,7 @@ export class Points {
     return Object.values(state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel);
   }
   private requireViewer(state:State,account:Account){
+    if(!hasPointsIdentity(account))throw new PlotCommandError('Iniciá sesión con Twitch o Phantom para apostar con tus puntos.');
     if(this.managedChannels(state,account).length)throw new PlotCommandError('Las cuentas de streamer no pueden apostar.');
   }
   /** Shared debit used by chat bets and API bets on an open draft; receipts guard replay. */
@@ -159,6 +161,19 @@ export class Points {
     if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new PlotCommandError('Saldo insuficiente');
     account.balance+=delta;state.ledger.push({id:randomUUID(),accountId:account.id,kind,delta,balance:account.balance,marketKey,createdAt:now()});
   }
+  private grantStartingPoints(state:State,account:Account){
+    if(hasPointsIdentity(account)&&!state.ledger.some(entry=>entry.accountId===account.id&&entry.kind==='welcome'))this.ledger(state,account,'welcome',STARTING_POINTS);
+  }
+  /** Issues a session only after Auth's one-time extension flow verified the existing account. */
+  async identitySession(accountId:string){
+    const token=randomBytes(32).toString('hex');
+    return this.transaction(state=>{
+      const account=state.accounts[accountId];
+      if(!account||!hasPointsIdentity(account))throw new Error('Conectá Twitch o Phantom para iniciar sesión.');
+      state.sessions[hash(token)]=account.id;
+      return {token,account:{id:account.id,wallet:account.wallet??null,name:account.name,balance:account.balance}};
+    });
+  }
   /** Twitch-first login: resumes the account already linked to this identity, or creates one exactly once. */
   async loginWithTwitch(identity:TwitchIdentity):Promise<{token:string;account:{id:string;name:string;balance:number};created:boolean}>{
     if(!/^\d+$/.test(identity.id)||!/^[a-z0-9_]{1,40}$/.test(identity.login))throw new Error('Identidad de Twitch inválida');
@@ -167,7 +182,7 @@ export class Points {
       const existing=Object.values(state.accounts).find(a=>a.twitch?.id===identity.id);
       if(existing){state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
       const id=randomUUID();const account:Account={id,name:identity.displayName,tokenHash:hash(token),balance:0,createdAt:now(),twitch:identity};
-      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.ledger(state,account,'welcome',STARTING_POINTS);
+      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.grantStartingPoints(state,account);
       return {token,account:{id,name:account.name,balance:account.balance},created:true};
     });
   }
@@ -179,7 +194,7 @@ export class Points {
       const existing=Object.values(state.accounts).find(a=>a.google?.id===identity.id);
       if(existing){state.sessions[hash(token)]=existing.id;return {token,account:{id:existing.id,name:existing.name,balance:existing.balance},created:false};}
       const id=randomUUID();const account:Account={id,name:identity.displayName,tokenHash:hash(token),balance:0,createdAt:now(),google:identity};
-      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.ledger(state,account,'welcome',STARTING_POINTS);
+      state.accounts[id]=account;state.sessions[hash(token)]=account.id;this.grantStartingPoints(state,account);
       return {token,account:{id,name:account.name,balance:account.balance},created:true};
     });
   }
@@ -187,7 +202,7 @@ export class Points {
     const token=randomBytes(32).toString('hex');
     return this.transaction(state=>{
       const id=randomUUID();const account:Account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};
-      state.accounts[id]=account;this.ledger(state,account,'welcome',STARTING_POINTS);
+      state.accounts[id]=account;this.grantStartingPoints(state,account);
       return {token,account:{id,name:account.name,balance:account.balance}};
     });
   }
@@ -196,8 +211,8 @@ export class Points {
     return this.transaction(state=>{
       let account=Object.values(state.accounts).find(a=>a.wallet===wallet);
       if(!account&&preferredToken){const preferred=this.account(state,preferredToken);if(!preferred.wallet)account=preferred;}
-      if(!account){const id=randomUUID();account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};state.accounts[id]=account;this.ledger(state,account,'welcome',STARTING_POINTS);}
-      account.wallet=wallet;state.sessions[hash(token)]=account.id;
+      if(!account){const id=randomUUID();account={id,name:`Jugador ${id.slice(0,4).toUpperCase()}`,tokenHash:hash(token),balance:0,createdAt:now()};state.accounts[id]=account;this.grantStartingPoints(state,account);}
+      account.wallet=wallet;this.grantStartingPoints(state,account);state.sessions[hash(token)]=account.id;
       for(const bet of state.bets)if(bet.accountId===account.id)bet.wallet??=wallet;
       return {token,account:{id:account.id,wallet,name:account.name,balance:account.balance}};
     });
@@ -214,7 +229,7 @@ export class Points {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const total=bets.reduce((n,b)=>n+b.amount,0);
     const sourceFresh=m.demo||m.source==='plot'||Date.now()-Date.parse(m.sourceCheckedAt)<SOURCE_MAX_AGE;
     const phase=m.phase==='open'&&closesAt(m.prediction)<=Date.now()?'locked':m.phase;
-    return {...m,phase,network:'offchain',canBet:phase==='open'&&m.prediction.status==='ACTIVE'&&closesAt(m.prediction)>Date.now()&&sourceFresh,
+    return {...m,...(m.phase==='void'&&m.winnerId?{reason:bets.length?'No hubo apuestas a la opción ganadora. Todas las apuestas fueron reembolsadas.':'La predicción no recibió apuestas.'}:{}),phase,network:'offchain',canBet:phase==='open'&&m.prediction.status==='ACTIVE'&&closesAt(m.prediction)>Date.now()&&sourceFresh,
       sourceFresh,totalPoints:total,totalBets:bets.length,participants:new Set(bets.map(b=>b.accountId)).size,
       outcomes:m.prediction.outcomes.map(o=>{const own=bets.filter(b=>b.outcomeId===o.id);const points=own.reduce((n,b)=>n+b.amount,0);return {id:o.id,title:o.title,color:o.color,points,bets:own.length,share:total?points/total*100:0};})};
   }
@@ -329,7 +344,7 @@ export class Points {
     m.winnerId=winner??undefined;m.reason=reason;m.settlement={source:m.demo?'demo':'twitch',at:now()};
     if(!winner||!winningPool) {
       // Automatic refund: credited inside the same transaction, once per position, even for offline accounts.
-      if(winner)m.reason='Sin apuestas al ganador: se devuelve cada apuesta';
+      if(winner)m.reason=bets.length?'No hubo apuestas a la opción ganadora. Todas las apuestas fueron reembolsadas.':'La predicción no recibió apuestas.';
       // Terminal refunded phase: winnerId/reason still distinguish an owner resolve with no winning bets from a cancellation.
       m.phase='void';
       const groups=new Map<string,Bet[]>();
@@ -415,6 +430,7 @@ export class Points {
       // Channel registration is a streamer capability: only wallet-backed accounts claim channels.
       if(a.wallet&&!state.channels.includes(identity.login))state.channels.push(identity.login);
       if(a.wallet)state.streamers[identity.login]={channel:identity.login,wallet:a.wallet,twitchId:identity.id,assignedAt:now()};
+      this.grantStartingPoints(state,a);
       return {twitch:a.twitch,channel:identity.login};
     });
   }

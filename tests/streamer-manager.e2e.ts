@@ -63,3 +63,28 @@ test('resolution card preserves real stake, total payout and net for historical 
  for(const [width,height] of [[700,600],[360,800]]){await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await card.scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/streamer-resolution-personal-${width}.png`});}
  await card.getByRole('button',{name:'Cobrar 300 pts',exact:true}).click();await expect(card.getByRole('button',{name:'Cobrar 300 pts',exact:true})).toHaveCount(0);await expect(page.locator('#own-balance')).toContainText('10.200');
 });
+
+test('automatic cancellation explains missing winning bets before and after confirmation',async({page,browser})=>{
+ await owner(page);
+ const viewer=await browser.newPage();await signIn(viewer);
+ try{
+  for(const withBet of [false,true]){
+   const card=await create(page,withBet?'¿Resultado sin ganadores apostados?':'¿Resultado sin apuestas?');
+   const key=await card.getAttribute('data-streamer-key');
+   if(withBet)await api(viewer,'/api/points/bet',{key,outcomeId:'1',amount:200,requestId:randomUUID()});
+   await card.getByRole('button',{name:'Cerrar apuestas',exact:true}).click();
+   await card.getByRole('button',{name:'Elegir ganador: Equipo Azul',exact:true}).click();
+   await card.getByRole('button',{name:'Revisar resultado',exact:true}).click();
+   await expect(card.getByRole('region',{name:'Confirmar liquidación'})).toContainText(withBet?'No hay apuestas a la opción ganadora':'no recibió apuestas');
+   await card.getByRole('button',{name:'Confirmar anulación',exact:true}).click();
+   await expect(card).toHaveAttribute('data-phase','void');await expect(card).toContainText('Anulada');
+   await expect(card.locator('.resolution-reason')).toContainText(withBet?'No hubo apuestas a la opción ganadora':'no recibió apuestas');
+   await expect(card).toContainText(withBet?'Todas las apuestas fueron reembolsadas.':'La predicción no recibió apuestas.');
+   const markets=await api(page,'/api/markets'),market=markets.find((m:{key:string})=>m.key===key);
+   expect(market.phase).toBe('void');expect(market.winnerId).toBe('2');expect(market.reason).toContain(withBet?'No hubo apuestas a la opción ganadora':'no recibió apuestas');
+   await page.reload();await expect(card).toHaveAttribute('data-phase','void');await expect(card.locator('.resolution-reason')).toContainText(withBet?'No hubo apuestas a la opción ganadora':'no recibió apuestas');
+   const me=await api(viewer,'/api/points/me');expect(me.balance).toBe(10000);
+   expect(me.ledger.filter((entry:{kind:string;marketKey:string})=>entry.kind==='refund'&&entry.marketKey===key)).toHaveLength(withBet?1:0);
+  }
+ }finally{await viewer.close();}
+});

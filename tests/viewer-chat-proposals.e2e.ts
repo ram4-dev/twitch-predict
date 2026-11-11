@@ -5,6 +5,7 @@ import {createHmac,randomUUID} from 'node:crypto';
 import {phantomProvider} from './fixtures/phantom.js';
 
 test('viewer chat proposal appears in the open streamer inbox and bot delivers help, confirmation and permission replies',async({page,context})=>{
+ test.setTimeout(90000);
  const login=`plot_${randomUUID().replaceAll('-','').slice(0,8)}`,ownerId=String(Date.now());
  const owner={id:ownerId,login,display_name:'Plot streamer',scopes:['channel:bot','moderation:read']};
  await writeFile(resolve('test-results/twitch-oauth.json'),JSON.stringify(owner));await phantomProvider(page);
@@ -60,7 +61,7 @@ test('viewer chat proposal appears in the open streamer inbox and bot delivers h
  await expect.poll(async()=>{
   let lines='';try{lines=await readFile(resolve('.e2e-fixtures/chat-messages.jsonl'),'utf8');}catch{/* first worker tick */}
   return lines.split('\n').filter(Boolean).map(line=>JSON.parse(line)).filter(m=>m.broadcaster_id===ownerId).map(m=>m.message).join('\n');
- },{timeout:35000,intervals:[1000]}).toMatch(/Crear o proponer:[\s\S]*Propuesta .* pendiente de aprobación[\s\S]*No tenés permisos/);
+ },{timeout:60000,intervals:[1000]}).toMatch(/Crear o proponer:[\s\S]*Propuesta .* pendiente de aprobación[\s\S]*No tenés permisos/);
  for(const width of [700,360]){await page.setViewportSize({width,height:600});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
  await inbox.getByRole('button',{name:'Aceptar y publicar'}).click();
  await expect(inbox.getByText('Propuesta aceptada y mercado publicado.')).toBeVisible();

@@ -84,7 +84,7 @@ test('authenticated viewers enqueue channels outside the seed list once, without
  const server=cloudApp(docs,env).listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
  const watch=(channel:string,token=login.token)=>fetch(base+'/api/byte/twitch/watch',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:JSON.stringify({channel})});
  try{
-  assert.equal((await watch('new_streamer','invalid-session')).status,400);
+  assert.equal((await watch('new_streamer','invalid-session')).status,401);
   assert.equal((await watch('https://evil.example')).status,400);
   assert.equal((await watch('missing_streamer')).status,400);
   const results=await Promise.all([watch('NEW_STREAMER'),watch('new_streamer')]);

@@ -7,7 +7,7 @@ import {Points,STARTING_POINTS} from '../src/points.js';
 import {demoPrediction} from '../src/mirror.js';
 async function fixture(run:(points:Points,dir:string)=>Promise<void>){const dir=await mkdtemp(`${tmpdir()}/points-test-`);try{const p=new Points(dir);await p.load();await run(p,dir);}finally{await rm(dir,{recursive:true,force:true});}}
 test('separate accounts debit atomically, settle a shared pool, persist and cannot claim twice',()=>fixture(async(p,dir)=>{
-  const a=await p.createAccount(),b=await p.createAccount();const source=demoPrediction();const m=await p.accept(source,true);
+  const a=await p.walletLogin(`fixture-${randomUUID()}`),b=await p.walletLogin(`fixture-${randomUUID()}`);const source=demoPrediction();const m=await p.accept(source,true);
   assert.equal(m.totalPoints,0);assert.equal(p.me(a.token).balance,STARTING_POINTS);
   const id=randomUUID();await Promise.all(Array.from({length:5},()=>p.bet(a.token,m.key,'victory',300,id)));
   await p.bet(b.token,m.key,'defeat',700,randomUUID());assert.equal(p.market(m.key).totalPoints,1000);assert.equal(p.me(a.token).balance,9700);
@@ -21,7 +21,7 @@ test('separate accounts debit atomically, settle a shared pool, persist and cann
   assert.equal(loaded.me(a.token).balance+loaded.me(b.token).balance,2*STARTING_POINTS);
 }));
 test('concurrent spend never overdraws, rejects fractional/negative points and bad identities',()=>fixture(async p=>{
-  const a=await p.createAccount();const m=await p.accept(demoPrediction(),true);
+  const a=await p.walletLogin(`fixture-${randomUUID()}`);const m=await p.accept(demoPrediction(),true);
   const results=await Promise.allSettled([p.bet(a.token,m.key,'victory',7000,randomUUID()),p.bet(a.token,m.key,'defeat',7000,randomUUID())]);
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(p.me(a.token).balance,3000);
   for(const amount of [-1,0,.5,NaN,Infinity,1_000_001])await assert.rejects(p.bet(a.token,m.key,'victory',amount,randomUUID()));
@@ -30,13 +30,13 @@ test('concurrent spend never overdraws, rejects fractional/negative points and b
   assert.equal(p.market(m.key).totalPoints,7000);
 }));
 test('integer payouts conserve the whole pool; cancellation and zero winners refund all stakes',()=>fixture(async p=>{
-  const a=await p.createAccount(),b=await p.createAccount(),c=await p.createAccount();const m=await p.accept(demoPrediction(),true);
+  const a=await p.walletLogin(`fixture-${randomUUID()}`),b=await p.walletLogin(`fixture-${randomUUID()}`),c=await p.walletLogin(`fixture-${randomUUID()}`);const m=await p.accept(demoPrediction(),true);
   await p.bet(a.token,m.key,'victory',1,randomUUID());await p.bet(b.token,m.key,'victory',2,randomUUID());await p.bet(c.token,m.key,'defeat',7,randomUUID());
   await p.demoResolve(m.key,'victory');assert.equal(p.me(a.token).claimable+p.me(b.token).claimable,10);
   for(const winner of [null,'defeat']){const m2=await p.accept(demoPrediction(),true);await p.bet(a.token,m2.key,'victory',100,randomUUID());await p.demoResolve(m2.key,winner);assert.equal(p.market(m2.key).phase,'void');assert.equal(p.me(a.token).bets.find(b=>b.marketKey===m2.key)?.payout,100);}
 }));
 test('source locks, deadline and stale verification reject bets; terminal results cannot regress',()=>fixture(async(p,dir)=>{
-  const account=await p.createAccount();const source=demoPrediction();const m=await p.accept(source);
+  const account=await p.walletLogin(`fixture-${randomUUID()}`);const source=demoPrediction();const m=await p.accept(source);
   await p.bet(account.token,m.key,'victory',100,randomUUID());await p.accept({...source,status:'LOCKED'});
   await assert.rejects(p.bet(account.token,m.key,'defeat',100,randomUUID()),/cerrada/);
   await p.accept(source);assert.equal(p.market(m.key).phase,'locked');
@@ -49,7 +49,7 @@ test('source locks, deadline and stale verification reject bets; terminal result
 }));
 
 test('failed disk commit cannot debit points and the operation queue recovers',()=>fixture(async(p,dir)=>{
-  const a=await p.createAccount();const m=await p.accept(demoPrediction(),true);
+  const a=await p.walletLogin(`fixture-${randomUUID()}`);const m=await p.accept(demoPrediction(),true);
   await rename(`${dir}/points.json`,`${dir}/points.backup`);await mkdir(`${dir}/points.json`);
   const id=randomUUID();await assert.rejects(p.bet(a.token,m.key,'victory',200,id));
   assert.equal(p.me(a.token).balance,10000);assert.equal(p.market(m.key).totalPoints,0);
@@ -79,4 +79,22 @@ test('a viewer becoming a streamer can replay an old receipt without debiting ag
   assert.deepEqual(await p.bet(account.token,market.key,'victory',100,id),receipt);
   await assert.rejects(p.bet(account.token,market.key,'victory',100,randomUUID()),/streamer/);
   assert.equal(p.me(account.token).balance,9900);assert.equal(p.market(market.key).totalPoints,100);
+}));
+
+test('no winning bets keep the void/refund policy and expose an explicit cancellation reason',()=>fixture(async p=>{
+ const owner=await p.walletLogin('resolve-owner');await p.linkTwitch(owner.token,{id:'97020',login:'resolve_owner',displayName:'Owner',linkedAt:new Date().toISOString()});
+ await p.setBotEnabled(owner.token,true);
+ const viewer=await p.loginWithTwitch({id:'97021',login:'resolve_viewer',displayName:'Viewer',linkedAt:new Date().toISOString()});
+ for(const withBet of [false,true]){
+  const {key}=await p.plotCommand('97020','97020',{kind:'create',title:'¿Resultado?',options:['Sí','No']},randomUUID());
+  if(withBet)await p.bet(viewer.token,key,'1',100,randomUUID());
+  await p.streamerAction(owner.token,{key,action:'lock',requestId:randomUUID()});
+  const preview=p.previewSettlement(owner.token,key,'2');assert.equal(preview.phase,'void');
+  assert.match(preview.reason!,withBet?/No hubo apuestas a la opción ganadora/:/no recibió apuestas/);
+  const action={key,action:'resolve' as const,winnerId:'2',requestId:randomUUID()};
+  await p.streamerAction(owner.token,action);await p.streamerAction(owner.token,action);
+  const market=p.market(key);assert.equal(market.phase,'void');assert.equal(market.winnerId,'2');
+  assert.equal(market.reason,preview.reason);assert.equal(p.me(viewer.token).balance,10000);
+  assert.equal(p.me(viewer.token).ledger.filter(l=>l.marketKey===key&&l.kind==='refund').length,withBet?1:0);
+ }
 }));

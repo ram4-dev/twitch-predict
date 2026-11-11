@@ -1,6 +1,7 @@
 import {BettingModeLabel,type BettingMode} from './components/betting-mode.js';
 import {UserMarketCard,BetSheet,type Selection} from './components/user-market-card.js';
 import {MarketDetail} from './market-detail.js';
+import {hasPointsIdentity} from '../points-identity.js';
 import {createPointsClient} from './points-ui.js';
 import type {AppMarket,AppAccount} from './mobile-app-data.js';
 import {useEffect,useRef,useState} from 'react';
@@ -122,7 +123,7 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
   const visible=state.markets.filter(m=>m.status==='open');
   const closed=state.markets.filter(m=>m.status!=='open');
   return <main className="streamer-page" ref={node=>{if(node)enhanceGlowStage(node);}}>
-    <header className="streamer-head"><PlotBrandLink logoClassName="streamer-brand"/><WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/></header>
+    <header className="streamer-head"><PlotBrandLink logoClassName="streamer-brand"/>{mode==='points'?<a className="phone-connect" href="/app">Mi cuenta</a>:<WalletButton wallet={wallet} busy={busy} onConnect={()=>void connect()} onOpenPhantom={openPhantom}/>}</header>
     <div className="byte-connection"><BettingModeLabel mode={mode}/>{mode==='byte'&&state.points.length>0&&<> · <BettingModeLabel mode="points"/></>}</div>
     <StreamerIdentity login={channel.login}/>
     <div className="streamer-tools">
@@ -142,10 +143,10 @@ export function ChannelPage({channel}:{channel:StreamerChannel}){
   </main>;
 }
 
-const pointsClient=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async token=>localStorage.setItem('pointsToken',token)});
+const pointsClient=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async token=>localStorage.setItem('pointsToken',token),clear:async()=>localStorage.removeItem('pointsToken')});
 function PublicPoints({markets,onDone,wallet}:{markets:AppMarket[];onDone:()=>Promise<void>;wallet:string}){
   const [selection,setSelection]=useState<Selection>(),[account,setAccount]=useState<AppAccount>(),[detail,setDetail]=useState('');
-  useEffect(()=>{void pointsClient.me().then(setAccount).catch(()=>setAccount(undefined));},[wallet]);
+  useEffect(()=>{void pointsClient.me().then(value=>setAccount(hasPointsIdentity(value)?value:undefined)).catch(()=>setAccount(undefined));},[wallet]);
   const market=markets.find(m=>m.key===detail);
   const bet=async(m:AppMarket,outcome:string,amount:number,id:string)=>{
     await pointsClient.bet({key:m.key,outcomeId:outcome,amount,requestId:id});

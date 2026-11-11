@@ -1,3 +1,4 @@
+import {PointsSessionError} from './points-identity.js';
 import {LocalDocuments} from './local-documents.js';
 import {CloudTwitchBot} from './cloud/twitch-bot.js';
 import {trustedLocalHostname} from './local-origin.js';
@@ -68,7 +69,7 @@ app.post('/api/twitch/bot/webhook',express.raw({type:'application/json',limit:'6
   try{if(!Buffer.isBuffer(req.body)){res.sendStatus(400);return;}const headers=Object.fromEntries(['id','timestamp','signature','type'].map(name=>{const key=`twitch-eventsub-message-${name}`;return [key,req.get(key)??''];}));const result=await bot.webhook(headers,req.body);res.status(result.status).type('text/plain').send(result.body);}catch{res.sendStatus(400);}
 });
 app.use(express.json({limit:'16kb'}));
-const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
+const route=(handler:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{try{await handler(req,res);}catch(e){res.status(e instanceof PointsSessionError?401:400).json({error:e instanceof z.ZodError?'Datos de la operación inválidos':(e as Error).message});}};
 // Public signup collects only an email and never exposes the stored list.
 app.post(['/api/waitlist','/waitlist'],express.urlencoded({extended:false,limit:'2kb'}),async(req,res)=>{
   const native=req.path==='/waitlist';
@@ -227,7 +228,7 @@ app.post('/api/auth/extension/complete',route(async(req,res)=>{
   if(req.get('origin')&&req.get('origin')!==`chrome-extension://${i.extensionId}`)throw new Error('Origen de extensión inválido');
   res.json({...await auth.complete(i.flowId,i.state,i.code,i.extensionId),bridgeToken:token});
 }));
-app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Conectá Phantom para iniciar sesión'}));
+app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Iniciá sesión con Twitch o Phantom'}));
 // Plan 2: proposals API (session 2). Mounted beside /api/points/me: same bearer session, identity resolved
 // server-side from the linked account; owner evidence via capabilities() inside the aggregate, never from the body.
 const proposalResolver:ProposalActorResolver={

@@ -27,6 +27,7 @@ test('live app confirms a real signed-in bet, restores its filter, resolves and 
 });
 
 test('live search ignores stale responses and reports failures without faking results',async({page})=>{
+ await signIn(page);
  await page.route('**/api/markets',route=>route.fulfill({json:[]}));await page.route('**/api/channels',route=>route.fulfill({json:{channels:[]}}));
  await page.route('**/api/twitch/search?*',async route=>{const q=new URL(route.request().url()).searchParams.get('q');if(q==='old'){await new Promise(resolve=>setTimeout(resolve,500));await route.fulfill({json:{channels:[{login:'old',displayName:'Old',live:true}]}}).catch(()=>{});}else if(q==='fail')await route.fulfill({status:503,json:{error:'Twitch no respondió.'}});else await route.fulfill({json:{channels:[{login:'new',displayName:'New',live:true}]}});});
  await page.goto('/app');const search=page.getByRole('combobox',{name:'Buscar streamer'});await search.fill('old');await page.waitForRequest('**/api/twitch/search?q=old');await search.fill('new');await expect(page.getByRole('option').filter({hasText:'@new'})).toBeVisible();await expect(page.getByRole('option').filter({hasText:'@old'})).toHaveCount(0);await search.press('ArrowDown');await search.press('Enter');await expect(search).toHaveValue('@new');await page.getByRole('button',{name:'Limpiar búsqueda'}).click();await search.fill('fail');await expect(page.getByRole('status')).toContainText('Twitch no respondió.');await expect(page.getByRole('option')).toHaveCount(0);

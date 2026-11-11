@@ -135,7 +135,7 @@ t3('outage inside TTL denies moderator publish; query does not block concurrent 
   // While the slow Twitch query is in flight, the Points queue must stay free for bets/refunds.
   const refundable=await p.markets();
   const demo=refundable[0];
-  const concurrentBet=await p.bet((await p.createAccount()).token,demo.key,'1',10,randomUUID()).then(()=>true).catch(()=>false);
+  const concurrentBet=await p.bet((await p.walletLogin(`viewer-${randomUUID()}`)).token,demo.key,'1',10,randomUUID()).then(()=>true).catch(()=>false);
   assert.equal(concurrentBet,true,'Points queue must not be blocked by the moderator revalidation');
   await slow;
   assert.equal(p.markets().length,1);

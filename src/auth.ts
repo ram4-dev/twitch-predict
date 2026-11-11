@@ -1,9 +1,10 @@
+import {hasPointsIdentity} from './points-identity.js';
 import {randomBytes,createPublicKey,verify,timingSafeEqual} from 'node:crypto';
 import {address,getAddressEncoder} from '@solana/kit';
 import type {Points} from './points.js';
 const id=()=>randomBytes(32).toString('hex');
 const ttl=5*60_000;
-type Flow={id:string;extensionId:string;state:string;preferredToken?:string;origin?:string;expires:number;code?:string;wallet?:string;redeeming?:boolean};
+type Flow={id:string;extensionId:string;state:string;preferredToken?:string;origin?:string;expires:number;code?:string;wallet?:string;accountId?:string;redeeming?:boolean};
 type Challenge={id:string;address:string;origin:string;message:string;expires:number;flowId?:string;preferredToken?:string};
 function publicKey(value:string){const bytes=getAddressEncoder().encode(address(value));return createPublicKey({key:Buffer.concat([Buffer.from('302a300506032b6570032100','hex'),Buffer.from(bytes)]),format:'der',type:'spki'});}
 const equal=(a:string,b:string)=>{const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.length&&timingSafeEqual(x,y);};
@@ -23,8 +24,8 @@ export class Auth {
   authorize(flowId:string,token:string,origin:string){
     const f=this.flow(flowId);
     if(f.origin!==origin||f.code||f.redeeming)throw new Error('La vinculación no corresponde a este panel o ya se completó');
-    const account=this.points.me(token);if(!account.wallet)throw new Error('Conectá Phantom antes de vincular tu cuenta');
-    f.wallet=account.wallet;f.code=id();f.expires=this.clock()+ttl;
+    const account=this.points.me(token);if(!hasPointsIdentity(account))throw new Error('Conectá Twitch o Phantom antes de vincular tu cuenta');
+    f.wallet=account.wallet??undefined;f.accountId=account.id;f.code=id();f.expires=this.clock()+ttl;
     return {flowId:f.id,code:f.code,extensionId:f.extensionId};
   }
   context(flowId:string){const f=this.flow(flowId);return {extensionId:f.extensionId,expiresAt:new Date(f.expires).toISOString()};}
@@ -55,8 +56,8 @@ export class Auth {
   }
   async complete(flowId:string,state:string,code:string,extensionId:string){
     const f=this.flow(flowId);
-    if(f.extensionId!==extensionId||!equal(f.state,state)||!f.code||!equal(f.code,code)||!f.wallet||f.redeeming)throw new Error('La vinculación de la extensión no es válida');
+    if(f.extensionId!==extensionId||!equal(f.state,state)||!f.code||!equal(f.code,code)||(!f.wallet&&!f.accountId)||f.redeeming)throw new Error('La vinculación de la extensión no es válida');
     f.redeeming=true;
-    try{const result=await this.points.walletLogin(f.wallet);this.flows.delete(flowId);return result;}catch(e){f.redeeming=false;throw e;}
+    try{const result=f.wallet?await this.points.walletLogin(f.wallet):await this.points.identitySession(f.accountId!);this.flows.delete(flowId);return result;}catch(e){f.redeeming=false;throw e;}
   }
 }

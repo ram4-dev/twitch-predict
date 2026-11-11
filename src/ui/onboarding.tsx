@@ -9,10 +9,10 @@ import {ArrowRight,Check,Loader2} from 'lucide-react';
 import {TwitchIcon,GoogleIcon} from './brand-icons.js';
 import {StreamerOnboarding} from './streamer-onboarding.js';
 type Provider={isPhantom?:boolean;connect():Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
-type Login={token:string;account:{wallet:string;id:string};handoff?:{flowId:string;extensionId:string;code:string}};
+type Login={token:string;account:{wallet?:string;id:string};handoff?:{flowId:string;extensionId:string;code:string}};
 const provider=()=> (window as unknown as {phantom?:{solana?:Provider}}).phantom?.solana;
 const flowId=new URLSearchParams(location.hash.slice(1)).get('flow')??undefined;
-async function request<T>(path:string,body?:unknown):Promise<T>{const token=localStorage.getItem('pointsToken');const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar el acceso');return data;}
+async function request<T>(path:string,body?:unknown):Promise<T>{const token=localStorage.getItem('pointsToken');const response=await fetch(path,{method:body===undefined?'GET':'POST',headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token?{Authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const data=await response.json();if(!response.ok)throw Object.assign(new Error(data.error||'No se pudo completar el acceso'),{status:response.status});return data;}
 function Onboarding(){
   const mode=useBettingMode();
   const [phase,setPhase]=useState('ready'),[error,setError]=useState(''),[installed,setInstalled]=useState(!!provider()?.isPhantom),[login,setLogin]=useState<Login>(),[flowReady,setFlowReady]=useState(!flowId);
@@ -22,6 +22,10 @@ function Onboarding(){
   const social=async(provider:'twitch'|'google')=>{
     setError('');setPhase('connecting');
     try{
+      if(localStorage.getItem('pointsToken')){
+        try{await request('/api/points/me');}catch(error){if((error as {status?:number}).status===401)localStorage.removeItem('pointsToken');else throw error;}
+      }
+      if(flowId)sessionStorage.setItem('plotExtensionFlow',flowId);
       const result=await request<{url:string}>(`/api/${provider}/start`,{});
       location.assign(result.url);
     }catch(e){setError((e as Error).message);setPhase('ready');}
@@ -51,7 +55,11 @@ function Onboarding(){
       try{
         const result=await request<Login & {token:string}>(`/api/${provider}/complete`,{ticket});
         const previous=localStorage.getItem('pointsToken');if(previous&&previous!==result.token)localStorage.setItem('previousPointsToken',previous);
-        localStorage.setItem('pointsToken',result.token);setPhase('done');location.replace('/app#markets');
+        localStorage.setItem('pointsToken',result.token);
+        if(flowId){
+          const handoff=await request<NonNullable<Login['handoff']>>('/api/auth/extension/authorize',{flowId});
+          await finish({...result,handoff});
+        }else{setPhase('done');location.replace('/app#markets');}
       }catch(e){if(active)setError((e as Error).message);}
     })();
     return()=>{active=false;};
@@ -66,6 +74,7 @@ function Onboarding(){
       if(!response?.ok)throw new Error(response?.error||'No se pudo vincular la extensión. Reintentá la conexión.');
       localStorage.setItem('linkedExtensionId',result.handoff.extensionId);
     }
+    sessionStorage.removeItem('plotExtensionFlow');
     setPhase('done');if(new URLSearchParams(location.search).has('extension')){window.close();return;}location.replace('/app#markets');
   };
   const connect=async()=>{
@@ -84,17 +93,17 @@ function Onboarding(){
     }catch(e){const err=e as Error&{code?:number};setError(err.code===4001?'Cancelaste la conexión o la firma. Podés volver a intentar.':err.message);setPhase('ready');}
   };
   const autoStarted=useRef(false);
-  useEffect(()=>{if(flowReady&&installed&&new URLSearchParams(location.search).has('extension')&&!autoStarted.current){autoStarted.current=true;void connect();}},[flowReady,installed]);
+  useEffect(()=>{if(flowReady&&installed&&new URLSearchParams(location.search).get('connect')!=='twitch'&&new URLSearchParams(location.search).has('extension')&&!autoStarted.current){autoStarted.current=true;void connect();}},[flowReady,installed]);
   const busy=phase!=='ready';
   const labels:Record<string,string>={ready:login?'Reintentar vinculación':'Conectar Phantom',connecting:'Conectá tu wallet en Phantom…',signing:'Confirmá el inicio de sesión en Phantom…',linking:'Vinculando tu extensión…',done:'Abriendo tu panel…'};
   return <AuthLayout footer="Al terminar, abrimos tu panel y la extensión queda conectada."><div className="auth-progress"><span>{flowId?<><Check size={14}/> Extensión instalada</>:<>plot</>}</span><span>Cuenta y panel</span></div><PlotMascot/><h1>Tu cuenta, también<br/>en el stream.</h1><p>Entrá con Twitch para tener tus puntos y apuestas desde el chat, la extensión y el panel.</p>
-      {!flowId&&<div className="auth-social" role="group" aria-label="Formas de entrar">
+      {<div className="auth-social" role="group" aria-label="Formas de entrar">
         <Button className="auth-primary" disabled={phase!=='ready'} onClick={()=>void social('twitch')}>{phase==='connecting'?<Loader2 size={16} className="animate-spin"/>:<TwitchIcon size={18}/>}<span>{phase==='connecting'?'Abriendo Twitch…':'Continuar con Twitch'}</span>{phase==='connecting'?null:<ArrowRight size={16}/>}</Button>
-        {googleConfigured!==false&&<Button variant="outline" disabled={phase!=='ready'||googleConfigured===null} onClick={()=>void social('google')}>{googleConfigured===null?<Loader2 size={16} className="animate-spin"/>:<GoogleIcon size={18}/>}<span>{googleConfigured===null?'Google…':'Continuar con Google'}</span></Button>}
-        {googleConfigured===false&&<p className="auth-secondary" aria-disabled="true">Google todavía no está disponible.</p>}
+        {!flowId&&googleConfigured!==false&&<Button variant="outline" disabled={phase!=='ready'||googleConfigured===null} onClick={()=>void social('google')}>{googleConfigured===null?<Loader2 size={16} className="animate-spin"/>:<GoogleIcon size={18}/>}<span>{googleConfigured===null?'Google…':'Continuar con Google'}</span></Button>}
+        {!flowId&&googleConfigured===false&&<p className="auth-secondary" aria-disabled="true">Google todavía no está disponible.</p>}
       </div>}
       {flowId?(installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={false}/><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>)
-      :installed&&<Button variant="outline" disabled={phase!=='ready'} onClick={()=>void connect()}>Conectar Phantom</Button>}
+      :installed?<Button variant="outline" disabled={phase!=='ready'} onClick={()=>void connect()}>Conectar Phantom</Button>:<PhantomHandoff className="auth-secondary"/>}
       {error&&<p className="auth-error" role="alert">{error}</p>}<BettingModeNotice mode={mode}/></AuthLayout>;
 }
 createRoot(document.getElementById('onboarding-root')!).render(new URLSearchParams(location.search).has('streamer')?<StreamerOnboarding/>:<Onboarding/>);

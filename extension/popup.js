@@ -2,7 +2,7 @@ import {mountChannelSearch,searchTwitch} from './channel-search.js';
 import {defaultBridge,isAppOrigin} from './app-config.js';
 import {popupScope,matchingCache,cacheAllowsBet,cachedBalance,reconcileBytePredictions} from './popup-cache.js';
 import { countdown, isOpen, pointShare, formatNumber, totalMetric, statusLabel } from './model.js';
-import {disposePointsViews,createPointsClient,bettingView,performPointsAction} from './points-ui.js';
+import {disposePointsViews,createPointsClient,hasPointsIdentity,bettingView,performPointsAction} from './points-ui.js';
 import './surfaces.js';
 import {byteMarketView,twitchPreviewView,disposeByteViews} from './byte-ui.js';
 const points=n=>new Intl.NumberFormat('en-US').format(n??0);
@@ -55,13 +55,13 @@ function predictionCard(p,market,item){
   if(market&&['resolved','void'].includes(market.phase)){
     let settled=settledCards.get(market.key);
     if(!settled){settled=el('article',null,'prediction');settled.dataset.predictionId=p.id;settledCards.set(market.key,settled);}
-    const view=bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load,true),forms,true);
+    const view=bettingView(market,hasPointsIdentity(account)?account:undefined,action=>performPointsAction(action,client,load,true),forms,true);
     if(settled.firstElementChild!==view)settled.replaceChildren(view,sourceView(p));
     return settled;
   }
   const card=el('article',null,'prediction');card.dataset.predictionId=p.id;
   const line=el('div',null,'topline');line.append(el('span',`@${p.channel}`,'status'));const timer=el('span',countdown(p),'countdown');timer.dataset.timer=p.id;line.append(timer);card.append(line,el('h1',p.title));
-  if(market)card.append(bettingView(market,account?.wallet?account:undefined,action=>performPointsAction(action,client,load,true),forms,true));
+  if(market)card.append(bettingView(market,hasPointsIdentity(account)?account:undefined,action=>performPointsAction(action,client,load,true),forms,true));
   else{const pending=el('section',null,'market');const labels={unpaired:'Connect the extension once to create the copy',offline:'Market offline',closed:'This prediction is already closed',failed:'The market could not be created'};pending.append(el('strong',labels[item?.market?.state]||'Creating the copy automatically…'));if(item?.market?.error)pending.append(el('p',item.market.error,'market-error'));card.append(pending);}
   card.append(sourceView(p));return card;
 }
@@ -72,7 +72,7 @@ function render(){
   for(const m of visible)if(!current.some(p=>p.prediction.id===m.prediction.id))cards.push(predictionCard(m.prediction,m));
   reconcileCards(cards);for(const key of settledCards.keys())if(!markets.some(m=>m.key===key))settledCards.delete(key);$('#empty').hidden=!!cards.length;
   $('#empty-copy').textContent=selectedChannel?`No stakes are open on @${selectedChannel}. The next one will show up automatically.`:'Open a Twitch channel. The next stake will be copied automatically.';
-  $('#account-name').textContent=account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Connect Phantom';$('#own-balance').textContent=account?points(account.balance):'—';
+  $('#account-name').textContent=account?.twitch?`@${account.twitch.login}`:account?.wallet?`${account.wallet.slice(0,4)}…${account.wallet.slice(-4)}`:'Sign in';$('#own-balance').textContent=account?points(account.balance):'—';
   const history=$('#history');history.replaceChildren();const bets=account?.bets??[];
   if(bets.length){history.append(el('h2','Your recent stakes'));for(const bet of bets.slice(-8).reverse()){const row=el('div',null,'history-row');row.append(el('strong',bet.title),el('span',`${bet.outcome} · ${points(bet.amount)} pts · ${bet.claimed?'Claimed':bet.payout?`${points(bet.payout)} pts to claim`:['resolved','void'].includes(bet.phase)?'Finished':'In play'}`));if(bet.payout&&!bet.claimed){const market=markets.find(m=>m.key===bet.marketKey);const button=el('button','View payout');button.onclick=()=>{selectedChannel=market.prediction.channel;void load();};row.append(button);}history.append(row);}}
   tick();
@@ -121,7 +121,7 @@ function renderByte(){
  const cards=rounds.map(r=>r.card);
  if(cards.length>1){cards.splice(1,0,roundLabel('history','Earlier rounds'));cards.unshift(roundLabel('current','Current round'));}
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='The operator creates this channel’s markets from the dashboard. Pick an option to sign with Phantom.';
- $('#dashboard').href=`${base}/app`;$('#user-console').href='#history';$('#user-console').target='_self';$('#login p').textContent='Connect Phantom to stake and follow your transactions from the extension.';$('#streamer-console').hidden=true;
+ $('#dashboard').href=`${base}/app`;$('#user-console').href='#history';$('#user-console').target='_self';$('#connect-twitch').hidden=true;$('#login p').textContent='Connect Phantom to stake and follow your transactions from the extension.';$('#streamer-console').hidden=true;
 }
 async function refreshByte(base,scope){
  lastRefresh=Date.now();byteError='';
@@ -158,14 +158,16 @@ async function load(force=false){
       await refreshByte(base,scope);return;
     }
     disposeByteViews();
+    $('#connect-twitch').hidden=false;$('#login p').textContent='Sign in with Twitch or Phantom to access your points and stakes.';
     $('#wallet').hidden=false;$('#own-balance').nextElementSibling.textContent='internal points';
-    if(!client||clientBase!==base){clientBase=base;client=createPointsClient(base,{get:async()=> (await chrome.storage.local.get('pointsToken')).pointsToken,set:async token=>chrome.storage.local.set({pointsToken:token})},true);}
+    if(!client||clientBase!==base){clientBase=base;client=createPointsClient(base,{get:async()=> (await chrome.storage.local.get('pointsToken')).pointsToken,set:async token=>chrome.storage.local.set({pointsToken:token}),clear:async()=>chrome.storage.local.remove('pointsToken')},true);}
     try{[markets,account]=await Promise.all([client.request('/api/markets'),client.me()]);$('#points-error').hidden=true;}catch(e){account=undefined;markets=[];$('#points-error').hidden=false;$('#points-error').textContent=`Internal points are offline: ${e.message}`;}
     const channels=[...new Set([...Object.keys(state).filter(k=>k.startsWith('channel:')).map(k=>k.slice(8)),...markets.map(m=>m.prediction.channel)])].sort();
     if(!selectedChannel)selectedChannel=state.lastPoll?.channel||channels[0]||'';if(selectedChannel&&!channels.includes(selectedChannel))channels.push(selectedChannel);
     updateChannelSearch(selectedChannel,activeChannel);snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`Could not refresh Twitch: ${snapshot.sourceError}`:'';
-    $('#login').hidden=!!account?.wallet;$('#points-error').hidden=!account?.wallet||$('#points-error').hidden;$('#dashboard').href=`${base}/app`;$('#user-console').href=`${base}/app#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/app#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=account?.wallet?'Connected':'Not connected';render();
+    if(!hasPointsIdentity(account)){account=undefined;markets=[];}
+    $('#wallet').hidden=!hasPointsIdentity(account);$('#login').hidden=hasPointsIdentity(account);$('#points-error').hidden=!hasPointsIdentity(account)||$('#points-error').hidden;$('#dashboard').href=`${base}/app`;$('#user-console').href=`${base}/app#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/app#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=hasPointsIdentity(account)?'Connected':'Not connected';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){const force=forceAgain;again=false;forceAgain=false;void load(force);}}
 }
@@ -178,6 +180,7 @@ async function requestPoll(force=false){
  catch(e){$('#source-error').hidden=false;$('#source-error').textContent=e.message;}
  finally{polling.delete(channel);if(force)$('#refresh').disabled=false;await load(force);}
 }
+$('#connect-twitch').onclick=async()=>{const button=$('#connect-twitch');button.disabled=true;$('#auth-message').textContent='Opening Twitch sign-in…';try{const result=await chrome.runtime.sendMessage({type:'CONNECT_TWITCH'});if(result?.error)throw new Error(result.error);}catch(e){$('#auth-message').textContent=e.message;}finally{button.disabled=false;}};
 $('#connect-phantom').onclick=async()=>{const button=$('#connect-phantom');button.disabled=true;$('#auth-message').textContent='Opening Phantom access…';try{const result=await chrome.runtime.sendMessage({type:'CONNECT_PHANTOM'});if(result?.error)throw new Error(result.error);}catch(e){$('#auth-message').textContent=e.message;}finally{button.disabled=false;}};
 $('#refresh').onclick=()=>void requestPoll(true);
 chrome.storage.onChanged.addListener((changes,area)=>{
