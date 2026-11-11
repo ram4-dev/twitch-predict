@@ -23,4 +23,4 @@ Primary viewport 700 x 600, compact 360 and 320. No new design direction: extend
 
 ## Delivery and resumption
 
-Keep this worktree. Update the existing PR #58 from this dependent branch and rewrite its title/description to the final account-specific behavior. Preview runs via plot-streamer-manager-preview.service from this worktree with the same data directory and HTTPS origin; only its working-directory drop-in changes. Stop the isolated test launcher/proxy after checks; leave the user preview running. No merge to main requested for this follow-up.
+Keep this worktree. Update the existing PR #58 from this dependent branch and rewrite its title/description to the final account-specific behavior. Preview runs via plot-streamer-manager-preview.service from this worktree with the same data directory and HTTPS origin; the service now has a durable user unit and a launch script, with secrets injected by vault-env. Portless keeps backend port 4620 stable for the existing Tailscale proxy. Stop the isolated test launcher/proxy after checks; leave the user preview running. No merge to main requested for this follow-up.
