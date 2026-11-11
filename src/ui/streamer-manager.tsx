@@ -8,6 +8,7 @@ import {Resolution} from './components/resolution.js';
 import {StreamerMarketState} from './components/streamer-market-state.js';
 import {Button} from './components/button.js';
 import {SettlementAmounts} from './components/settlement-amounts.js';
+import {CountingAmount} from './components/counting-amount.js';
 import {MarketComposer,ProposalInbox} from './proposals-ui.js';
 import {httpProposalsClient} from './proposals-client.js';
 import {number} from './points-ui.js';
@@ -81,7 +82,7 @@ function ManagedMarket({market:m,account,theme,onChanged}:{market:AppMarket;acco
   const stake=own.reduce((sum,b)=>sum+b.amount,0),payout=own.reduce((sum,b)=>sum+b.payout,0),pending=own.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0);
   const credited=account.ledger.filter(entry=>entry.kind==='streamer_fee'&&entry.marketKey===m.key).reduce((sum,entry)=>sum+entry.delta,0);
   const earnings=m.phase==='void'?0:m.fees?.streamer??credited;
-  return <div data-streamer-key={m.key} data-phase={m.phase}><PhoneGlass className="phone-market manager-resolution" data-market-phase={m.phase} data-choice-tone={m.phase==='resolved'?'positive':'neutral'}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} reason={m.phase==='void'?m.reason:undefined} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} material="count" hideEmptyPersonal resultContent={<StreamerMarketState market={m}/>}><section className="manager-earnings" data-positive={earnings>0} aria-label="Ganancia del streamer"><span>Ganaste</span><p><strong>{number(earnings)}</strong><span>pts</span></p></section>{pending>0&&<Button tone="positive" disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></PhoneGlass></div>;
+  return <div data-streamer-key={m.key} data-phase={m.phase}><PhoneGlass className="phone-market manager-resolution" data-market-phase={m.phase} data-choice-tone={m.phase==='resolved'?'positive':'neutral'}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} reason={m.phase==='void'?m.reason:undefined} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} material="count" hideEmptyPersonal resultContent={<StreamerMarketState market={m}/>}><section className="manager-earnings" data-positive={earnings>0} aria-label="Ganancia del streamer"><span>Ganaste</span><p aria-label={`${number(earnings)} pts`}><strong><CountingAmount value={earnings} signed={false}/></strong><span aria-hidden="true">pts</span></p></section>{pending>0&&<Button tone="positive" disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></PhoneGlass></div>;
  }
  const canManage=m.source==='plot';
  return <div data-streamer-key={m.key} data-phase={m.phase}><UserMarketCard market={m} theme={theme} management chosenOutcome={m.winnerId??winner} onDetail={()=>{}} onChoose={({outcome})=>{if(!busy&&canManage){setWinner(outcome);setPreview(undefined);setError('');}}}>
