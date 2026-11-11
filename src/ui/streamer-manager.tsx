@@ -3,6 +3,7 @@ import {Plus,RefreshCw} from 'lucide-react';
 import type {Points} from '../points.js';
 import type {AppAccount,AppMarket,AppTheme} from './mobile-app-data.js';
 import {UserMarketCard} from './components/user-market-card.js';
+import {Resolution} from './components/resolution.js';
 import {Button} from './components/button.js';
 import {MarketComposer,ProposalInbox} from './proposals-ui.js';
 import {httpProposalsClient} from './proposals-client.js';
@@ -44,12 +45,12 @@ export function StreamerManager({account,theme,onRefresh}:{account:AppAccount;th
   {!data&&loading&&<p role="status">Cargando mercados…</p>}
   {data&&!channel&&<p className="phone-manager-empty">Ya no tenés canales para administrar.</p>}
   {channel&&view==='proposals'?<ProposalInbox key={channel} client={proposals} channelId={channel} onChanged={()=>void changed()}/>:<>
-   <div className="phone-manager-markets">{markets.map(m=><ManagedMarket key={m.key} market={m} theme={theme} onChanged={changed}/>)}{data&&!markets.length&&<p className="phone-manager-empty">Todavía no hay mercados en este canal. Creá el primero.</p>}</div>
+   <div className="phone-manager-markets">{markets.map(m=><ManagedMarket key={m.key} market={m} account={account} theme={theme} onChanged={changed}/>)}{data&&!markets.length&&<p className="phone-manager-empty">Todavía no hay mercados en este canal. Creá el primero.</p>}</div>
   </>}
  </section>;
 }
 
-function ManagedMarket({market:m,theme,onChanged}:{market:AppMarket;theme:AppTheme;onChanged:()=>Promise<void>}){
+function ManagedMarket({market:m,account,theme,onChanged}:{market:AppMarket;account:AppAccount;theme:AppTheme;onChanged:()=>Promise<void>}){
  const [winner,setWinner]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [preview,setPreview]=useState<{action:'resolve'|'cancel';winner:string;data:Settlement}>();
  const requests=useRef(new Map<string,string>());
@@ -66,7 +67,18 @@ function ManagedMarket({market:m,theme,onChanged}:{market:AppMarket;theme:AppThe
   try{const data=await request<Settlement>('/api/streamer/preview',{key:m.key,winnerId:action==='cancel'?null:winner});setPreview({action,winner,data});}
   catch(e){setError((e as Error).message);}finally{setBusy(false);}
  };
- const canManage=m.source==='plot'&&!['resolved','void'].includes(m.phase);
+ const collect=async()=>{
+  if(busy)return;setBusy(true);setError('');
+  if(!requests.current.has('claim'))requests.current.set('claim',crypto.randomUUID());
+  try{await request('/api/points/claim',{key:m.key,requestId:requests.current.get('claim')});await onChanged();}
+  catch(e){setError((e as Error).message);}finally{setBusy(false);}
+ };
+ if(['resolved','void'].includes(m.phase)){
+  const own=account.bets.filter(b=>b.marketKey===m.key);
+  const stake=own.reduce((sum,b)=>sum+b.amount,0),payout=own.reduce((sum,b)=>sum+b.payout,0),pending=own.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0);
+  return <div data-streamer-key={m.key} data-phase={m.phase}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} material="count">{pending>0&&<Button disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></div>;
+ }
+ const canManage=m.source==='plot';
  return <div data-streamer-key={m.key} data-phase={m.phase}><UserMarketCard market={m} theme={theme} management chosenOutcome={m.winnerId??winner} onDetail={()=>{}} onChoose={({outcome})=>{if(!busy&&canManage){setWinner(outcome);setPreview(undefined);setError('');}}}>
   {canManage?<div className="phone-manager-actions">
    <p>{m.phase==='open'?'Cerrá las apuestas para elegir el ganador.':'Elegí la opción ganadora.'}</p>
