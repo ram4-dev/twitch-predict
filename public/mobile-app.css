@@ -225,3 +225,18 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
   background:rgb(var(--accent-rgb) / .14);color:var(--foreground,#fff);border:1px solid rgb(var(--accent-rgb) / .42)}
 .phone-choice-chip small{font-weight:500;font-size:11px;opacity:.85}
 @media (prefers-reduced-motion:reduce){.phone-choice-chip{transition:none}}
+
+/* "Mis jugadas" now reuses the same market card as the active feed, so the chosen option keeps its
+ * own colour and stake instead of turning grey when the market closes. */
+.phone-position-wrap{display:grid;gap:0;border-radius:var(--panel-radius,#20px)}
+.phone-position-receipt{display:grid;gap:10px;padding:14px 20px 18px;border-radius:0 0 var(--panel-radius,20px) var(--panel-radius,20px);
+  background:rgb(255 255 255 / .03);border:1px solid rgb(255 255 255 / .07);border-top:0;margin-top:-14px;padding-top:20px}
+.phone-position-receipt .phone-receipt{margin:0}
+.phone-result-refund{color:#ffd08a!important}
+/* A closed market must not wash out the chosen option: keep the ring at full strength. */
+.phone-app .phone-market .phone-outcome[data-chosen="true"]:disabled,
+.phone-app .phone-position-wrap .phone-outcome[data-chosen="true"]:disabled{
+  opacity:1!important;filter:none!important;
+  box-shadow:0 0 0 2px rgb(var(--choice-rgb, 255 255 255) / .55)!important;
+  transform:scale(1.03);position:relative;z-index:1;font-weight:600;
+}
