@@ -15,4 +15,8 @@ Typecheck, ESLint and build completed without errors. Unit/integration suite: 19
 
 Proposal mockups were inspected at 360/728 px and browser-tested for responsive widths, acceptance/rejection, review/back/confirmation and reset. They do not send backend requests.
 
-Preview activation pending; keep this worktree and leave main unchanged.
+## Preview activation
+
+Updated the existing plot-streamer-manager-preview.service drop-in to WorkingDirectory=/home/meeting/projects/twitch-predict.streamer-earnings-card and restarted only that service. Preserve its existing data directory, vault-env injection, origin and Portless/Tailscale routing. The public HTTPS preview health, JS and CSS returned 200; browser-computed asset SHA-256 values matched this worktree's verified build exactly. The browser profile used for the probe was signed out; authenticated rendering and financial scenarios are covered by E2E above. Closed the check tab afterward.
+
+Implementation commit: d609153. Retain this worktree and the running preview. Main remains unchanged; no merge or push was performed.
