@@ -56,3 +56,27 @@ test('failed disk commit cannot debit points and the operation queue recovers',(
   await rm(`${dir}/points.json`,{recursive:true});await rename(`${dir}/points.backup`,`${dir}/points.json`);
   await p.bet(a.token,m.key,'victory',200,id);assert.equal(p.me(a.token).balance,9800);
 }));
+
+test('registered streamers cannot make new HTTP or chat bets, while viewers keep betting',()=>fixture(async p=>{
+  const owner=await p.walletLogin('streamer-wallet');await p.linkTwitch(owner.token,{id:'91001',login:'owner',displayName:'Owner',linkedAt:new Date().toISOString()});await p.setBotEnabled(owner.token,true);
+  const created=await p.plotCommand('91001','91001',{kind:'create',title:'¿Ganamos?',options:['Sí','No']},'create-policy-market');
+  const other=await p.accept(demoPrediction(),true);const before=p.me(owner.token);
+  for(const market of [{key:created.key,outcome:'1'},{key:other.key,outcome:'victory'}]){
+    await assert.rejects(p.bet(owner.token,market.key,market.outcome,100,randomUUID()),/streamer/);
+    await assert.rejects(p.chatBet('91001',market.key,market.outcome,randomUUID()),/streamer/);
+  }
+  await assert.rejects(p.plotCommand('91001','91001',{kind:'bet',id:p.market(created.key).shortId,option:1},'owner-chat-bet'),/streamer/);
+  assert.deepEqual(p.me(owner.token),before);assert.equal(p.market(created.key).totalPoints,0);
+  const viewer=await p.createAccount();await p.linkTwitch(viewer.token,{id:'91002',login:'viewer',displayName:'Viewer',linkedAt:new Date().toISOString()});
+  await p.bet(viewer.token,created.key,'1',100,randomUUID());await p.chatBet('91002',created.key,'2',randomUUID());
+  assert.equal(p.me(viewer.token).balance,9800);assert.equal(p.market(created.key).totalPoints,200);
+}));
+
+test('a viewer becoming a streamer can replay an old receipt without debiting again',()=>fixture(async p=>{
+  const account=await p.walletLogin('later-streamer');const market=await p.accept(demoPrediction(),true),id=randomUUID();
+  const receipt=await p.bet(account.token,market.key,'victory',100,id);
+  await p.linkTwitch(account.token,{id:'91003',login:'new_streamer',displayName:'New streamer',linkedAt:new Date().toISOString()});
+  assert.deepEqual(await p.bet(account.token,market.key,'victory',100,id),receipt);
+  await assert.rejects(p.bet(account.token,market.key,'victory',100,randomUUID()),/streamer/);
+  assert.equal(p.me(account.token).balance,9900);assert.equal(p.market(market.key).totalPoints,100);
+}));

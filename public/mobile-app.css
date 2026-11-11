@@ -253,8 +253,6 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-app .phone-outcome .plot-button-content{border-radius:8px!important}
 /* Streamer workspace: the same market cards as the feed, one column in the popup.
    At 700px: 24 + 652 + 24 = 700. At 360px: 16 + 328 + 16 = 360. */
-.phone-nav[data-manager=true]{grid-template-columns:repeat(3,minmax(0,1fr))}
-.phone-nav[data-manager=true]>button{gap:5px;font-size:12px;padding-inline:4px;white-space:nowrap}
 .phone-manager{display:grid;gap:12px;padding-bottom:16px;min-width:0}
 .phone-manager-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}
 .phone-manager-heading h2{font-size:23px;margin:0}
@@ -312,7 +310,7 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-manager .proposal-meta{font-size:12px;color:#c3b9b2}
 .phone-manager .proposal-options{padding-left:20px;font-size:14px}
 .phone-manager .proposal-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px}
-@container phone (max-width:22.5rem){.phone-nav[data-manager=true]>button>svg{display:none}.phone-manager-heading{gap:12px}.phone-manager-heading h2{font-size:21px}.phone-manager-heading>.plot-button{padding-inline:10px}}
+@container phone (max-width:22.5rem){.phone-manager-heading{gap:12px}.phone-manager-heading h2{font-size:21px}.phone-manager-heading>.plot-button{padding-inline:10px}}
 
 .phone-manager-toolbar .phone-icon-button svg{width:17px;height:17px;flex:none}
 .phone-manager .phone-market-meta{margin-bottom:12px}

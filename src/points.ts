@@ -140,8 +140,15 @@ export class Points {
       return {count:evidence.users.length,verifiedAt:evidence.verifiedAt};
     });
   }
+  private managedChannels(state:State,account:Account){
+    return Object.values(state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel);
+  }
+  private requireViewer(state:State,account:Account){
+    if(this.managedChannels(state,account).length)throw new Error('Las cuentas de streamer no pueden apostar.');
+  }
   /** Shared debit used by chat bets and API bets on an open draft; receipts guard replay. */
   private betOnDraft(state:State,account:Account,m:Market,outcomeId:string,amount:number) {
+    this.requireViewer(state,account);
     if(!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
     if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
     const pool=state.bets.filter(b=>b.marketKey===m.key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
@@ -201,7 +208,7 @@ export class Points {
     return {id:account.id,name:account.name,wallet:account.wallet??null,twitch:account.twitch??null,google:account.google??null,balance:account.balance,startingPoints:STARTING_POINTS,
       bets:bets.map(b=>({...b,title:this.state.markets[b.marketKey].prediction.title,channel:this.state.markets[b.marketKey].prediction.channel,outcome:this.state.markets[b.marketKey].prediction.outcomes.find(o=>o.id===b.outcomeId)?.title,phase:this.state.markets[b.marketKey].phase})),
       claimable:bets.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0),ledger:this.state.ledger.filter(l=>l.accountId===account.id).slice(-100).reverse().map(l=>({...l,title:l.marketKey?this.state.markets[l.marketKey]?.prediction.title:undefined})),
-      streamerChannels:Object.values(this.state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel)};
+      streamerChannels:this.managedChannels(this.state,account)};
   }
   private view(state:State, m:Market) {
     const bets=state.bets.filter(b=>b.marketKey===m.key);const total=bets.reduce((n,b)=>n+b.amount,0);
@@ -344,6 +351,7 @@ export class Points {
     return this.transaction(state=>{
       const account=this.account(state,token);const id=`${account.id}:${requestId}`;const fingerprint=JSON.stringify(['bet',key,outcomeId,amount]);
       const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');return previous.result;}
+      this.requireViewer(state,account);
       const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
       if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
       const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
@@ -370,6 +378,7 @@ export class Points {
       if(!account)throw new Error('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
       const id=`${account.id}:${requestId}`,fingerprint=JSON.stringify(['chatBet',key,outcomeId]);
       const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');return previous.result as {betId:string;amount:number;outcomeId:string;balance:number};}
+      this.requireViewer(state,account);
       const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
       if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
       const amount=CHAT_BET_POINTS;
@@ -431,7 +440,7 @@ export class Points {
   exportStateJson():string {return JSON.stringify(this.state);}
   private streamer(state:State,token:string,key?:string){
     const a=this.account(state,token);// Real channels require the linked Twitch identity; the demo channel stays with its assigned wallet.
-    const channels=Object.values(state.streamers).filter(s=>(a.twitch&&s.twitchId===a.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===a.wallet)).map(s=>s.channel);
+    const channels=this.managedChannels(state,a);
     if(key&&!channels.includes(state.markets[key]?.prediction.channel.toLowerCase()))throw new Error('No tenés permisos sobre este mercado');
     return {account:a,channels};
   }

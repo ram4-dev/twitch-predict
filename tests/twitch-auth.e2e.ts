@@ -26,7 +26,7 @@ test('streamer and channel navigation stay absent across old links and refresh',
  for(const hash of ['markets','profile','streamer','channels','connect']){await page.goto(`/app#${hash}`);await expect(page.getByRole('navigation',{name:'Secciones'}).getByRole('button')).toHaveCount(2);await expect(page.locator('#own-balance')).toContainText('10.000');await expect(page.locator('#twitch-connection,.twitch-connect')).toHaveCount(0);await expect(page.getByRole('button',{name:'Streamer',exact:true})).toHaveCount(0);}
 });
 
-test('streamer markets follow Twitch lock and winner automatically without betting or settlement controls',async({page})=>{
+test('streamer markets follow Twitch results in the management workspace without betting controls',async({page,browser})=>{
   const user=await identity();await signIn(page);await provider(page,user.login);await startOAuth(page);await page.getByRole('link',{name:'Autorizar canal',exact:true}).click();await expect.poll(async()=>(await me(page)).twitch?.id).toBe(user.id);
   const prediction={id:randomUUID(),channel:user.login,title:'Resultado automático de Twitch',status:'ACTIVE',createdAt:new Date().toISOString(),predictionWindowSeconds:600,lockedAt:null as string|null,endedAt:null as string|null,winningOutcome:null as {id:string}|null,outcomes:[{id:'yes',title:'Sí',color:'BLUE',totalPoints:100,totalUsers:1},{id:'no',title:'No',color:'PINK',totalPoints:100,totalUsers:1}]};
   const fixture=resolve('test-results/twitch-fixture.json');
@@ -35,10 +35,11 @@ test('streamer markets follow Twitch lock and winner automatically without betti
     const watchStatus=await page.evaluate(async channel=>{const {token}=await(await fetch('/api/pair')).json();const r=await fetch('/api/channels',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({channel})});return r.status;},user.login);expect(watchStatus).toBe(200);
     await page.getByRole('button',{name:'Mis apuestas',exact:true}).click();await page.reload();
     const key=`offchain:${user.login}:${prediction.id}`,card=page.locator(`[data-key="${key}"]`);
-    await expect(card).toBeVisible({timeout:15000});await card.getByRole('button',{name:'Apostar a Sí',exact:true}).click();await page.getByLabel('Puntos a apostar',{exact:true}).fill('100');await page.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(page.locator('#own-balance')).toContainText('9.900');
-    await expect(card).toContainText('Abierta');
-    prediction.status='LOCKED';prediction.lockedAt=new Date().toISOString();await writeFile(fixture,JSON.stringify([prediction]));await expect(card).toContainText('Cerrada',{timeout:20000});await expect(card.getByRole('button',{name:'Apostar a Sí',exact:true})).toBeDisabled();
-    prediction.status='RESOLVED';prediction.endedAt=new Date().toISOString();prediction.winningOutcome={id:'yes'};await writeFile(fixture,JSON.stringify([prediction]));await page.getByRole('button',{name:'Mis jugadas',exact:true}).click();const position=page.locator(`[data-position-key="${key}"]`);await expect(position).toContainText('Ganó Sí',{timeout:20000});await expect(position).toContainText('Perdió No');await page.reload();await expect(position).toContainText('Cobro total');
+    await expect(card).toBeVisible({timeout:15000});await expect(card.getByRole('button',{name:/^Apostar a/})).toHaveCount(0);await expect(page.getByRole('group',{name:'Ver apuestas'})).toHaveCount(0);
+    await expect(card).toContainText('Apuestas abiertas');
+    const viewer=await browser.newPage();await signIn(viewer);const betStatus=await viewer.evaluate(async key=>{const r=await fetch('/api/points/bet',{method:'POST',headers:{'content-type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')}`},body:JSON.stringify({key,outcomeId:'yes',amount:100,requestId:crypto.randomUUID()})});return r.status;},key);expect(betStatus).toBe(200);await viewer.close();
+    prediction.status='LOCKED';prediction.lockedAt=new Date().toISOString();await writeFile(fixture,JSON.stringify([prediction]));await expect(card).toContainText('Esperando resultado',{timeout:20000});await expect(card.getByRole('button',{name:'Elegir ganador: Sí',exact:true})).toBeDisabled();
+    prediction.status='RESOLVED';prediction.endedAt=new Date().toISOString();prediction.winningOutcome={id:'yes'};await writeFile(fixture,JSON.stringify([prediction]));await expect(card).toContainText('Ganó Sí',{timeout:20000});await expect(card).toContainText('Perdió No');await page.reload();await expect(card).toContainText('Resuelto');
 
   }finally{await writeFile(fixture,'[]');}
 });

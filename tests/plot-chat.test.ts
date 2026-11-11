@@ -57,14 +57,15 @@ test('only linked broadcaster with enabled bot can manage their own native marke
 }));
 test('native chat bets settle and claim with existing point conservation and receipt protections',()=>fixture(async({p,viewer,owner})=>{
  const {key}=await p.plotCommand('123','123',create(),'create');
- await p.chatBet('456',key,'1','bet-viewer');await p.chatBet('123',key,'2','bet-owner');
+ const losingViewer=await p.createAccount();await p.linkTwitch(losingViewer.token,identity('457','losing_viewer'));
+ await p.chatBet('456',key,'1','bet-viewer');await assert.rejects(p.chatBet('123',key,'2','bet-owner'),/streamer/);await p.chatBet('457',key,'2','bet-losing-viewer');
  await assert.rejects(p.plotCommand('123','123',{kind:'resolve',option:1},'too-early'),/cerrá/);
  await p.plotCommand('123','123',{kind:'lock'},'lock');
  await assert.rejects(p.plotCommand('123','123',{kind:'resolve',option:6},'invalid'),/no existe/);
  await assert.rejects(p.chatBet('456',key,'1','after-close'),/cerrada/);
  await p.plotCommand('123','123',{kind:'resolve',option:1},'resolve');
  assert.equal(p.market(key).winnerId,'1');assert.equal(p.market(key).phase,'resolved');
- const paid=await p.claim(viewer,key,randomUUID()) as {paid:number};assert.equal(paid.paid,200);assert.equal(p.me(viewer).balance,10100);assert.equal(p.me(owner).balance,9900);
+ const paid=await p.claim(viewer,key,randomUUID()) as {paid:number};assert.equal(paid.paid,200);assert.equal(p.me(viewer).balance,10100);assert.equal(p.me(owner).balance,10000);assert.equal(p.me(losingViewer.token).balance,9900);
  await p.plotCommand('123','123',{kind:'resolve',option:1},'resolve');
  await assert.rejects(p.plotCommand('123','123',{kind:'resolve',option:2},'change-winner'),/No hay/);
 }));
