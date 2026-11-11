@@ -18,5 +18,13 @@ Apply the approved second mockup to the streamer's open/locked management cards.
 
 ## Delivery
 
-Keep this branch/worktree for review and resumption. Main and existing user previews remain unchanged. The isolated E2E server was managed by Playwright; no persistent preview or unrelated pane was opened. No merge, push or deployment was performed.
+Keep this branch/worktree for review and resumption. Main remains unchanged. The isolated E2E server was managed by Playwright. No merge or push was performed.
+
+## Preview activation - 2026-11-11
+
+The user reported that https://plot-dev.tailfb789f.ts.net:8444/app#markets still showed the prior interface. The live plot-streamer-manager-preview.service was running from main at /home/meeting/projects/twitch-predict, while implementation commit 9934cf7 was isolated in this worktree.
+
+Added /home/meeting/.config/systemd/user/plot-streamer-manager-preview.service.d/90-streamer-state-first.conf with WorkingDirectory=/home/meeting/projects/twitch-predict.streamer-state-first-cards, reloaded the user systemd configuration and restarted only that preview service. Existing vault-env injection, shared data directory, authentication origin, Portless name/backend port and Tailscale URL remain unchanged.
+
+Verified the public URL through the T3 browser: health, mobile-app.js and mobile-app.css returned 200. Public JS and CSS SHA-256 matched this worktree's files exactly. The new state-panel class and pending-confirmation label are present. The browser profile used for verification was signed out, so authenticated visual behavior relies on the completed E2E validation above. The check tab was closed. The preview service remains running from this worktree; preserve it for the user.
 
