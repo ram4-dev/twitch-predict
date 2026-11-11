@@ -315,3 +315,5 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-manager-toolbar .phone-icon-button svg{width:17px;height:17px;flex:none}
 .phone-manager .phone-market-meta{margin-bottom:12px}
 .phone-manager .phone-pool-split{margin-bottom:14px}
+/* Management choices have no stake subline; keep the result mark beside the option. */
+.phone-market[data-management=true] .phone-outcome[data-chosen=true] .phone-outcome-name{display:block}
