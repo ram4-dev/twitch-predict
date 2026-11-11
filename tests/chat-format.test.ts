@@ -80,3 +80,12 @@ test('a market list with shares renders aligned bars per option',()=>{
   assert.equal(messages.length,1);
   assert.match(messages[0].text,/^#FY abierta · ¿Kills\? · 1 más de 8 ██████░░░░ 62% · 2 menos de 8 ████░░░░░░ 38%$/);
 });
+
+test('help and create confirmations keep their complete text instead of becoming market lists',()=>{
+ const replies=[
+  'Crear: !plot crear Pregunta, Sí, No · Listar: !plot mercados · Apostar: !plot apostar 1',
+  '¿Gana? · !1 Sí · !2 No · Código AB · 100 puntos por apuesta.',
+  'No tenés permisos · Consultá al dueño · !plot ayuda',
+ ];
+ for(const reply of replies){assert.deepEqual(parseMarketList(reply),[]);assert.deepEqual(splitChatReply(reply,link),[{text:`${reply} ${link}`}]);}
+});

@@ -1,7 +1,9 @@
 // Only loaded by the isolated E2E server, never by the application launcher.
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,appendFile,mkdir} from 'node:fs/promises';
 await writeFile(process.env.E2E_SERVER_PID_FILE,String(process.pid));
 const original=globalThis.fetch;
+const subscriptions=[];
+await mkdir('.e2e-fixtures',{recursive:true});
 globalThis.fetch=async(input,options)=>{
   const url=String(input);
   if(url.startsWith('https://id.twitch.tv/oauth2/')||url.startsWith('https://api.twitch.tv/helix/users')){
@@ -14,6 +16,24 @@ globalThis.fetch=async(input,options)=>{
     if(url.includes('/users?login='))return Response.json({data:[]});
     if(url.endsWith('/users'))return Response.json({data:[user]});
     return new Response(null,{status:200});
+  }
+  // EventSub and chat delivery stay inside the isolated E2E process.
+  if(url.startsWith('https://api.twitch.tv/helix/eventsub/subscriptions')){
+    if(options?.method==='POST'){
+      const subscription=JSON.parse(options.body);
+      subscriptions.push({...subscription,id:String(subscriptions.length+1),status:'enabled'});
+      return Response.json({data:[]},{status:202});
+    }
+    if(options?.method==='DELETE'){
+      const index=subscriptions.findIndex(s=>s.id===new URL(url).searchParams.get('id'));
+      if(index>=0)subscriptions.splice(index,1);
+      return new Response(null,{status:204});
+    }
+    return Response.json({data:subscriptions,pagination:{}});
+  }
+  if(url==='https://api.twitch.tv/helix/chat/messages'){
+    await appendFile('.e2e-fixtures/chat-messages.jsonl',JSON.stringify(JSON.parse(options.body))+'\n');
+    return Response.json({data:[{is_sent:true}]});
   }
   // Get Moderators fixture: mode file takes precedence (E2E flips it between steps), then the env var.
   // 'deny' → empty list; 'outage' → network failure; JSON array → list of user ids.

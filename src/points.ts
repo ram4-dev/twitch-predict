@@ -1,4 +1,4 @@
-import {type PlotCommand} from './plot-chat.js';
+import {PlotCommandError,type PlotCommand} from './plot-chat.js';
 import type {Documents} from './cloud/documents.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -144,19 +144,19 @@ export class Points {
     return Object.values(state.streamers).filter(s=>(account.twitch&&s.twitchId===account.twitch.id)||(s.channel==='demo_streamer'&&s.wallet===account.wallet)).map(s=>s.channel);
   }
   private requireViewer(state:State,account:Account){
-    if(this.managedChannels(state,account).length)throw new Error('Las cuentas de streamer no pueden apostar.');
+    if(this.managedChannels(state,account).length)throw new PlotCommandError('Las cuentas de streamer no pueden apostar.');
   }
   /** Shared debit used by chat bets and API bets on an open draft; receipts guard replay. */
   private betOnDraft(state:State,account:Account,m:Market,outcomeId:string,amount:number) {
     this.requireViewer(state,account);
-    if(!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
-    if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
-    const pool=state.bets.filter(b=>b.marketKey===m.key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
+    if(!this.view(state,m).canBet)throw new PlotCommandError('La apuesta está cerrada o falta actualizar Twitch');
+    if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new PlotCommandError('Opción inválida');
+    const pool=state.bets.filter(b=>b.marketKey===m.key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new PlotCommandError('El pozo alcanzó el límite');
     this.ledger(state,account,'bet',-amount,m.key);
     const bet:Bet={id:randomUUID(),accountId:account.id,wallet:account.wallet,marketKey:m.key,outcomeId,amount,payout:0,claimed:false,createdAt:now()};state.bets.push(bet);
   }
   private ledger(state:State, account:Account, kind:LedgerEntry['kind'], delta:number, marketKey?:string) {
-    if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new Error('Saldo insuficiente');
+    if(!Number.isSafeInteger(account.balance+delta)||account.balance+delta<0) throw new PlotCommandError('Saldo insuficiente');
     account.balance+=delta;state.ledger.push({id:randomUUID(),accountId:account.id,kind,delta,balance:account.balance,marketKey,createdAt:now()});
   }
   /** Twitch-first login: resumes the account already linked to this identity, or creates one exactly once. */
@@ -244,20 +244,20 @@ export class Points {
       // Viewers with a valid Twitch identity may bet and list; only the owner locks, resolves or
       // cancels; a verified moderator may only create. The dispatch below enforces the rest.
       const privileged=owner||(verifiedModerator&&command.kind==='create');
-      if(!privileged&&!['bet','list'].includes(command.kind))throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
-      if(!owner&&command.kind==='create'&&!verifiedModerator)throw new Error('Solo el dueño del canal puede crear o resolver predicciones de Plot.');
+      if(!privileged&&!['bet','list'].includes(command.kind))throw new PlotCommandError('No tenés permisos. Solo el dueño del canal puede cerrar, resolver o cancelar predicciones; los viewers pueden proponer con !plot crear.');
+      if(!owner&&command.kind==='create'&&!verifiedModerator)throw new PlotCommandError('No tenés permisos. Solo el dueño del canal puede cerrar, resolver o cancelar predicciones; los viewers pueden proponer con !plot crear.');
       const receiptId=`plot-command:${channelId}:${eventId}`,fingerprint=JSON.stringify([actorId,command]);
-      const previous=state.receipts[receiptId];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de evento reutilizado con otros datos');return previous.result as {key:string;text:string};}
+      const previous=state.receipts[receiptId];if(previous){if(previous.fingerprint!==fingerprint)throw new PlotCommandError('ID de evento reutilizado con otros datos');return previous.result as {key:string;text:string};}
       const channel=account?.twitch?.login??'unknown';
       const pending=Object.values(state.markets).filter(m=>m.source==='plot'&&m.prediction.channel===channel&&!['resolved','void'].includes(m.phase));
-      const byCode=(code:string)=>{const matches=pending.filter(m=>m.shortId===code);if(!matches.length)throw new Error(`No hay un mercado pendiente con código ${code} en este canal. Usá !plot mercados para verlos.`);return matches[0];};
+      const byCode=(code:string)=>{const matches=pending.filter(m=>m.shortId===code);if(!matches.length)throw new PlotCommandError(`No hay un mercado pendiente con código ${code} en este canal. Usá !plot mercados para verlos.`);return matches[0];};
       // Ambiguity guard: never debit points or mutate a market guessed from position or recency.
-      const resolveTarget=(id?:string,extra?:(m:Market)=>boolean)=>{const candidates=extra?pending.filter(extra):pending;if(id)return byCode(id);if(candidates.length===1)return candidates[0];throw new Error(candidates.length?'Hay varios mercados pendientes. Indicá el código: usá !plot mercados para verlos.':'No hay una predicción de Plot pendiente en este canal.');};
+      const resolveTarget=(id?:string,extra?:(m:Market)=>boolean)=>{const candidates=extra?pending.filter(extra):pending;if(id)return byCode(id);if(candidates.length===1)return candidates[0];throw new PlotCommandError(candidates.length?'Hay varios mercados pendientes. Indicá el código: usá !plot mercados para verlos.':'No hay una predicción de Plot pendiente en este canal.');};
       let text:string;let target:Market|undefined;
       if(command.kind==='create'){
         const id=`plot-${createHash('sha256').update(channelId+':'+eventId).digest('hex').slice(0,32)}`,stamp=now();
         const prediction=predictionSchema.parse({id,channel,title:command.title,status:'ACTIVE',createdAt:stamp,predictionWindowSeconds:120,outcomes:command.options.map((title,i)=>({id:String(i+1),title}))});
-        if(new Set(prediction.outcomes.map(o=>o.title.toLocaleLowerCase())).size!==prediction.outcomes.length||prediction.outcomes.length>6)throw new Error('Ingresá entre 2 y 6 opciones distintas.');
+        if(new Set(prediction.outcomes.map(o=>o.title.toLocaleLowerCase())).size!==prediction.outcomes.length||prediction.outcomes.length>6)throw new PlotCommandError('Ingresá entre 2 y 6 opciones distintas.');
         target={key:`plot:${channel}:${id}`,prediction,phase:'open',demo:false,source:'plot',ownerTwitchId:channelId,creatorTwitchId:owner?channelId:actorId,shortId:this.nextShortId(state,channel),version:1,createdAt:stamp,updatedAt:stamp,sourceCheckedAt:stamp};
         state.markets[target.key]=target;
         text=`${prediction.title} · ${prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')} · Código ${target.shortId} · 100 puntos por apuesta con !plot apostar ${target.shortId}, 1. Abierta 2 minutos.`;
@@ -269,13 +269,13 @@ export class Points {
       }else{
         target=resolveTarget(command.id);
         if(command.kind==='lock'){
-          if(target.phase!=='open')throw new Error('Las apuestas de ese mercado ya están cerradas.');
+          if(target.phase!=='open')throw new PlotCommandError('Las apuestas de ese mercado ya están cerradas.');
           target.phase='locked';target.operatorLockedAt??=now();target.operatorLockedBy??=account?.wallet;target.prediction.status='LOCKED';target.prediction.lockedAt??=now();
           text=`Apuestas cerradas (${target.shortId}). Usá !plot resolver ${target.shortId}, 1 (número ganador) o !plot cancelar ${target.shortId}.`;
         }else if(command.kind==='resolve'){
-          if(this.view(state,target).phase!=='locked')throw new Error('Primero cerrá las apuestas con !plot cerrar.');
+          if(this.view(state,target).phase!=='locked')throw new PlotCommandError('Primero cerrá las apuestas con !plot cerrar.');
           const chosen=target.prediction.outcomes[command.option-1];
-          if(!chosen)throw new Error('Esa opción no existe en esta predicción.');
+          if(!chosen)throw new PlotCommandError('Esa opción no existe en esta predicción.');
           this.settle(state,target,chosen.id,'Resultado confirmado por el streamer');
           target.settlement={source:'streamer',wallet:account?.wallet,at:now()};target.prediction.status='RESOLVED';target.prediction.winningOutcomeId=chosen.id;target.prediction.endedAt=now();
           text=`Resultado (${target.shortId}): ${chosen.title}. Revisá tus puntos en Plot.`;
@@ -284,11 +284,11 @@ export class Points {
           target.settlement={source:'streamer',wallet:account?.wallet,at:now()};target.prediction.status='CANCELED';target.prediction.winningOutcomeId=null;target.prediction.endedAt=now();
           text=`Predicción ${target.shortId} cancelada: devolvimos tus puntos automáticamente.`;
         }else{
-          if(command.kind!=='bet')throw new Error('Operación no soportada');
+          if(command.kind!=='bet')throw new PlotCommandError('Operación no soportada');
           const chosen=target.prediction.outcomes[command.option-1];
-          if(!chosen)throw new Error(`Esa opción no existe. Opciones: ${target.prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}.`);
+          if(!chosen)throw new PlotCommandError(`Esa opción no existe. Opciones: ${target.prediction.outcomes.map((o,i)=>`!${i+1} ${o.title}`).join(' · ')}.`);
           const actorAccount=Object.values(state.accounts).find(a=>a.twitch?.id===actorId);
-          if(!actorAccount)throw new Error('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
+          if(!actorAccount)throw new PlotCommandError('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
           this.betOnDraft(state,actorAccount,target,chosen.id,CHAT_BET_POINTS);
           text=`Apostaste ${CHAT_BET_POINTS} puntos a "${chosen.title}" (${target.shortId}).`;
         }
@@ -375,14 +375,14 @@ export class Points {
   async chatBet(twitchId:string,key:string,outcomeId:string,requestId:string) {
     return this.transaction<{betId:string;amount:number;outcomeId:string;balance:number}>(state=>{
       const account=Object.values(state.accounts).find(a=>a.twitch?.id===twitchId);
-      if(!account)throw new Error('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
+      if(!account)throw new PlotCommandError('Vinculá tu cuenta de Twitch con Plot para apostar desde el chat.');
       const id=`${account.id}:${requestId}`,fingerprint=JSON.stringify(['chatBet',key,outcomeId]);
-      const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new Error('ID de operación reutilizado con otros datos');return previous.result as {betId:string;amount:number;outcomeId:string;balance:number};}
+      const previous=state.receipts[id];if(previous){if(previous.fingerprint!==fingerprint)throw new PlotCommandError('ID de operación reutilizado con otros datos');return previous.result as {betId:string;amount:number;outcomeId:string;balance:number};}
       this.requireViewer(state,account);
-      const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new Error('La apuesta está cerrada o falta actualizar Twitch');
-      if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new Error('Opción inválida');
+      const m=state.markets[key];if(!m||!this.view(state,m).canBet)throw new PlotCommandError('La apuesta está cerrada o falta actualizar Twitch');
+      if(!m.prediction.outcomes.some(o=>o.id===outcomeId))throw new PlotCommandError('Opción inválida');
       const amount=CHAT_BET_POINTS;
-      const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new Error('El pozo alcanzó el límite');
+      const pool=state.bets.filter(b=>b.marketKey===key).reduce((sum,b)=>sum+b.amount,0);if(!Number.isSafeInteger(pool+amount))throw new PlotCommandError('El pozo alcanzó el límite');
       this.ledger(state,account,'bet',-amount,key);
       const bet:Bet={id:randomUUID(),accountId:account.id,wallet:account.wallet,marketKey:key,outcomeId,amount,payout:0,claimed:false,createdAt:now()};state.bets.push(bet);
       const result={betId:bet.id,amount,outcomeId,balance:account.balance};state.receipts[id]={fingerprint,result};return result;

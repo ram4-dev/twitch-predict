@@ -1,6 +1,6 @@
 /** Plan 2 — proposal components shared by the streamer inbox and the author's "Mis propuestas".
  * Accessible by default: no hover-only information, no color-only state, keyboard reachable, reduced-motion safe. */
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from './components/button.js';
 import {Badge} from './components/badge.js';
 import type {ProposalsClient,ProposalItem} from './proposals-client.js';
@@ -33,8 +33,17 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
   const [busy,setBusy]=useState<string>();
   const [message,setMessage]=useState('');
   const [loadError,setLoadError]=useState('');
-  const refresh=useCallback(async()=>{try{const data=await client.forChannel(channelId);setProposals(data.proposals);setLoaded(true);setLoadError('');}catch(e){setLoaded(true);setLoadError((e as Error).message);}},[client,channelId]);
-  useEffect(()=>{if(!initial?.loaded)void refresh();},[refresh,initial?.loaded]);
+  const requestSequence=useRef(0);
+  const refresh=useCallback(async()=>{
+    const sequence=++requestSequence.current;
+    try{const data=await client.forChannel(channelId);if(sequence!==requestSequence.current)return;setProposals(data.proposals);setLoaded(true);setLoadError('');}
+    catch(e){if(sequence!==requestSequence.current)return;setLoaded(true);setLoadError((e as Error).message);}
+  },[client,channelId]);
+  useEffect(()=>{
+    if(!initial?.loaded)void refresh();
+    const timer=setInterval(()=>void refresh(),5000);
+    return ()=>{clearInterval(timer);requestSequence.current++;};
+  },[refresh,initial?.loaded]);
   const act=async(action:'accept'|'reject'|'withdraw',proposal:ProposalItem)=>{
     setBusy(proposal.id);setMessage('');
     try{

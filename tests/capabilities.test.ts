@@ -77,6 +77,8 @@ test('bot promotes a real moderator from the authoritative Twitch list and a fak
   // A random chatter claiming nothing cannot create either.
   await send('!plot crear ¿Fake?, Sí, No','999');
   assert.equal(p.markets().length,1);
+  // Expire valid cached evidence before testing a Twitch outage.
+  await store.update('twitch-bot-runtime',()=>({moderators:{} as Record<string,{checkedAt:number}>}),s=>{s.moderators['123'].checkedAt=0;});
   // Twitch outage denies moderation without guessing.
   const failingBot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},(async()=>{throw new Error('down');}) as unknown as typeof fetch,Date.now,p);
   const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:'456',message:{text:'!plot crear ¿Outage?, Sí, No'}}}));
@@ -209,7 +211,7 @@ test('channel start requests moderation:read and a missing scope fails explicitl
   }) as unknown as typeof fetch;
   const strictBot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},scopedApi,Date.now,p);
   await assert.rejects(strictBot.callback(state,started.cookie,'cb-code'),/permisos/);
-  // A 403 from Get Moderators denies moderation but tells the chat why (no silent viewer downgrade).
+  // No moderator evidence and no mounted proposal adapter: surface a server failure.
   const outboxBot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},api,Date.now,p);
   const send=async(text:string,actor:string,id:string=uuid2())=>{
    const raw=Buffer.from(JSON.stringify({subscription:{type:'channel.chat.message',condition:{user_id:'42'}},event:{broadcaster_user_id:'123',chatter_user_id:actor,message:{text}}}));
@@ -219,8 +221,7 @@ test('channel start requests moderation:read and a missing scope fails explicitl
   await send('!plot crear ¿Sin permiso?, Sí, No','456');
   const runtime=await store.read('twitch-bot-runtime',()=>({outbox:{} as Record<string,{text:string}>}));
   const reply=Object.values(runtime.outbox).map(o=>o.text).join(' ');
-  // Without moderator evidence the create is refused as owner-only; the reply surfaces the permission problem.
-  assert.match(reply,/dueño|moderation:read/);
+  assert.match(reply,/Ocurrió un error al procesar el comando/);
   assert.equal(p.markets().length,0);
  }finally{await rm2(directory,{recursive:true,force:true});}
 });

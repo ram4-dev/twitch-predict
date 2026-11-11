@@ -7,17 +7,20 @@ import {createHmac,randomUUID} from 'node:crypto';
 import {Points} from '../src/points.js';
 import {parsePlotCommand} from '../src/plot-chat.js';
 import {CloudTwitchBot} from '../src/cloud/twitch-bot.js';
+import {ProposalService} from '../src/proposals-service.js';
+import {ProposalError} from '../src/proposals.js';
 import {LocalDocuments} from '../src/local-documents.js';
 const identity=(id:string,login:string)=>({id,login,displayName:login,linkedAt:new Date().toISOString()});
-async function fixture(work:(v:{p:Points;directory:string;owner:string;viewer:string;other:string;bot:CloudTwitchBot;store:LocalDocuments})=>Promise<void>){
+async function fixture(work:(v:{p:Points;directory:string;owner:string;viewer:string;other:string;bot:CloudTwitchBot;store:LocalDocuments;requests:string[]})=>Promise<void>){
  const directory=await mkdtemp(join(tmpdir(),'plot-chat-'));
  try{
   const p=new Points(directory);await p.load();const owner=await p.walletLogin('owner-wallet');await p.linkTwitch(owner.token,identity('123','owner'));await p.setBotEnabled(owner.token,true);
   const other=await p.walletLogin('other-wallet');await p.linkTwitch(other.token,identity('789','other'));await p.setBotEnabled(other.token,true);
   const viewer=await p.createAccount();await p.linkTwitch(viewer.token,identity('456','viewer'));
   const store=new LocalDocuments(directory);await store.update('twitch-bot-auth',()=>({bot:{id:'42',login:'plotfun',clientId:'fixture',authorizedAt:Date.now()}}),()=>{});
-  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},async()=>{throw new Error('Native commands must not call Twitch prediction APIs');},Date.now,p);
-  await work({p,directory,owner:owner.token,viewer:viewer.token,other:other.token,bot,store});
+  const requests:string[]=[];
+  const bot=new CloudTwitchBot(store,{clientId:'fixture',clientSecret:'fixture-secret',origin:'https://plot.example'},async input=>{requests.push(String(input));throw new Error('Native commands must not call Twitch prediction APIs');},Date.now,p);
+  await work({p,directory,owner:owner.token,viewer:viewer.token,other:other.token,bot,store,requests});
  }finally{await rm(directory,{recursive:true,force:true});}
 }
 const create=()=>parsePlotCommand('!plot crear ¿Gano la partida?')!;
@@ -97,4 +100,80 @@ test('native betting expires on time even with no Twitch updates',()=>fixture(as
  const restored=new Points(directory);await restored.load();assert.equal(restored.market(key).canBet,false);assert.equal(restored.market(key).phase,'locked');
  await assert.rejects(restored.chatBet('456',key,'1','expired-bet'),/cerrada/);
  await restored.plotCommand('123','123',{kind:'resolve',option:1},'resolve');assert.equal(restored.market(key).prediction.status,'RESOLVED');
+}));
+
+const botRuntime=()=>({events:{} as Record<string,number>,cooldowns:{} as Record<string,number>,outbox:{} as Record<string,{text:string}>});
+function mountProposals(bot:CloudTwitchBot,p:Points){
+ const proposals=new ProposalService(p);
+ bot.mountProposals({accountForTwitch:async id=>p.accountForTwitch(id),submit:async args=>{
+  const proposal=await proposals.submit(args);
+  return {...proposal,text:`Propuesta ${proposal.shortId} enviada al streamer; pendiente de aprobación.`};
+ }});
+ return proposals;
+}
+test('viewer help and bare !plot always reply, even during the legacy channel cooldown and without role lookups',()=>fixture(async({bot,store,requests})=>{
+ await store.update('twitch-bot-runtime',botRuntime,s=>{s.cooldowns['123']=Date.now();});
+ // A role lookup would fail this test instead of just returning false.
+ bot.mountProposals({accountForTwitch:async()=>{throw new Error('Help must not resolve accounts');},submit:async()=>{throw new Error('Help must not submit');}});
+ for(const [id,text] of [['help','!plot ayuda'],['bare','!plot'],['other-viewer','!plot ayuda']]){
+  const event=message(text,'999',id);assert.equal((await bot.webhook(event.headers,event.raw)).status,204);
+ }
+ assert.equal(requests.length,0,'help needs neither Twitch roles nor account lookup');
+ const {outbox}=await store.read('twitch-bot-runtime',botRuntime);
+ for(const id of ['help','bare','other-viewer']){
+  assert.match(outbox[`command:${id}`].text,/Crear o proponer: !plot crear/);
+  assert.match(outbox[`command:${id}`].text,/!plot mercados/);
+  assert.ok(!outbox[`command:${id}`].text.startsWith('#'));
+ }
+}));
+test('signed viewer create registers one pending proposal while help and other commands keep answering',()=>fixture(async({p,bot,store})=>{
+ const proposals=mountProposals(bot,p);
+ await store.update('twitch-bot-runtime',botRuntime,s=>{s.cooldowns['123']=Date.now();});
+ const event=message('!plot crear ¿Viewer propone?, Sí, No','456','viewer-create');
+ await Promise.all([bot.webhook(event.headers,event.raw),bot.webhook(event.headers,event.raw)]);
+ const pending=await proposals.listForChannel('123','pending');
+ assert.equal(pending.length,1);assert.equal(pending[0].origin,'chat');assert.equal(pending[0].authorAccountId,p.accountForTwitch('456')?.accountId);assert.equal(p.markets().length,0);
+ for(const [id,text,actor] of [['help-after','!plot ayuda','456'],['unlinked','!plot crear ¿Otra?','998'],['forbidden','!plot resolver 1','456'],['invalid','!plot crear','456']]){
+  const e=message(text,actor,id);await bot.webhook(e.headers,e.raw);
+ }
+ const {outbox}=await store.read('twitch-bot-runtime',botRuntime);
+ assert.match(outbox['command:viewer-create'].text,/Propuesta .* enviada al streamer; pendiente de aprobación/);
+ assert.match(outbox['command:help-after'].text,/!plot mercados/);
+ assert.match(outbox['command:unlinked'].text,/vinculá tu Twitch/);
+ assert.match(outbox['command:forbidden'].text,/No tenés permisos.*dueño/);
+ assert.match(outbox['command:invalid'].text,/Usá !plot crear/);
+ assert.equal((await proposals.listForChannel('123')).length,1);
+}));
+test('identity and submission failures reply safely; expected proposal limits stay actionable',()=>fixture(async({p,bot,store})=>{
+ const fail=async()=>{throw new Error('private database connection password=do-not-publish');};
+ bot.mountProposals({accountForTwitch:fail,submit:fail});
+ let e=message('!plot crear ¿Falla?','456','identity-error');await bot.webhook(e.headers,e.raw);
+ bot.mountProposals({accountForTwitch:async()=>p.accountForTwitch('456'),submit:fail});
+ e=message('!plot crear ¿Falla?','456','submission-error');await bot.webhook(e.headers,e.raw);
+ bot.mountProposals({accountForTwitch:async()=>p.accountForTwitch('456'),submit:async()=>{throw new ProposalError('PROPOSAL_LIMIT','Ya tenés 3 propuestas pendientes en este canal.');}});
+ e=message('!plot crear ¿Límite?','456','limit');await bot.webhook(e.headers,e.raw);
+ const {outbox}=await store.read('twitch-bot-runtime',botRuntime);
+ for(const id of ['identity-error','submission-error']){
+  assert.match(outbox[`command:${id}`].text,/Ocurrió un error al procesar el comando/);
+  assert.doesNotMatch(outbox[`command:${id}`].text,/private|password|database/);
+ }
+ assert.match(outbox['command:limit'].text,/Ya tenés 3 propuestas pendientes/);
+}));
+test('missing proposal adapter reports server failure instead of denying viewer permission',()=>fixture(async({bot,store})=>{
+ const e=message('!plot crear ¿Propuesta?','456','missing-adapter');await bot.webhook(e.headers,e.raw);
+ assert.match((await store.read('twitch-bot-runtime',botRuntime)).outbox['command:missing-adapter'].text,/Ocurrió un error/);
+}));
+
+test('unexpected command and bet failures use a server error reply instead of exposing exception messages',()=>fixture(async({p,bot,store})=>{
+ await p.plotCommand('123','123',create(),'create-for-error');
+ p.plotCommand=async()=>{throw new Error('private command database failure');};
+ p.chatBet=async()=>{throw new Error('private bet database failure');};
+ for(const [id,text] of [['command-error','!plot mercados'],['bet-error','!yes']]){
+  const e=message(text,'456',id);assert.equal((await bot.webhook(e.headers,e.raw)).status,204);
+ }
+ const {outbox}=await store.read('twitch-bot-runtime',botRuntime);
+ for(const key of ['command:command-error','chat:bet-error']){
+  assert.match(outbox[key].text,/Ocurrió un error al procesar el comando/);
+  assert.doesNotMatch(outbox[key].text,/private|database/);
+ }
 }));

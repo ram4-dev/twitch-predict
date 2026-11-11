@@ -30,7 +30,8 @@ test('streamer creates a Plot prediction in chat; viewer stakes on the public pa
   const response=await context.request.post('/api/twitch/bot/webhook',{headers:{'content-type':'application/json','twitch-eventsub-message-id':id,'twitch-eventsub-message-timestamp':stamp,'twitch-eventsub-message-type':'notification','twitch-eventsub-message-signature':'sha256='+createHmac('sha256',secret).update(id+stamp).update(raw).digest('hex')},data:raw});
   expect(response.status()).toBe(204);
  };
- await send('!plot crear ¿Ganamos la partida?, Sí, No',ownerId,'native-create');await send('!plot crear ¿Ganamos la partida?, Sí, No',ownerId,'native-create');
+ const createId=randomUUID();
+ await send('!plot crear ¿Ganamos la partida?, Sí, No',ownerId,createId);await send('!plot crear ¿Ganamos la partida?, Sí, No',ownerId,createId);
  const markets=await (await context.request.get('/api/markets')).json();const native=markets.filter((m:{source?:string;prediction:{channel:string}})=>m.source==='plot'&&m.prediction.channel===login);expect(native).toHaveLength(1);expect(native[0].demo).toBe(false);
  const viewerContext=await browser.newContext({baseURL:origin});
  try{
@@ -41,7 +42,7 @@ test('streamer creates a Plot prediction in chat; viewer stakes on the public pa
   await viewer.getByRole('button',{name:'Apostar a Sí',exact:true}).click();const dialog=viewer.getByRole('dialog');await expect(dialog).toBeVisible();
   await viewer.getByLabel('Puntos a apostar',{exact:true}).fill('100');await dialog.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(dialog).not.toBeVisible();
   const afterBet=await viewer.evaluate(async()=>{const r=await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}});return r.json();});expect(afterBet.balance).toBe(9900);
-  await send('!plot cerrar','not-the-owner','unauthorized-close');expect((await (await context.request.get('/api/markets')).json()).find((m:{key:string})=>m.key===native[0].key).canBet).toBe(true);
+  await send('!plot cerrar','not-the-owner',randomUUID());expect((await (await context.request.get('/api/markets')).json()).find((m:{key:string})=>m.key===native[0].key).canBet).toBe(true);
   await send('!plot cerrar');await send('!plot resolver 1');
   await viewer.reload();await expect(viewer.getByText('¿Ganamos la partida?',{exact:true})).toBeVisible();
   const claim=await viewer.evaluate(async key=>{const r=await fetch('/api/points/claim',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('pointsToken')}`},body:JSON.stringify({key,requestId:crypto.randomUUID()})});return {status:r.status,body:await r.json()};},native[0].key);
