@@ -21,7 +21,7 @@ export function LiquidMetalSurface({active,tone='neutral'}:{active:boolean;tone?
   catch{node.current.dataset.fallback='true';}
   return()=>mount?.dispose();
  },[active,reduced,tone]);
- return <span ref={node} className="liquid-metal-surface" aria-hidden="true"/>;
+ return <span ref={node} className="liquid-metal-surface" data-tone={tone} aria-hidden="true"/>;
 }
 // Simplex and Swirl selected in Dia use the same Paper Shaders dithering family.
 export function DitherField({shape='swirl',paused=false}:{shape?:'swirl'|'simplex';paused?:boolean}){

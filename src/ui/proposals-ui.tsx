@@ -2,6 +2,8 @@
  * Accessible by default: no hover-only information, no color-only state, keyboard reachable, reduced-motion safe. */
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from './components/button.js';
+import {PhoneGlass} from './components/phone-glass.js';
+import {LiquidMetalSurface} from './components/materials.js';
 import {Badge} from './components/badge.js';
 import type {ProposalsClient,ProposalItem} from './proposals-client.js';
 
@@ -14,18 +16,18 @@ export function ProposalStatusBadge({status}:{status:ProposalItem['status']}){
 
 export function ProposalCard({proposal,children,management=false}:{proposal:ProposalItem;children?:React.ReactNode;management?:boolean}){
   const content=proposal.editedInput??proposal.input;
-  return <article className="proposal-card" data-proposal-id={proposal.id} data-proposal-state={proposal.status} data-accepted-market-id={proposal.acceptedMarketId}>
-    {management&&<span className="outcome-frame-rim proposal-card-rim" aria-hidden="true"/>}
+  const card=<article className="proposal-card" data-proposal-id={proposal.id} data-proposal-state={proposal.status} data-accepted-market-id={proposal.acceptedMarketId}>
     <div className="console-section-title"><span className="proposal-meta">Propuesta #{proposal.shortId}</span>
       <ProposalStatusBadge status={proposal.status}/></div>
     <h3>{content.title}</h3>
-    <ol className="proposal-options" aria-label="Opciones de la propuesta">{content.options.map((o,i)=><li key={i}><span className="proposal-option-label">Opción {i+1}</span><strong>{o}</strong></li>)}</ol>
+    <ol className="proposal-options" aria-label="Opciones de la propuesta">{content.options.map((o,i)=><li key={i} className={management?'liquid-metal-frame':undefined} data-tone={management?(i===0?'positive':'negative'):undefined}>{management&&<LiquidMetalSurface active={false} tone={i===0?'positive':'negative'}/>}<span className="proposal-option-label">Opción {i+1}</span><strong>{o}</strong></li>)}</ol>
     <p className="proposal-details">{content.durationSeconds!==undefined&&<>{content.durationSeconds>=60?`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:1}).format(content.durationSeconds/60)} min`:`${content.durationSeconds} s`} para apostar · </>}Recibida el {time(proposal.createdAt)}</p>
     {proposal.editedInput&&<p className="fine">Contenido ajustado por el streamer antes de publicar (original conservado).</p>}
     {proposal.status==='rejected'&&proposal.rejectionReason&&<p className="fine">Motivo: {proposal.rejectionReason}</p>}
     {proposal.status==='accepted'&&proposal.acceptedMarketId&&<p className="fine proposal-published">Mercado publicado.</p>}
     {children}
   </article>;
+  return management?<PhoneGlass asChild className="phone-market" data-choice-tone={proposal.status==='accepted'?'positive':proposal.status==='rejected'?'negative':'neutral'}>{card}</PhoneGlass>:card;
 }
 
 /** Streamer inbox. Only rendered with server-verified owner capabilities; actions call the API and show its result. */
@@ -66,8 +68,8 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
     {loaded&&!loadError&&!proposals.length&&<p className="console-empty">Todavía no hay propuestas para este canal.</p>}
     <div className="proposal-list">{proposals.map(p=><ProposalCard key={p.id} proposal={p} management>{p.status==='pending'&&
       <div className="proposal-actions">
-        <Button className="console-primary" disabled={!!busy} onClick={()=>void act('accept',p)}>{busy===p.id?'Publicando…':'Aceptar y publicar'}</Button>
-        <Button variant="ghost" disabled={!!busy} onClick={()=>void act('reject',p)}>Rechazar</Button>
+        <Button tone="positive" disabled={!!busy} onClick={()=>void act('accept',p)}>{busy===p.id?'Publicando…':'Aceptar y publicar'}</Button>
+        <Button tone="negative" disabled={!!busy} onClick={()=>void act('reject',p)}>Rechazar</Button>
       </div>}</ProposalCard>)}</div>
   </section>;
 }

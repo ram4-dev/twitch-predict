@@ -13,6 +13,7 @@ import {AnimatedBackdrop,backdropOptions,isBackdrop,type Backdrop} from './vendo
 import {MarketDetail,detailLayouts,isDetailLayout,type DetailLayout} from './market-detail.js';
 import {Button} from './components/button.js';
 import {LiquidGlass} from './vendor/opaline/liquid-glass.js';
+import {PhoneGlass as Glass} from './components/phone-glass.js';
 import {useActiveIndicator} from './vendor/opaline/use-active-indicator.js';
 import {createPointsClient,number} from './points-ui.js';
 import {enhancePointerGlow} from '@/components/ui/spotlight-card';
@@ -24,7 +25,6 @@ type SearchResult={login:string;displayName:string;live:boolean};
 const client=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async value=>localStorage.setItem('pointsToken',value),clear:async()=>localStorage.removeItem('pointsToken')});
 const normalize=(value:string)=>value.trim().replace(/^@/,'').toLowerCase();
 
-function Glass({children,className='',...props}:React.HTMLAttributes<HTMLDivElement>){return <LiquidGlass {...props} refraction={0} blur={8} tint="var(--surface)" shadow={false} className={`phone-glass ${className}`}>{children}</LiquidGlass>;}
 
 function useSnapshot(demo:boolean){
  const [snapshot,setSnapshot]=useState<AppSnapshot>(()=>demo?demoSnapshot():{markets:[],followed:[]});
