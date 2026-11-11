@@ -1,6 +1,5 @@
 import {PointsResolution} from './points-resolution.js';
 import {hasPointsIdentity} from '../points-identity.js';
-import {PointsFees} from './components/points-fees.js';
 import {PointsSignIn} from './components/points-sign-in.js';
 import {PreviewHeader} from './components/preview-header.js';
 import {PlotLogo} from './components/plot.js';
@@ -106,7 +105,7 @@ function OwnBets({snapshot,demo,onClaim,onDetail,theme='ember'}:{snapshot:AppSna
     {market?.winnerId&&<p className="phone-result">Ganó {market.outcomes.find(o=>o.id===market.winnerId)?.title} · Perdió {market.outcomes.filter(o=>o.id!==market.winnerId).map(o=>o.title).join(', ')}</p>}
     {bets[0].phase==='void'&&<p className="phone-result phone-result-refund">{market?.reason??'Cancelada · Reembolso'}</p>}
     <dl className="phone-receipt"><div><dt>Apuesta</dt><dd>{number(stake)} pts</dd></div>{ended&&<><div><dt>Cobro total</dt><dd>{number(payout)} pts</dd></div><div><dt>Neto</dt><dd>{payout-stake>0?'+':''}{number(payout-stake)} pts</dd></div></>}</dl>
-    {ended&&market&&<PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical/>}{pending>0&&<Button disabled={!!busy} onClick={async()=>{setBusy(key);setError('');try{await onClaim(key);}catch(e){setError(e instanceof Error?e.message:'No pudimos cobrar.');}finally{setBusy('');}}}>{busy===key?'Cobrando…':`${demo?'Simular cobro':'Cobrar'} ${number(pending)} pts`}</Button>}
+    {pending>0&&<Button disabled={!!busy} onClick={async()=>{setBusy(key);setError('');try{await onClaim(key);}catch(e){setError(e instanceof Error?e.message:'No pudimos cobrar.');}finally{setBusy('');}}}>{busy===key?'Cobrando…':`${demo?'Simular cobro':'Cobrar'} ${number(pending)} pts`}</Button>}
    </div>
   </div>;})}</div>;
 }

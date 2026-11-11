@@ -32,7 +32,7 @@ test('all streamer market phases share proposal glass, result frames and action 
   }
   if(phase==='void')await expect(card.locator('.resolution-reason')).toHaveCSS('margin-top','14px');
   if(phase==='resolved'||phase==='void'){
-   await expect(card.locator('.plot-resolution')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(card.locator('.plot-resolution h3')).toHaveCSS('font-family',/Fraunces/);await expect(card.getByRole('region',{name:'Ganancia del streamer'})).toContainText('0pts');
+   await expect(card.locator('.plot-resolution')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(card.locator('.plot-resolution h3')).toHaveCSS('font-family',/Fraunces/);await expect(card.getByRole('region',{name:'Ganancia del streamer'})).toHaveCount(0);
    await expect(card.getByRole('button',{name:/Elegir ganador|Revisar resultado/})).toHaveCount(0);
   }
  }

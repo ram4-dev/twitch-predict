@@ -10,7 +10,6 @@ import {PointsResolution} from './points-resolution.js';
 import {Badge} from './components/badge.js';
 import type {Points} from '../points.js';
 type Market=ReturnType<Points['market']>;
-import {PointsFees} from './components/points-fees.js';
 type Account=ReturnType<Points['me']>;
 type Form={amount:number|string;busy:boolean;message:string;failed:boolean;pending?:{fingerprint:string;id:string}};
 type Action={type:'render'}|{type:'bet'|'claim';market:Market;form:Form;outcomeId?:string;amount?:number};
@@ -80,7 +79,7 @@ export function Betting({market,account,form,onAction,extension=false}:{market:M
     {market.phase==='resolved'&&stake>0&&!own.some(b=>b.payout)&&<p className="points-position">{extension?'Your option did not win. There are no points to claim.':'Tu opción no ganó. No hay puntos para cobrar.'}</p>}
     {market.reason&&<p className="points-rule">{market.reason}</p>}
     {(form.busy||form.message)&&<p role="status" className={`points-message ${form.failed?'error':''}`}>{form.busy?<><Loader2 size={14} className="animate-spin"/> {extension?'Saving…':'Guardando operación…'}</>:form.message}</p>}
-    <PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical={market.phase==='resolved'} english={extension}/>
+
   </>;
 }
 export async function performPointsAction(action:Action,client:Client,refresh:()=>Promise<void>,english=false){

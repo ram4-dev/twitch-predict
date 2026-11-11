@@ -18,7 +18,7 @@ test('web uses the shared resolution in history, details and streamer workspace 
   }
   return route.fulfill({json:path==='/api/markets'?[market]:path==='/api/points/me'?account:path==='/api/channels'?{channels:['ramitapai']}:path==='/api/streamer/console'?{channels:['ramitapai'],markets:[{...market,bets:account.bets,credited:320,pending:0}]}:path==='/api/google/config'?{configured:false}:{proposals:[]}});
  });
- await page.goto('/app#history');const card=page.locator('.plot-resolution.count');await expect(card).toHaveCount(1);
+ await page.goto('/app#history');const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(card.locator('.points-fees,.points-fee-note,.manager-earnings')).toHaveCount(0);await expect(card).toHaveCount(1);
  await expect(card.locator('.resolution-net')).toHaveText('+220 pts');await expect(card.locator('.resolution-receipt')).toHaveText('Tu apuesta100 ptsCobro total320 pts');
  await expect(page.locator('.phone-position .phone-market,.phone-position-receipt')).toHaveCount(0);
  await card.getByRole('button',{name:'Cobrar 320 pts',exact:true}).click();await expect(card.getByRole('alert')).toContainText('Cobro temporalmente no disponible');await expect(card.locator('.resolution-net')).toHaveText('+220 pts');
@@ -51,7 +51,7 @@ test('web resolution handles loss, mixed bets, refunds, spectators and unknown a
   {state:'spectator',phase:'resolved',bets:[],net:undefined},
  ] as const){
   market.phase=scenario.phase;account.bets=scenario.bets.map(b=>({...b,phase:scenario.phase}));
-  await page.goto('/app?market=demo-1');const card=page.locator('.plot-resolution.count');await expect(card).toHaveAttribute('data-state',scenario.state);
+  await page.goto('/app?market=demo-1');const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(card.locator('.points-fees,.points-fee-note,.manager-earnings')).toHaveCount(0);await expect(card).toHaveAttribute('data-state',scenario.state);
   if(scenario.net)await expect(card.locator('.resolution-net')).toHaveText(scenario.net);else{await expect(card).toContainText('No participaste');await expect(card.locator('.resolution-receipt')).toHaveCount(0);}
   if(scenario.phase==='void'){await expect(card).toContainText('Reembolso total');await expect(card).toContainText('Reembolso acreditado');await expect(card).not.toContainText('Ganó Sí');}else{await expect(card.locator('.resolution-result')).toContainText('Ganó Sí');await expect(card.locator('.resolution-result')).toContainText('Perdió No');}
   for(const width of [360,700]){await page.setViewportSize({width,height:600});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await card.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);}

@@ -6,8 +6,8 @@ import {UserMarketCard} from './components/user-market-card.js';
 import {PhoneGlass} from './components/phone-glass.js';
 import {Resolution} from './components/resolution.js';
 import {StreamerMarketState} from './components/streamer-market-state.js';
-import {PointsFees} from './components/points-fees.js';
 import {Button} from './components/button.js';
+import {SettlementAmounts} from './components/settlement-amounts.js';
 import {MarketComposer,ProposalInbox} from './proposals-ui.js';
 import {httpProposalsClient} from './proposals-client.js';
 import {number} from './points-ui.js';
@@ -79,9 +79,7 @@ function ManagedMarket({market:m,account,theme,onChanged}:{market:AppMarket;acco
  if(['resolved','void'].includes(m.phase)){
   const own=account.bets.filter(b=>b.marketKey===m.key);
   const stake=own.reduce((sum,b)=>sum+b.amount,0),payout=own.reduce((sum,b)=>sum+b.payout,0),pending=own.filter(b=>!b.claimed).reduce((sum,b)=>sum+b.payout,0);
-  const earned=account.ledger.filter(entry=>entry.kind==='streamer_fee'&&entry.marketKey===m.key).reduce((sum,entry)=>sum+entry.delta,0);
-  const earnings=m.phase==='void'?0:m.fees?.streamer??earned;
-  return <div data-streamer-key={m.key} data-phase={m.phase}><PhoneGlass className="phone-market manager-resolution" data-market-phase={m.phase} data-choice-tone={m.phase==='resolved'?'positive':'neutral'}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} reason={m.phase==='void'?m.reason:undefined} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} material="count" hideEmptyPersonal resultContent={<StreamerMarketState market={m}/>}><section className="manager-earnings" data-positive={earnings>0} aria-label="Ganancia del streamer"><span>Ganancia del streamer</span><p><strong>{number(earnings)}</strong><span>pts</span></p></section>{m.fees&&<PointsFees pool={m.totalPoints} fees={m.fees} canceled={m.phase==='void'} historical/>}{pending>0&&<Button tone="positive" disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></PhoneGlass></div>;
+  return <div data-streamer-key={m.key} data-phase={m.phase}><PhoneGlass className="phone-market manager-resolution" data-market-phase={m.phase} data-choice-tone={m.phase==='resolved'?'positive':'neutral'}><Resolution title={m.prediction.title} channel={m.prediction.channel} outcomes={m.outcomes} winnerId={m.winnerId} canceled={m.phase==='void'} reason={m.phase==='void'?m.reason:undefined} stake={stake} payout={payout} hit={own.some(b=>b.outcomeId===m.winnerId)} material="count" hideEmptyPersonal resultContent={<StreamerMarketState market={m}/>}>{pending>0&&<Button tone="positive" disabled={busy} onClick={()=>void collect()}>{busy?'Cobrando…':`Cobrar ${number(pending)} pts`}</Button>}{error&&<p role="alert" className="phone-error">{error}</p>}</Resolution></PhoneGlass></div>;
  }
  const canManage=m.source==='plot';
  return <div data-streamer-key={m.key} data-phase={m.phase}><UserMarketCard market={m} theme={theme} management chosenOutcome={m.winnerId??winner} onDetail={()=>{}} onChoose={({outcome})=>{if(!busy&&canManage){setWinner(outcome);setPreview(undefined);setError('');}}}>
@@ -90,7 +88,10 @@ function ManagedMarket({market:m,account,theme,onChanged}:{market:AppMarket;acco
     <Button tone="positive" disabled={busy||!winner} onClick={()=>void prepare('resolve')}>{busy?'Calculando…':'Revisar resultado'}</Button>
     <Button tone="negative" disabled={busy} onClick={()=>void prepare('cancel')}>Cancelar y reembolsar</Button>
    </>}
-   {preview&&<section className="phone-manager-confirm" aria-label="Confirmar liquidación"><h3>{preview.action==='cancel'?'Cancelar mercado':`Ganador: ${m.outcomes.find(o=>o.id===preview.winner)?.title}`}</h3><p>{preview.action==='cancel'?'Se devolverán todas las apuestas.':preview.data.phase==='void'?(preview.data.bets.length?'No hay apuestas a la opción ganadora. Al confirmar se anulará la predicción y se devolverán los puntos.':'La predicción no recibió apuestas. Al confirmar quedará anulada.'):'El resultado será definitivo.'}</p><dl className="phone-receipt"><div><dt>Pozo total</dt><dd>{number(preview.data.pool)} pts</dd></div><div><dt>Apuestas</dt><dd>{number(preview.data.bets.length)}</dd></div></dl><PointsFees pool={preview.data.pool} fees={preview.data.fees} canceled={preview.data.phase==='void'}/><div className="phone-manager-preview">{preview.data.bets.slice(0,20).map(b=><p key={b.id}><span>{b.outcome} · Apuesta {number(b.amount)} pts</span><span>Cobro total {number(b.payout)} pts · Neto {b.payout-b.amount>0?'+':''}{number(b.payout-b.amount)} pts</span></p>)}</div>{preview.data.bets.length>20&&<p>Se muestran las primeras 20 apuestas de {number(preview.data.bets.length)}.</p>}{preview.action==='resolve'&&preview.data.phase!=='void'&&<p>Los ganadores podrán cobrar su premio.</p>}<div className="phone-manager-confirm-buttons"><Button tone={preview.action==='cancel'?'negative':'positive'} disabled={busy} onClick={()=>void run(preview.action)}>{busy?'Confirmando…':preview.action==='cancel'?'Confirmar reembolso':preview.data.phase==='void'?'Confirmar anulación':'Confirmar ganador'}</Button><Button disabled={busy} onClick={()=>setPreview(undefined)}>Volver</Button></div></section>}
+   {preview&&<section className="phone-manager-confirm" aria-label="Confirmar liquidación">
+    <SettlementAmounts streamer={preview.data.phase==='void'?0:preview.data.fees?.streamer??0} winners={preview.data.phase==='void'?preview.data.pool:preview.data.fees?.winners??preview.data.bets.reduce((sum,bet)=>sum+bet.payout,0)} refunded={preview.data.phase==='void'}/>
+    <div className="phone-manager-confirm-buttons"><Button tone={preview.action==='cancel'?'negative':'positive'} disabled={busy} onClick={()=>void run(preview.action)}>{busy?'Confirmando…':preview.action==='cancel'?'Confirmar reembolso':preview.data.phase==='void'?'Confirmar anulación':'Confirmar ganador'}</Button><Button disabled={busy} onClick={()=>setPreview(undefined)}>Volver</Button></div>
+   </section>}
    {error&&<p role="alert" className="phone-error">{error}</p>}
   </div>:m.source!=='plot'&&<p className="phone-manager-external">El resultado se actualiza desde Twitch.</p>}
  </UserMarketCard></div>;
