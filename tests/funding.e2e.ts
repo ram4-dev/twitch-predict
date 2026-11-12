@@ -112,3 +112,15 @@ test('package selection survives a quote error and Phantom cancellation',async({
   await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
   await expect(page.getByRole('region',{name:'Cotización'})).toContainText('5.000000 USDC');
 });
+
+test('disabled payments still allow package pricing without preparing a transaction',async({page})=>{
+  await login(page);const config=await(await page.request.get('/api/funding/config')).json();
+  await page.route('**/api/funding/config',route=>route.fulfill({json:{...config,enabled:false,treasury:null,reason:'Compras y retiros todavía no están habilitados.'}}));
+  await page.reload();await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();
+  await expect(page.getByRole('button',{name:'Ver cotización',exact:true})).toBeEnabled();
+  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  const quote=page.getByRole('region',{name:'Cotización',exact:true});await expect(quote).toContainText('5.000000 USDC');await expect(quote.getByRole('status')).toContainText('todavía no están habilitados');
+  await expect(page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true})).toHaveCount(0);
+  await page.getByRole('radio',{name:'SOL',exact:true}).check();await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await expect(quote).toContainText('0.033333334 SOL');
+  expect((await state()).broadcasts).toBe(0);await expect(page.locator('.funding-row')).toHaveCount(0);
+});

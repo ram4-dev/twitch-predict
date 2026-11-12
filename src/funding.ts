@@ -3,7 +3,7 @@ import {Connection,Keypair,PublicKey,SystemProgram,Transaction,TransactionInstru
 import {usdcTransfer} from './funding-transfer.js';
 import {getBase58Decoder} from '@solana/kit';
 import {DEVNET_GENESIS} from './byte-model.js';
-import {fundingAmount,fundingPackageAmount,POINT_PACKAGES,publicOrder,POINTS_PER_USDC,MAINNET_GENESIS,USDC_MAINNET,USDC_DEVNET,type FundingNetwork,type Currency,type FundingOrder} from './funding-model.js';
+import {fundingAmount,fundingPackageAmount,POINT_PACKAGES,publicOrder,POINTS_PER_USDC,MAINNET_GENESIS,USDC_MAINNET,USDC_DEVNET,type FundingNetwork,type Currency,type FundingOrder,type FundingEstimate} from './funding-model.js';
 import type {Points} from './points.js';
 
 export interface FundingChain {
@@ -66,6 +66,12 @@ export class Funding {
     tx.add(new TransactionInstruction({programId:memoProgram,keys:[],data:Buffer.from(`plot:${id}`)}));
     const order=await this.points.fundingQuote(token,{id,network:this.network,wallet:account.wallet,direction,currency,...amount,solPrice,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+60000).toISOString(),status:'quoted',transaction:tx.serialize({requireAllSignatures:false,verifySignatures:false}).toString('base64'),lastValidBlockHeight:latest.lastValidBlockHeight});
     return publicOrder(order);
+  }
+  async estimate(direction:FundingOrder['direction'],currency:Currency,input:string|{packageId:string}):Promise<FundingEstimate>{
+    if(typeof input!=='string'&&direction!=='deposit')throw new Error('Los paquetes son para comprar puntos');
+    const solPrice=currency==='SOL'?await this.price():'1';
+    const amount=typeof input==='string'?fundingAmount(direction,currency,input,solPrice):fundingPackageAmount(currency,input.packageId,solPrice);
+    return {direction,currency,...amount,solPrice,expiresAt:new Date(Date.now()+60000).toISOString()};
   }
   list(token:string){return this.points.fundingOrders(token).map(publicOrder);}
   submit(token:string,id:string,signed?:string){

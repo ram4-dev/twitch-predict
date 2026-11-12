@@ -139,3 +139,15 @@ test('packages keep advertised points and round SOL payment up to the nearest la
     await assert.rejects(s.funding.quote(s.token,'withdraw','USDC',{packageId:'points-1000'}),/comprar/);
   }finally{await rm(s.dir,{recursive:true,force:true});}
 });
+
+test('pricing works with payments disabled and never creates or broadcasts an order',async()=>{
+  const s=await setup();try{
+    const funding=new Funding(s.points,{}, {...s.options,treasury:undefined,enabled:false});
+    const usdc=await funding.estimate('deposit','USDC',{packageId:'points-5000'});
+    assert.equal(usdc.points,5000);assert.equal(usdc.units,'5000000');assert(!('id' in usdc));assert(!('transaction' in usdc));
+    const sol=await funding.estimate('deposit','SOL',{packageId:'points-1000'});
+    assert.deepEqual({points:sol.points,units:sol.units},fundingPackageAmount('SOL','points-1000','150.125'));
+    assert.equal(s.points.fundingOrders(s.token).length,0);assert.equal(s.chain.broadcasts,0);
+    await assert.rejects(funding.quote(s.token,'deposit','USDC',{packageId:'points-5000'}),/habilitados/);
+  }finally{await rm(s.dir,{recursive:true,force:true});}
+});

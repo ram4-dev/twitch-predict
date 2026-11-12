@@ -5,6 +5,7 @@ import type {Funding} from './funding.js';
 
 /** Same authenticated API for the local store and cloud's request-scoped PostgreSQL aggregate. */
 export function fundingRouter(resolve:(req:express.Request,res:express.Response)=>Funding){
+  const quoteInput=z.union([z.object({direction:z.literal('deposit'),currency:z.enum(['USDC','SOL']),packageId:z.string().min(1).max(40)}).strict(),z.object({direction:z.enum(['deposit','withdraw']),currency:z.enum(['USDC','SOL']),amount:z.string().min(1).max(30)}).strict()]);
   const router=express.Router();
   const token=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
   const route=(work:(req:express.Request,res:express.Response)=>unknown)=>async(req:express.Request,res:express.Response)=>{
@@ -15,8 +16,12 @@ export function fundingRouter(resolve:(req:express.Request,res:express.Response)
   };
   router.get('/config',route((req,res)=>res.json(resolve(req,res).config())));
   router.get('/orders',route((req,res)=>res.json(resolve(req,res).list(token(req)))));
+  router.post('/estimate',route(async(req,res)=>{
+    const i=quoteInput.parse(req.body);
+    res.json(await resolve(req,res).estimate(i.direction,i.currency,'packageId' in i?{packageId:i.packageId}:i.amount));
+  }));
   router.post('/quote',route(async(req,res)=>{
-    const i=z.union([z.object({direction:z.literal('deposit'),currency:z.enum(['USDC','SOL']),packageId:z.string().min(1).max(40)}).strict(),z.object({direction:z.enum(['deposit','withdraw']),currency:z.enum(['USDC','SOL']),amount:z.string().min(1).max(30)}).strict()]).parse(req.body);
+    const i=quoteInput.parse(req.body);
     res.json(await resolve(req,res).quote(token(req),i.direction,i.currency,'packageId' in i?{packageId:i.packageId}:i.amount));
   }));
   router.post('/submit',route(async(req,res)=>{

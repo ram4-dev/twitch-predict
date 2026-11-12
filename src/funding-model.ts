@@ -26,6 +26,7 @@ export type FundingOrder = {
   status:'quoted'|'pending'|'confirmed'|'failed'|'expired'; signature?:string; signedTransaction?:string;
 };
 export type PublicFundingOrder = Omit<FundingOrder,'accountId'|'signedTransaction'>;
+export type FundingEstimate = Pick<PublicFundingOrder,'direction'|'currency'|'units'|'points'|'solPrice'|'expiresAt'>;
 export function publicOrder(order:FundingOrder):PublicFundingOrder {
   const result={...order} as Partial<FundingOrder>;
   delete result.accountId;delete result.signedTransaction;

@@ -6,19 +6,19 @@ import {Input} from './components/input.js';
 import {PhoneGlass as Glass} from './components/phone-glass.js';
 import {createPointsClient,number} from './points-ui.js';
 import {phantom} from '../byte-wallet.js';
-import {POINT_PACKAGES,POINTS_PER_USDC,type PublicFundingOrder,type Currency} from '../funding-model.js';
+import {POINT_PACKAGES,POINTS_PER_USDC,type PublicFundingOrder,type FundingEstimate,type Currency} from '../funding-model.js';
 import type {Funding} from '../funding.js';
 import type {Points} from '../points.js';
 
 const client=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async token=>localStorage.setItem('pointsToken',token)});
-const units=(order:PublicFundingOrder)=>{
+const units=(order:Pick<PublicFundingOrder,'currency'|'units'>)=>{
   const decimals=order.currency==='USDC'?6:9,value=BigInt(order.units),scale=10n**BigInt(decimals);
   return `${value/scale}.${(value%scale).toString().padStart(decimals,'0')}`;
 };
 const statusLabels={quoted:'Cotización pendiente',pending:'Confirmación pendiente',confirmed:'Confirmada',failed:'Falló en Solana',expired:'Expiró sin transferir'};
 export function FundingPanel({onBalanceChanged}:{onBalanceChanged?:()=>void}={}){
   const [config,setConfig]=useState<ReturnType<Funding['config']>>(),[account,setAccount]=useState<ReturnType<Points['me']>>(),[orders,setOrders]=useState<PublicFundingOrder[]>([]);
-  const [direction,setDirection]=useState<'deposit'|'withdraw'>('deposit'),[currency,setCurrency]=useState<Currency>('USDC'),[amount,setAmount]=useState(''),[packageId,setPackageId]=useState(''),[quote,setQuote]=useState<PublicFundingOrder>();
+  const [direction,setDirection]=useState<'deposit'|'withdraw'>('deposit'),[currency,setCurrency]=useState<Currency>('USDC'),[amount,setAmount]=useState(''),[packageId,setPackageId]=useState(''),[quote,setQuote]=useState<PublicFundingOrder|FundingEstimate>();
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState(''),[clock,setClock]=useState(Date.now());
   const refresh=async()=>{
     const configuration=await client.request<ReturnType<Funding['config']>>('/api/funding/config');setConfig(configuration);
@@ -44,11 +44,14 @@ export function FundingPanel({onBalanceChanged}:{onBalanceChanged?:()=>void}={})
   useEffect(()=>{if(account)onBalanceChanged?.();},[account?.balance,onBalanceChanged]);
   const requestQuote=async()=>{
     setBusy(true);setError('');setMessage('');setQuote(undefined);
-    try{setQuote(await client.authRequest<PublicFundingOrder>('/api/funding/quote',direction==='deposit'?{direction,currency,packageId}:{direction,currency,amount}));}
+    try{
+      const body=direction==='deposit'?{direction,currency,packageId}:{direction,currency,amount};
+      setQuote(config?.enabled&&account?.wallet?await client.authRequest<PublicFundingOrder>('/api/funding/quote',body):await client.request<FundingEstimate>('/api/funding/estimate',body));
+    }
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   };
   const confirm=async()=>{
-    if(!quote||busy)return;setBusy(true);setError('');setMessage('');
+    if(!quote||!('id' in quote)||busy)return;setBusy(true);setError('');setMessage('');
     try{
       let signedTransaction:string|undefined;
       if(quote.direction==='deposit'){
@@ -75,9 +78,9 @@ export function FundingPanel({onBalanceChanged}:{onBalanceChanged?:()=>void}={})
             {packageId&&<fieldset className="funding-payment" disabled={busy}><legend>Pagá con</legend>{(['USDC','SOL'] as const).map(value=><label key={value}><input type="radio" name="payment-currency" value={value} checked={currency===value} onChange={()=>{setCurrency(value);setQuote(undefined);setError('');}}/>{value}</label>)}</fieldset>}
           </>:<><label htmlFor="funding-currency">Moneda</label><select id="funding-currency" disabled={busy} value={currency} onChange={e=>{setCurrency(e.target.value as Currency);setQuote(undefined);}}><option>USDC</option><option>SOL</option></select><label htmlFor="funding-amount">Puntos a retirar</label><Input id="funding-amount" inputMode="numeric" autoComplete="off" required value={amount} disabled={busy} onChange={e=>{setAmount(e.target.value);setQuote(undefined);}} aria-describedby="funding-hint"/></>}
           <p id="funding-hint" className="funding-muted">{direction==='deposit'?'La compra se acredita cuando Solana confirma la transferencia.':'Los puntos disponibles se reservan al confirmar el retiro.'} {currency==='SOL'?'La conversión usa una cotización de SOL/USDC válida por 60 segundos.':''}</p>
-          <Button type="submit" disabled={busy||!config?.enabled||!account?.wallet||(direction==='deposit'?!packageId:!amount)}>{busy?'Procesando…':'Ver cotización'}</Button>
+          <Button type="submit" disabled={busy||!config||(direction==='deposit'?!packageId:!amount)}>{busy?'Procesando…':'Ver cotización'}</Button>
         </form>
-        {quote&&<section className="funding-quote" aria-label="Cotización"><h3>{quote.direction==='deposit'?'Vas a comprar':'Vas a retirar'}</h3><dl><dt>Puntos</dt><dd>{number(quote.points)}</dd><dt>{quote.direction==='deposit'?'Pagás':'Recibís'}</dt><dd>{units(quote)} {quote.currency}</dd>{quote.currency==='SOL'&&<><dt>1 SOL</dt><dd>{quote.solPrice} USDC</dd></>}<dt>Destino</dt><dd>{quote.direction==='deposit'?'Tesorería de plot':'Tu wallet conectada'}</dd></dl><p className="funding-muted">{quote.direction==='deposit'?'Phantom muestra el costo de red y la creación de cuenta USDC, si corresponde.':'La tesorería paga el costo de red del retiro.'}</p><p>{expired?'La cotización venció. Pedí una nueva.':`Vence en ${Math.max(0,Math.ceil((Date.parse(quote.expiresAt)-clock)/1000))} segundos.`}</p><Button type="button" disabled={busy||expired} onClick={()=>void confirm()}>{quote.direction==='deposit'?'Confirmar compra en Phantom':'Confirmar retiro'}</Button></section>}
+        {quote&&<section className="funding-quote" aria-label="Cotización"><h3>{'id' in quote?(quote.direction==='deposit'?'Vas a comprar':'Vas a retirar'):'Precio de la operación'}</h3><dl><dt>Puntos</dt><dd>{number(quote.points)}</dd><dt>{quote.direction==='deposit'?'Pagás':'Recibís'}</dt><dd>{units(quote)} {quote.currency}</dd>{quote.currency==='SOL'&&<><dt>1 SOL</dt><dd>{quote.solPrice} USDC</dd></>}<dt>Destino</dt><dd>{quote.direction==='deposit'?'Tesorería de plot':'Tu wallet conectada'}</dd></dl><p className="funding-muted">{quote.direction==='deposit'?'Phantom muestra el costo de red y la creación de cuenta USDC, si corresponde.':'La tesorería paga el costo de red del retiro.'}</p><p>{expired?'La cotización venció. Pedí una nueva.':`Vence en ${Math.max(0,Math.ceil((Date.parse(quote.expiresAt)-clock)/1000))} segundos.`}</p>{'id' in quote?<Button type="button" disabled={busy||expired} onClick={()=>void confirm()}>{quote.direction==='deposit'?'Confirmar compra en Phantom':'Confirmar retiro'}</Button>:<div className="funding-availability"><p role="status">{!config?.enabled?config?.reason:'Conectá Phantom para continuar con esta operación.'}</p>{config?.enabled&&!account?.wallet&&<a href="/onboarding?connect=phantom">Conectar Phantom →</a>}</div>}</section>}
         <p role="status" className={error?'funding-error':''}>{error||message}</p></Glass>
         <Glass className="funding-panel"><h2>Compras y retiros</h2>{!account?<p>Conectá tu wallet para ver los movimientos.</p>:!orders.some(o=>o.status!=='quoted')?<p>Todavía no tenés compras ni retiros.</p>:orders.filter(o=>o.status!=='quoted').slice(0,20).map(order=><article className="funding-row" key={order.id}><strong>{order.direction==='deposit'?'Compra':'Retiro'} · {number(order.points)} pts</strong><p>{units(order)} {order.currency} · {statusLabels[order.status]}</p><p className="funding-muted">{new Date(order.createdAt).toLocaleString('es-AR')}</p>{order.signature&&<a href={`https://explorer.solana.com/tx/${order.signature}${order.network==='devnet'?'?cluster=devnet':''}`} target="_blank" rel="noopener noreferrer">Ver en Solana ↗</a>}</article>)}</Glass></div>
     </section>;
