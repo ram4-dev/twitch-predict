@@ -8,7 +8,7 @@ import {createPrivateKey,sign} from 'node:crypto';
 import {phantomProvider} from './fixtures/phantom.js';
 async function fixture(){return (await readFile(resolve('test-results/funding-fixture-path'),'utf8')).trim();}
 test.skip(process.env.MARKET_MODE==='solana'||process.env.E2E_MARKET_MODE==='byte','Points funding flow');
-async function login(page:Page){
+async function installWallet(page:Page){
   const wallet=Keypair.generate(),privateKey=createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.from(wallet.secretKey.subarray(0,32))]),format:'der',type:'pkcs8'});
   await phantomProvider(page,{address:getAddressDecoder().decode(wallet.publicKey.toBytes()),sign:message=>Array.from(sign(null,Buffer.from(message),privateKey))});
   await page.exposeBinding('__fundingSign',(_source,raw:number[])=>{const tx=Transaction.from(Buffer.from(raw));tx.sign(wallet);return Array.from(tx.serialize());});
@@ -16,6 +16,10 @@ async function login(page:Page){
     const w=window as unknown as {phantom:{solana:{signTransaction:(tx:{serialize(options:unknown):Uint8Array;constructor:{from(raw:Uint8Array):unknown}})=>Promise<unknown>}};__fundingSign:(raw:number[])=>Promise<number[]>};
     w.phantom.solana.signTransaction=async tx=>tx.constructor.from(new Uint8Array(await w.__fundingSign(Array.from(tx.serialize({requireAllSignatures:false,verifySignatures:false})))));
   });
+  return wallet;
+}
+async function login(page:Page){
+  const wallet=await installWallet(page);
   await page.goto('/onboarding');await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await page.waitForURL('**/app#markets');await page.goto('/wallet.html');
   await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('10.000');return wallet;
 }
@@ -23,8 +27,7 @@ async function reset(){await writeFile(await fixture(),JSON.stringify({transacti
 async function state(){return JSON.parse(await readFile(await fixture(),'utf8'));}
 test.beforeEach(reset);
 test('buy USDC, bet purchased points, withdraw SOL and recover the same account after reload',async({page})=>{
-  await login(page);await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Cotización'})).toContainText('5.000');await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();
+  await login(page);await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();
   await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('15.000');await expect(page.locator('#own-balance')).toContainText('15.000');await expect(page.getByText('Compra confirmada. Los puntos ya están en tu saldo.',{exact:true})).toBeVisible();
   await page.goto('/app');
   const market=await page.evaluate(async()=>{const {token}=await(await fetch('/api/pair')).json();return (await fetch('/api/demo',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:'{}'})).json();});
@@ -37,7 +40,7 @@ test('buy USDC, bet purchased points, withdraw SOL and recover the same account 
   await page.screenshot({path:'test-results/funding-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/funding-mobile.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('buy SOL and withdraw USDC from the same points balance',async({page})=>{
-  await login(page);await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();await page.getByRole('radio',{name:'SOL',exact:true}).check();await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('11.000');
+  await login(page);await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();await page.getByRole('radio',{name:'SOL',exact:true}).check();await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('11.000');
   await page.getByRole('button',{name:'Retirar puntos',exact:true}).click();await page.getByLabel('Moneda',{exact:true}).selectOption('USDC');await page.getByLabel('Puntos a retirar',{exact:true}).fill('1000');await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await expect(page.getByRole('region',{name:'Cotización'})).toContainText('1.000000 USDC');await page.getByRole('button',{name:'Confirmar retiro',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('10.000');
 });
 test('pending withdrawal survives reload, reserves points, then returns them on a finalized failure',async({page})=>{
@@ -95,32 +98,45 @@ test('package selection survives a quote error and Phantom cancellation',async({
   await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();
   await page.getByRole('radio',{name:'SOL',exact:true}).check();
   await page.route('**/api/funding/quote',route=>route.fulfill({status:503,json:{error:'No se pudo cotizar SOL. Intentá de nuevo.'}}));
-  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();
   await expect(page.getByText('No se pudo cotizar SOL. Intentá de nuevo.',{exact:true})).toBeVisible();
   await expect(page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true})).toBeChecked();
   await page.unroute('**/api/funding/quote');
-  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Cotización'})).toContainText('0.006666667 SOL');
   await page.evaluate(()=>{const w=window as unknown as {phantom:{solana:{signTransaction:()=>Promise<never>}}};w.phantom.solana.signTransaction=async()=>{throw Object.assign(new Error('Rejected'),{code:4001});};});
-  await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();
+  await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();
   await expect(page.getByText('Cancelaste la operación en Phantom.',{exact:true})).toBeVisible();
   await expect(page.getByRole('region',{name:'Cotización'})).toBeVisible();
   expect((await state()).broadcasts).toBe(0);
   await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();
   await expect(page.getByRole('region',{name:'Cotización'})).toHaveCount(0);
   await page.getByRole('radio',{name:'USDC',exact:true}).check();
-  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();
   await expect(page.getByRole('region',{name:'Cotización'})).toContainText('5.000000 USDC');
 });
 
-test('disabled payments still allow package pricing without preparing a transaction',async({page})=>{
+test('disabled payments report the blocker without sending funds',async({page})=>{
   await login(page);const config=await(await page.request.get('/api/funding/config')).json();
   await page.route('**/api/funding/config',route=>route.fulfill({json:{...config,enabled:false,treasury:null,reason:'Compras y retiros todavía no están habilitados.'}}));
   await page.reload();await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();
-  await expect(page.getByRole('button',{name:'Ver cotización',exact:true})).toBeEnabled();
-  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
-  const quote=page.getByRole('region',{name:'Cotización',exact:true});await expect(quote).toContainText('5.000000 USDC');await expect(quote.getByRole('status')).toContainText('todavía no están habilitados');
-  await expect(page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true})).toHaveCount(0);
-  await page.getByRole('radio',{name:'SOL',exact:true}).check();await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await expect(quote).toContainText('0.033333334 SOL');
+  await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();
+  await expect(page.locator('.funding-error')).toContainText('todavía no están habilitados');
   expect((await state()).broadcasts).toBe(0);await expect(page.locator('.funding-row')).toHaveCount(0);
+});
+
+test('one purchase click opens Phantom signing directly and ignores a duplicate click',async({page})=>{
+  await login(page);await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();
+  await page.evaluate(()=>{const button=Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Comprar con Phantom')!;button.click();button.click();});
+  await expect(page.locator('#own-balance')).toContainText('11.000');expect((await state()).broadcasts).toBe(1);
+  await expect(page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true})).toHaveCount(0);
+});
+
+test('a Twitch account links Phantom during purchase and retains its account and balance',async({page})=>{
+  const {randomUUID}=await import('node:crypto');
+  const id=String(Date.now()),loginName=`buyer_${randomUUID().slice(0,8)}`;
+  await writeFile(resolve('.e2e-fixtures/twitch-oauth.json'),JSON.stringify({id,login:loginName,display_name:loginName}));
+  await page.route('https://id.twitch.tv/oauth2/authorize?**',async route=>{const url=new URL(route.request().url()),callback=new URL(url.searchParams.get('redirect_uri')!);callback.searchParams.set('state',url.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');await route.fulfill({status:302,headers:{location:callback.href}});});
+  await installWallet(page);await page.goto('/onboarding');await page.getByRole('button',{name:'Continuar con Twitch',exact:true}).click();await page.waitForURL(/\/app(?:[?#]|$)/);await expect(page.getByRole('button',{name:'Saldo',exact:true})).toBeVisible();
+  const before=await page.evaluate(async()=>await(await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}})).json());expect(before.wallet).toBeFalsy();
+  await page.getByRole('button',{name:'Saldo',exact:true}).click();await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();await expect(page.locator('#own-balance')).toContainText('11.000');
+  const after=await page.evaluate(async()=>await(await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}})).json());expect(after.id).toBe(before.id);expect(after.wallet).toBeTruthy();expect(after.twitch.id).toBe(id);expect((await state()).broadcasts).toBe(1);
 });

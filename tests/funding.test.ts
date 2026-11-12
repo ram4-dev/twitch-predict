@@ -151,3 +151,16 @@ test('pricing works with payments disabled and never creates or broadcasts an or
     await assert.rejects(funding.quote(s.token,'deposit','USDC',{packageId:'points-5000'}),/habilitados/);
   }finally{await rm(s.dir,{recursive:true,force:true});}
 });
+
+test('a public treasury address receives purchases without a server signing key',async()=>{
+  const s=await setup();try{
+    const funding=new Funding(s.points,{POINTS_PAYMENTS_ENABLED:'true',POINTS_NETWORK:'devnet',POINTS_TREASURY_ADDRESS:s.treasury.publicKey.toBase58()},{chain:s.chain,price:async()=>'150'});
+    assert.equal(funding.config().enabled,true);assert.equal(funding.config().withdrawalsEnabled,false);
+    const order=await funding.quote(s.token,'deposit','SOL',{packageId:'points-1000'});
+    const tx=Transaction.from(Buffer.from(order.transaction,'base64'));
+    assert.equal(tx.instructions[0].keys[1].pubkey.toBase58(),s.treasury.publicKey.toBase58());
+    const submitted=await funding.submit(s.token,order.id,sign(order,s.wallet));s.chain.finalize(submitted.signature!);await funding.submit(s.token,order.id);assert.equal(s.points.me(s.token).balance,11000);
+    await assert.rejects(funding.quote(s.token,'withdraw','SOL','1000'),/firmante/);
+    assert.throws(()=>new Funding(s.points,{POINTS_TREASURY_ADDRESS:Keypair.generate().publicKey.toBase58()},s.options),/no coincide/);
+  }finally{await rm(s.dir,{recursive:true,force:true});}
+});

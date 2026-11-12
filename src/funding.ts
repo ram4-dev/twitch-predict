@@ -19,6 +19,7 @@ const memoProgram=new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 export class Funding {
   private chain:FundingChain;
   private treasury?:Keypair;
+  private treasuryAddress?:PublicKey;
   private price:()=>Promise<string>;
   readonly enabled:boolean;
   readonly network:FundingNetwork;
@@ -35,6 +36,8 @@ export class Funding {
       try{this.treasury=Keypair.fromSecretKey(Uint8Array.from(JSON.parse(environment.POINTS_TREASURY_KEYPAIR)));}
       catch{throw new Error('POINTS_TREASURY_KEYPAIR no tiene un formato válido');}
     }
+    this.treasuryAddress=environment.POINTS_TREASURY_ADDRESS?new PublicKey(environment.POINTS_TREASURY_ADDRESS):this.treasury?.publicKey;
+    if(this.treasury&&this.treasuryAddress&&!this.treasury.publicKey.equals(this.treasuryAddress))throw new Error('La clave de tesorería no coincide con POINTS_TREASURY_ADDRESS');
     this.price=options.price??(async()=>{
       const response=await fetch('https://api.coinbase.com/v2/prices/SOL-USDC/spot',{signal:AbortSignal.timeout(8000)});
       if(!response.ok)throw new Error('No se pudo cotizar SOL. Intentá de nuevo.');
@@ -44,15 +47,16 @@ export class Funding {
       return data.amount;
     });
   }
-  config(){return {enabled:this.enabled&&!!this.treasury,network:this.network,pointsPerUsdc:POINTS_PER_USDC,currencies:['USDC','SOL'],packages:POINT_PACKAGES,treasury:this.treasury?.publicKey.toBase58()??null,reason:!this.enabled?'Compras y retiros todavía no están habilitados.':!this.treasury?'Falta configurar la tesorería.':null};}
-  private async ready(){
-    if(!this.enabled||!this.treasury)throw new Error(this.config().reason??'Tesorería no disponible');
+  config(){return {enabled:this.enabled&&!!this.treasuryAddress,withdrawalsEnabled:this.enabled&&!!this.treasury,network:this.network,pointsPerUsdc:POINTS_PER_USDC,currencies:['USDC','SOL'],packages:POINT_PACKAGES,treasury:this.treasuryAddress?.toBase58()??null,reason:!this.enabled?'Compras y retiros todavía no están habilitados.':!this.treasuryAddress?'Falta configurar la tesorería.':null};}
+  private async ready(direction:FundingOrder['direction']){
+    if(!this.enabled||!this.treasuryAddress)throw new Error(this.config().reason??'Tesorería no disponible');
+    if(direction==='withdraw'&&!this.treasury)throw new Error('Los retiros necesitan un firmante de tesorería.');
     if(await this.chain.getGenesisHash()!==(this.network==='devnet'?DEVNET_GENESIS:MAINNET_GENESIS))throw new Error(`El RPC de puntos debe corresponder a Solana ${this.network}`);
-    return this.treasury;
+    return {publicKey:this.treasuryAddress,signer:this.treasury};
   }
   async quote(token:string,direction:FundingOrder['direction'],currency:Currency,input:string|{packageId:string}){
     const account=this.points.me(token);if(!account.wallet)throw new Error('Conectá Phantom primero');
-    const treasury=await this.ready(),wallet=new PublicKey(account.wallet);
+    const treasury=await this.ready(direction),wallet=new PublicKey(account.wallet);
     if(wallet.equals(treasury.publicKey))throw new Error('La tesorería no puede operar como usuario');
     const solPrice=currency==='SOL'?await this.price():'1';
     if(typeof input!=='string'&&direction!=='deposit')throw new Error('Los paquetes son para comprar puntos');
@@ -83,12 +87,12 @@ export class Funding {
     const operation=this.execute(token,order,signed).finally(()=>this.operations.delete(key));this.operations.set(key,operation);return operation;
   }
   private async execute(token:string,initial:FundingOrder,signed?:string){
-    const treasury=await this.ready();let order=initial;
+    const treasury=await this.ready(initial.direction);let order=initial;
     if(order.status==='quoted'){
       if(Date.parse(order.expiresAt)<=Date.now())throw new Error('La cotización venció. Pedí una nueva.');
       const expected=Transaction.from(Buffer.from(order.transaction,'base64'));
       let tx:Transaction;
-      if(order.direction==='withdraw'){tx=expected;tx.sign(treasury);}
+      if(order.direction==='withdraw'){tx=expected;tx.sign(treasury.signer!);}
       else {
         if(!signed)throw new Error('Falta la firma de Phantom');
         tx=Transaction.from(Buffer.from(signed,'base64'));
