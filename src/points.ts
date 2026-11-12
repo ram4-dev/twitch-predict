@@ -1,3 +1,4 @@
+import type {FundingOrder,FundingNetwork} from './funding-model.js';
 import {pointFees,type PointFees} from './point-fees.js';
 import {hasPointsIdentity,PointsSessionError} from './points-identity.js';
 import {PlotCommandError,type PlotCommand} from './plot-chat.js';
@@ -17,9 +18,9 @@ type Bet = { id:string; accountId:string; wallet?:string; marketKey:string; outc
 type Settlement = { source:'twitch'|'streamer'|'demo'; at:string; wallet?:string; distributedAt?:string; distributedBy?:string };
 type Market = { key:string; prediction:Prediction; phase:'open'|'locked'|'resolved'|'void'; winnerId?:string; reason?:string; fees?:PointFees; sourceCheckedAt:string; createdAt:string; updatedAt:string; demo:boolean; source?:'plot'; ownerTwitchId?:string; creatorTwitchId?:string; shortId?:string; version?:number; operatorLockedAt?:string; operatorLockedBy?:string; settlement?:Settlement };
 type Receipt = { fingerprint:string; result:unknown };
-type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'|'streamer_fee'; delta:number; balance:number; marketKey?:string; createdAt:string };
+type LedgerEntry = { id:string; accountId:string; kind:'welcome'|'bet'|'claim'|'distribution'|'refund'|'streamer_fee'|'deposit'|'withdraw'|'withdraw-refund'; delta:number; balance:number; marketKey?:string; createdAt:string };
 type Streamer = { channel:string; wallet:string; assignedAt:string; twitchId?:string };
-type State = { version:1; platformRevenue?:{balance:number;credits:{marketKey:string;amount:number;at:string}[]}; pendingStreamerFees?:Record<string,{channel:string;twitchId?:string;amount:number}>; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
+type State = { version:1; fundingNetwork?:FundingNetwork; funding?:Record<string,FundingOrder>; platformRevenue?:{balance:number;credits:{marketKey:string;amount:number;at:string}[]}; pendingStreamerFees?:Record<string,{channel:string;twitchId?:string;amount:number}>; accounts:Record<string,Account>; markets:Record<string,Market>; bets:Bet[]; receipts:Record<string,Receipt>; ledger:LedgerEntry[]; channels:string[]; sessions:Record<string,string>; streamers:Record<string,Streamer>; channelModerators?:Record<string,ChannelModeratorEvidence> };
 /** Dated moderator evidence: the bot adapter refreshes it; HTTP publication revalidates inside its window. */
 export type ChannelModeratorEvidence={users:string[];verifiedAt:string};
 /** Positive moderator evidence lives this long; expiry denies rather than trusting a stale list. */
@@ -425,6 +426,49 @@ export class Points {
       this.ledger(state,account,'bet',-amount,key);
       const bet:Bet={id:randomUUID(),accountId:account.id,wallet:account.wallet,marketKey:key,outcomeId,amount,payout:0,claimed:false,createdAt:now()};state.bets.push(bet);
       const result={betId:bet.id,amount,outcomeId,balance:account.balance};state.receipts[id]={fingerprint,result};return result;
+    });
+  }
+  fundingOrders(token:string) {
+    const account=this.account(this.state,token);
+    return Object.values(this.state.funding??{}).filter(o=>o.accountId===account.id).reverse();
+  }
+  fundingOrder(token:string,id:string) {
+    const order=this.fundingOrders(token).find(o=>o.id===id);
+    if(!order)throw new Error('Operación inexistente');return order;
+  }
+  async fundingQuote(token:string,order:Omit<FundingOrder,'accountId'>) {
+    return this.transaction(state=>{
+      const account=this.account(state,token);
+      if(!account.wallet||account.wallet!==order.wallet)throw new Error('Volvé a conectar tu wallet');
+      if(state.fundingNetwork&&state.fundingNetwork!==order.network)throw new Error('Este saldo pertenece a otra red. Usá almacenamiento separado por red.');
+      state.fundingNetwork??=order.network;
+      state.funding??={};
+      if(state.funding[order.id])return state.funding[order.id];
+      if(Object.values(state.funding).filter(o=>o.accountId===account.id&&o.status==='quoted'&&Date.parse(o.expiresAt)>Date.now()).length>=10)throw new Error('Ya tenés cotizaciones pendientes');
+      return state.funding[order.id]={...order,accountId:account.id};
+    });
+  }
+  async fundingSubmit(token:string,id:string,signature:string,signedTransaction:string) {
+    return this.transaction(state=>{
+      const account=this.account(state,token),order=state.funding?.[id];
+      if(!order||order.accountId!==account.id)throw new Error('Operación inexistente');
+      if(order.status!=='quoted'){
+        if(order.signature!==signature)throw new Error('La operación ya tiene otra firma');return order;
+      }
+      if(Date.parse(order.expiresAt)<=Date.now())throw new Error('La cotización venció. Pedí una nueva.');
+      if(Object.values(state.funding??{}).some(o=>o.id!==id&&o.signature===signature))throw new Error('Transferencia ya utilizada');
+      if(order.direction==='withdraw')this.ledger(state,account,'withdraw',-order.points);
+      order.signature=signature;order.signedTransaction=signedTransaction;order.status='pending';return order;
+    });
+  }
+  async fundingFinish(token:string,id:string,status:'confirmed'|'failed'|'expired') {
+    return this.transaction(state=>{
+      const account=this.account(state,token),order=state.funding?.[id];
+      if(!order||order.accountId!==account.id)throw new Error('Operación inexistente');
+      if(order.status!=='pending')return order;
+      if(status==='confirmed'&&order.direction==='deposit')this.ledger(state,account,'deposit',order.points);
+      if(status!=='confirmed'&&order.direction==='withdraw')this.ledger(state,account,'withdraw-refund',order.points);
+      order.status=status;return order;
     });
   }
   // Provisioned only by the local bridge operator; a login cannot claim a Twitch channel.

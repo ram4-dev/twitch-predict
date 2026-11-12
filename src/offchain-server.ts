@@ -1,3 +1,5 @@
+import {Funding} from './funding.js';
+import {fundingRouter} from './funding-router.js';
 import {PointsSessionError} from './points-identity.js';
 import {LocalDocuments} from './local-documents.js';
 import {CloudTwitchBot} from './cloud/twitch-bot.js';
@@ -34,7 +36,7 @@ const directory=resolve(process.env.DATA_DIR??`${root}/data`);
 await mkdir(directory,{recursive:true,mode:0o700});
 try{await writeFile(`${directory}/bridge-token`,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});}catch(e){if((e as NodeJS.ErrnoException).code!=='EEXIST')throw e;}
 const token=(await readFile(`${directory}/bridge-token`,'utf8')).trim();
-const points=new Points(directory);await points.load();const source=new TwitchSource(points);const auth=new Auth(points);
+const points=new Points(directory);await points.load();const funding=new Funding(points);const source=new TwitchSource(points);const auth=new Auth(points);
 const marketEvents=new EventEmitter();marketEvents.setMaxListeners(0);
 const byte=new ByteService(directory,process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,undefined,()=>marketEvents.emit('markets'));await byte.load();
 const byteMirror=new ByteTwitchMirror(directory,byte,source,Date.now,undefined,()=>marketEvents.emit('markets'));await byteMirror.load();
@@ -43,6 +45,8 @@ const waitlist=new Waitlist(directory);await waitlist.load();
 // Plan 2 (session 2): proposal service over the shared Points aggregate; the bot derives viewer !plot crear here.
 const proposals=new ProposalService(points);
 
+const pointsPaymentsEnabled=process.env.POINTS_PAYMENTS_ENABLED==='true';
+const byteMode=process.env.MARKET_MODE==='byte'&&!pointsPaymentsEnabled;
 const app=express();app.disable('x-powered-by');app.set('trust proxy','loopback');
 app.use((req,res,next)=>{
   const trustedHost=(name:string)=>trustedLocalHostname(name,process.env.AUTH_ORIGIN);
@@ -91,7 +95,7 @@ app.get('/api/live/markets',(req,res)=>{
   const changed=()=>{if(!res.destroyed)res.write('event: markets\ndata: {}\n\n');};marketEvents.on('markets',changed);res.write('retry: 5000\nevent: ready\ndata: {}\n\n');
   const heartbeat=setInterval(()=>res.write(': heartbeat\n\n'),15000);heartbeat.unref();res.on('close',()=>{clearInterval(heartbeat);marketEvents.off('markets',changed);});
 });
-app.get('/api/health',(_req,res)=>res.json({ok:true,marketMode:process.env.MARKET_MODE==='byte'?'byte':'offchain',network:process.env.MARKET_MODE==='byte'?'devnet':'offchain',protocol:process.env.MARKET_MODE==='byte'?'byte partner markets':'Puntos internos',features:process.env.MARKET_MODE==='byte'?['wallet-bet','resolve','automatic-payout']:['bet','resolve','claim'],sourceError:source.lastError}));
+app.get('/api/health',(_req,res)=>res.json({ok:true,marketMode:byteMode?'byte':'offchain',network:byteMode?'devnet':'offchain',protocol:byteMode?'byte partner markets':'Puntos internos',features:byteMode?['wallet-bet','resolve','automatic-payout']:['bet','resolve','claim'],sourceError:source.lastError}));
 app.get('/api/markets',(_req,res)=>res.json(points.markets()));
 app.get('/api/channels',(_req,res)=>res.json({channels:points.channels(),details:source.channels(),sourceError:source.lastError}));
 app.get('/api/pair',(req,res)=>{if(req.get('sec-fetch-site')!=='same-origin'){res.status(403).json({error:'Open the dashboard to pair'});return;}res.json({token});});
@@ -247,6 +251,7 @@ const proposalResolver:ProposalActorResolver={
   isChannelOwner:async (_req,_res,actor,channelId)=>actor.twitchId===channelId,
 };
 app.use('/api/proposals',proposalsRouter({service:proposals,resolver:proposalResolver}));
+app.use('/api/funding',fundingRouter(()=>funding));
 app.get('/api/points/me',route((req,res)=>res.json(points.me(bearer(req)))));
 app.get('/api/streamer/console',route((req,res)=>res.json(points.streamerConsole(bearer(req)))));
 // Plan 2 (contract POST /api/streamer/markets): owner/mod direct creation through the same aggregate
@@ -308,15 +313,16 @@ app.get(['/s/:platform/:login','/join/:platform/:login','/overlay/:platform/:log
   res.sendFile('streamer.html',{root:`${root}/public`});
 });
 // Named .localhost hosts need HTTPS for Phantom's injected provider.
-app.get(['/app', '/app.html', '/byte'],(req,res,next)=>{
+app.get(['/app', '/app.html', '/byte', '/wallet.html'],(req,res,next)=>{
   const origin=process.env.AUTH_ORIGIN;
-  if(process.env.MARKET_MODE==='byte'&&origin?.startsWith('https://')&&appOrigin(req)!==origin){res.redirect(`${origin}${req.originalUrl}`);return;}
+  if((byteMode||pointsPaymentsEnabled)&&origin?.startsWith('https://')&&appOrigin(req)!==origin){res.redirect(`${origin}${req.originalUrl}`);return;}
   next();
 });
 // Native form POSTs need the same-origin referrer policy to retain their Origin.
 app.get(['/','/landing','/landing.html'],(_req,res)=>{res.set('Referrer-Policy','same-origin');res.sendFile('landing.html',{root:`${root}/public`});});
+app.get('/wallet.html',(_req,res)=>res.redirect('/app#balance'));
 app.get('/byte',(_req,res)=>res.sendFile('byte.html',{root:`${root}/public`}));
-app.get(['/app','/app.html'],(_req,res)=>res.sendFile(process.env.MARKET_MODE==='byte'?'byte.html':'index.html',{root:`${root}/public`}));
+app.get(['/app','/app.html'],(_req,res)=>res.sendFile(byteMode?'byte.html':'index.html',{root:`${root}/public`}));
 app.use(express.static(`${root}/public`));
 app.use('/extension',express.static(`${root}/extension`));
 const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{
@@ -325,7 +331,7 @@ const server=app.listen(Number(process.env.PORT??3000),'127.0.0.1',async()=>{
   await writeFile(`${directory}/runtime-port`,String(port),{mode:0o600});
   if(process.env.AUTH_PROXY_STATE_DIR)try{await promisify(execFile)('portless',['alias',process.env.AUTH_PROXY_NAME??'twitch-predict',String(port),'--force'],{env:{...process.env,PORTLESS_STATE_DIR:process.env.AUTH_PROXY_STATE_DIR,PORTLESS_PORT:'1357',PORTLESS_HTTPS:'1'}});}catch(e){console.error('Could not refresh auth HTTPS alias:',(e as Error).message);}
 });
-const sync=async()=>{await source.sync();await byteMirror.sync();};
+const sync=async()=>{await source.sync();if(!pointsPaymentsEnabled)await byteMirror.sync();};
 let syncingBot=false;
 const botTimer=setInterval(()=>{if(syncingBot)return;syncingBot=true;void bot.sync(channel=>byteMirror.snapshot(channel)).catch(()=>console.error('Twitch bot sync failed')).finally(()=>{syncingBot=false;});},5000);botTimer.unref();
 const timer=setInterval(()=>{void sync().catch(e=>console.error('Twitch sync failed:',(e as Error).message));},5000);timer.unref();

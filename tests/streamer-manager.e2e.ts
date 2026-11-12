@@ -8,7 +8,7 @@ async function api(page:Page,path:string,body?:Record<string,unknown>){return pa
 async function owner(page:Page){
  const login=`manager_${randomUUID().slice(0,8)}`,id=String(Date.now());await writeFile(resolve('test-results/twitch-oauth.json'),JSON.stringify({id,login,display_name:'Rami'}));
  await signIn(page);await page.route('https://id.twitch.tv/oauth2/authorize?**',async route=>{const u=new URL(route.request().url()),callback=new URL(u.searchParams.get('redirect_uri')!);callback.searchParams.set('state',u.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');await route.fulfill({status:302,headers:{location:callback.href}});});
- const start=await api(page,'/api/twitch/start',{});await page.goto(start.url);await expect(page).toHaveURL(/\/app#profile$/);await expect(page.getByRole('navigation',{name:'Secciones'}).getByRole('button')).toHaveCount(2);return login;
+ const start=await api(page,'/api/twitch/start',{});await page.goto(start.url);await expect(page).toHaveURL(/\/app#profile$/);await expect(page.getByRole('navigation',{name:'Secciones'}).getByRole('button')).toHaveCount(3);return login;
 }
 async function create(page:Page,title:string,retryLostResponse=false){
  let interrupted=false;const intents:string[]=[];if(retryLostResponse)await page.route('**/api/streamer/markets',async route=>{intents.push(route.request().postDataJSON().intentId);if(!interrupted){interrupted=true;const target=new URL(route.request().url());await route.fetch({url:target.href.replace(target.hostname,'127.0.0.1'),headers:{...route.request().headers(),host:target.host}});await route.abort('failed');}else await route.continue();});

@@ -39,13 +39,15 @@ while(!stopping){
    await documents.withLease('twitch-worker',owner,async()=>{
     const points=new Points('',documents);await points.load();
     const byte=new ByteService('',process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,documents);await byte.load();
-    const mirror=new ByteTwitchMirror('',byte,new TwitchSource(points),Date.now,documents);await mirror.load();
+    const source=new TwitchSource(points);
+    const mirror=new ByteTwitchMirror('',byte,source,Date.now,documents);await mirror.load();
     // Configured channels seed the list; authenticated viewers can enqueue any valid channel.
     await documents.update('byte-twitch',()=>({version:1,channels:[] as string[],mirrors:{}}),s=>{s.channels=[...new Set([...s.channels,...config.channels])];});
-    if(!lost&&!stopping)await mirror.sync();
+    if(!lost&&!stopping){if(process.env.POINTS_PAYMENTS_ENABLED==='true'){for(const channel of config.channels)if(!points.channels().includes(channel))await points.watch(channel);await source.sync();}else await mirror.sync();}
     if(lost)throw new Error('Worker lease lost');
-    await documents.update('worker-status',()=>({checkedAt:0,sourceError:null as string|null}),state=>{state.checkedAt=Date.now();state.sourceError=mirror.lastError?'No se pudo verificar Twitch; las predicciones vencidas quedan bloqueadas.':null;});
-    if(mirror.lastError)console.error('Twitch source unavailable; stale markets remain blocked');
+    const sourceError=process.env.POINTS_PAYMENTS_ENABLED==='true'?source.lastError:mirror.lastError;
+    await documents.update('worker-status',()=>({checkedAt:0,sourceError:null as string|null}),state=>{state.checkedAt=Date.now();state.sourceError=sourceError?'No se pudo verificar Twitch; las predicciones vencidas quedan bloqueadas.':null;});
+    if(sourceError)console.error('Twitch source unavailable; stale markets remain blocked');
    });
   }finally{clearInterval(renew);}
  }catch{console.error('Worker cycle failed; durable reservations retained');}

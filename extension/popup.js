@@ -121,7 +121,7 @@ function renderByte(){
  const cards=rounds.map(r=>r.card);
  if(cards.length>1){cards.splice(1,0,roundLabel('history','Earlier rounds'));cards.unshift(roundLabel('current','Current round'));}
  reconcileCards(cards);$('#empty').hidden=!!cards.length;$('#empty-copy').textContent='The operator creates this channel’s markets from the dashboard. Pick an option to sign with Phantom.';
- $('#dashboard').href=`${base}/app`;$('#user-console').href='#history';$('#user-console').target='_self';$('#connect-twitch').hidden=true;$('#login p').textContent='Connect Phantom to stake and follow your transactions from the extension.';$('#streamer-console').hidden=true;
+ $('#dashboard').href=`${base}/app`;$('#funding-wallet').href=`${base}/app#balance`;$('#user-console').href='#history';$('#user-console').target='_self';$('#connect-twitch').hidden=true;$('#login p').textContent='Connect Phantom to stake and follow your transactions from the extension.';$('#streamer-console').hidden=true;
 }
 async function refreshByte(base,scope){
  lastRefresh=Date.now();byteError='';
@@ -167,7 +167,7 @@ async function load(force=false){
     updateChannelSearch(selectedChannel,activeChannel);snapshot=state[`channel:${selectedChannel}`];
     $('#source-error').hidden=!snapshot?.sourceError;$('#source-error').textContent=snapshot?.sourceError?`Could not refresh Twitch: ${snapshot.sourceError}`:'';
     if(!hasPointsIdentity(account)){account=undefined;markets=[];}
-    $('#wallet').hidden=!hasPointsIdentity(account);$('#login').hidden=hasPointsIdentity(account);$('#points-error').hidden=!hasPointsIdentity(account)||$('#points-error').hidden;$('#dashboard').href=`${base}/app`;$('#user-console').href=`${base}/app#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/app#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=hasPointsIdentity(account)?'Connected':'Not connected';render();
+    $('#wallet').hidden=!hasPointsIdentity(account);$('#login').hidden=hasPointsIdentity(account);$('#points-error').hidden=!hasPointsIdentity(account)||$('#points-error').hidden;$('#dashboard').href=`${base}/app`;$('#funding-wallet').href=`${base}/app#balance`;$('#user-console').href=`${base}/app#history`;$('#user-console').target='_blank';$('#streamer-console').href=`${base}/app#streamer`;$('#streamer-console').hidden=!account?.streamerChannels?.length;$('#connection').textContent=hasPointsIdentity(account)?'Connected':'Not connected';render();
     if(restore)document.querySelector(`[data-market-key="${CSS.escape(restore)}"] input`)?.focus();
   }finally{loading=false;if(again){const force=forceAgain;again=false;forceAgain=false;void load(force);}}
 }

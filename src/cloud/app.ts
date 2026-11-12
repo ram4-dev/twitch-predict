@@ -1,3 +1,5 @@
+import {Funding} from '../funding.js';
+import {fundingRouter} from '../funding-router.js';
 import {PointsSessionError} from '../points-identity.js';
 import {LiveMarkets} from './live.js';
 import {Waitlist} from '../waitlist.js';
@@ -66,7 +68,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
   }
  });
  app.get('/live',(_req,res)=>res.json({ok:true}));
- app.get('/api/health',route(async(_req,res)=>{await documents.pool.query('SELECT 1');const heartbeat=await documents.heartbeat(),source=await documents.read('worker-status',()=>({checkedAt:0,sourceError:null as string|null}));res.json({ok:true,service:'plot-mobile',marketMode:'byte',network:'devnet',protocol:'byte partner markets',features:['wallet-bet','automatic-payout'],worker:heartbeat?.active?'active':'idle',sourceError:source.sourceError??(source.checkedAt&&Date.now()-source.checkedAt>30000?'La verificación de Twitch necesita actualizarse.':null),sourceCheckedAt:source.checkedAt||null});}));
+ app.get('/api/health',route(async(_req,res)=>{await documents.pool.query('SELECT 1');const heartbeat=await documents.heartbeat(),source=await documents.read('worker-status',()=>({checkedAt:0,sourceError:null as string|null}));res.json({ok:true,service:'plot-mobile',marketMode:env.POINTS_PAYMENTS_ENABLED==='true'?'offchain':'byte',network:env.POINTS_PAYMENTS_ENABLED==='true'?'offchain':'devnet',protocol:env.POINTS_PAYMENTS_ENABLED==='true'?'Puntos internos':'byte partner markets',features:env.POINTS_PAYMENTS_ENABLED==='true'?['bet','claim','deposit','withdraw']:['wallet-bet','automatic-payout'],worker:heartbeat?.active?'active':'idle',sourceError:source.sourceError??(source.checkedAt&&Date.now()-source.checkedAt>30000?'La verificación de Twitch necesita actualizarse.':null),sourceCheckedAt:source.checkedAt||null});}));
  // Every request gets a current read snapshot; all mutations lock/reload the authoritative SQL row.
  app.use(async(req,res,next)=>{
   try{
@@ -134,6 +136,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  });
  app.post('/api/twitch/complete',route(async(req,res)=>{const i=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const r=await context(res).twitch.complete(bearer(req)||undefined,i.ticket,cookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).json(r);}));
  app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await context(res).points.unlinkTwitch(bearer(req)))));
+ app.use('/api/funding',fundingRouter((_req,res)=>new Funding(context(res).points,env)));
  app.get('/api/points/me',route((req,res)=>res.json(context(res).points.me(bearer(req)))));
  // Plan 2: proposals API over the per-request Points context; identity and owner evidence stay server-side.
  const proposalResolver:ProposalActorResolver={
@@ -154,6 +157,19 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  app.get('/api/streamer/console',route((req,res)=>res.json(context(res).points.streamerConsole(bearer(req)))));
  app.get('/api/markets',(_req,res)=>res.json(context(res).points.markets()));
  app.get('/api/channels',(_req,res)=>res.json({channels:context(res).points.channels(),details:[],sourceError:null}));
+ app.post('/api/points/bet',route(async(req,res)=>{
+  const i=z.object({key:z.string().min(1).max(300),outcomeId:z.string().min(1).max(128),amount:z.number().int().positive().max(1_000_000),requestId:z.string().uuid()}).parse(req.body);
+  res.json(await context(res).points.bet(bearer(req),i.key,i.outcomeId,i.amount,i.requestId));
+ }));
+ app.post('/api/points/claim',route(async(req,res)=>{
+  const i=z.object({key:z.string().min(1).max(300),requestId:z.string().uuid()}).parse(req.body);
+  res.json(await context(res).points.claim(bearer(req),i.key,i.requestId));
+ }));
+ app.post('/api/channels',route(async(req,res)=>{
+  const points=context(res).points;points.me(bearer(req));
+  const channel=z.string().regex(/^[a-zA-Z0-9_]{1,40}$/).parse(req.body.channel);
+  await new TwitchSource(points).watch(channel);res.json({channels:points.channels()});
+ }));
  app.post('/api/points/session',(_req,res)=>res.status(410).json({error:'Iniciá sesión con Twitch o Phantom'}));
  app.get('/api/mobile/channels/:channel',route(async(req,res)=>{
   const channel=twitchChannel(String(req.params.channel)),markets=(await context(res).byte.list()).filter(m=>m.notes?.channel===channel&&m.status==='open'&&m.currency==='sol'&&m.bettable&&m.closeMs>Date.now());res.json({channel,markets,checkedAt:Date.now()});

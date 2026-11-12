@@ -109,3 +109,7 @@ Para habilitar la publicación:
 4. Buscá el publisher ID y el ID de la extensión en el [Developer Dashboard](https://chrome.google.com/webstore/devconsole/). En GitHub, abrí Settings → Secrets and variables → Actions y agregá los secretos de repositorio `CWS_CLIENT_ID`, `CWS_CLIENT_SECRET`, `CWS_REFRESH_TOKEN`, `CWS_EXTENSION_ID` y `CWS_PUBLISHER_ID`.
 
 El build usa `PLOT_PUBLIC_ORIGIN` cuando está configurado. Sin él, conserva la configuración local predeterminada del proyecto. Para una distribución conectada a un servidor público, configurá ese origen de HTTPS en el workflow antes de publicar.
+
+## Compra y retiro de puntos
+
+La sección Saldo (`/app#balance`), accesible desde la navegación, el perfil y la extensión, compra y retira en SOL o USDC sobre el saldo actual. 1 USDC equivale a 1.000 puntos y los puntos de bienvenida se conservan. Las operaciones permanecen deshabilitadas hasta configurar la tesorería. Configuración y límites de validación: [docs/points-funding.md](docs/points-funding.md).
