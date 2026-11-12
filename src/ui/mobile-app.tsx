@@ -31,7 +31,7 @@ function useSnapshot(demo:boolean){
  const [loading,setLoading]=useState(!demo),[error,setError]=useState('');const busy=useRef(false),queued=useRef(false),mounted=useRef(true);
  const refresh:()=>Promise<void>=useCallback(async()=>{
   if(demo)return;if(busy.current){queued.current=true;return;}busy.current=true;
-  try{const [markets,channels,account]=await Promise.all([client.request<AppMarket[]>('/api/markets'),client.request<{channels:string[]}>('/api/channels'),client.me().catch(()=>undefined)]);if(mounted.current){setSnapshot(hasPointsIdentity(account)?{markets,account,followed:channels.channels}:{markets:[],followed:[]});setError('');}}
+  try{const [markets,channels,account]=await Promise.all([client.request<AppMarket[]>('/api/markets'),client.request<{channels:string[]}>('/api/channels'),client.me().catch(error=>{if((error as {status?:number}).status===401||!localStorage.getItem('pointsToken'))return undefined;throw error;})]);if(mounted.current){setSnapshot(hasPointsIdentity(account)?{markets,account,followed:channels.channels}:{markets:[],followed:[]});setError('');}}
   catch(e){if(mounted.current)setError(e instanceof Error?e.message:'No pudimos actualizar.');}
   finally{busy.current=false;if(mounted.current){setLoading(false);if(queued.current){queued.current=false;void refresh();}}}
  },[demo]);

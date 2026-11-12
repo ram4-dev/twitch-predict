@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {Keypair,Transaction} from '@solana/web3.js';
 import {Points} from '../src/points.js';
 import {Funding} from '../src/funding.js';
-import {fundingAmount,USDC_DEVNET,USDC_MAINNET,MAINNET_GENESIS,type PublicFundingOrder} from '../src/funding-model.js';
+import {fundingAmount,fundingPackageAmount,POINT_PACKAGES,USDC_DEVNET,USDC_MAINNET,MAINNET_GENESIS,type PublicFundingOrder} from '../src/funding-model.js';
 import {DEVNET_GENESIS} from '../src/byte-model.js';
 import {demoPrediction} from '../src/mirror.js';
 import {usdcAccount,usdcTransfer,TOKEN_PROGRAM,ASSOCIATED_PROGRAM} from '../src/funding-transfer.js';
@@ -118,5 +118,24 @@ test('mainnet selects Circle mainnet USDC, verifies genesis, and cannot withdraw
     await assert.rejects(s.funding.quote(s.token,'withdraw','USDC','1000'),/otra red/);
     assert.throws(()=>s.funding.submit(s.token,quote.id),/otra red/);
     assert.equal(s.chain.broadcasts,0);
+  }finally{await rm(s.dir,{recursive:true,force:true});}
+});
+
+test('packages keep advertised points and round SOL payment up to the nearest lamport',async()=>{
+  for(const pack of POINT_PACKAGES){
+    assert.deepEqual(fundingPackageAmount('USDC',pack.id,'1'),{points:pack.points,units:String(pack.points*1000)});
+    const sol=fundingPackageAmount('SOL',pack.id,'150.125');
+    const numerator=BigInt(pack.points)*1_000_000_000n*1_000_000n,denominator=150125000n*1000n;
+    assert(BigInt(sol.units)*denominator>=numerator);
+    assert((BigInt(sol.units)-1n)*denominator<numerator);
+  }
+  assert.throws(()=>fundingPackageAmount('SOL','unknown','150'));
+  const s=await setup();try{
+    const order=await s.funding.quote(s.token,'deposit','SOL',{packageId:'points-1000'});
+    assert.equal(order.points,1000);
+    const submitted=await s.funding.submit(s.token,order.id,sign(order,s.wallet));
+    s.chain.finalize(submitted.signature!);await s.funding.submit(s.token,order.id);
+    assert.equal(s.points.me(s.token).balance,11000);
+    await assert.rejects(s.funding.quote(s.token,'withdraw','USDC',{packageId:'points-1000'}),/comprar/);
   }finally{await rm(s.dir,{recursive:true,force:true});}
 });

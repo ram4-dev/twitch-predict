@@ -16,8 +16,8 @@ export function fundingRouter(resolve:(req:express.Request,res:express.Response)
   router.get('/config',route((req,res)=>res.json(resolve(req,res).config())));
   router.get('/orders',route((req,res)=>res.json(resolve(req,res).list(token(req)))));
   router.post('/quote',route(async(req,res)=>{
-    const i=z.object({direction:z.enum(['deposit','withdraw']),currency:z.enum(['USDC','SOL']),amount:z.string().min(1).max(30)}).parse(req.body);
-    res.json(await resolve(req,res).quote(token(req),i.direction,i.currency,i.amount));
+    const i=z.union([z.object({direction:z.literal('deposit'),currency:z.enum(['USDC','SOL']),packageId:z.string().min(1).max(40)}).strict(),z.object({direction:z.enum(['deposit','withdraw']),currency:z.enum(['USDC','SOL']),amount:z.string().min(1).max(30)}).strict()]).parse(req.body);
+    res.json(await resolve(req,res).quote(token(req),i.direction,i.currency,'packageId' in i?{packageId:i.packageId}:i.amount));
   }));
   router.post('/submit',route(async(req,res)=>{
     const i=z.object({id:z.string().uuid(),signedTransaction:z.string().min(1).max(4000).optional()}).parse(req.body);

@@ -23,13 +23,13 @@ async function reset(){await writeFile(await fixture(),JSON.stringify({transacti
 async function state(){return JSON.parse(await readFile(await fixture(),'utf8'));}
 test.beforeEach(reset);
 test('buy USDC, bet purchased points, withdraw SOL and recover the same account after reload',async({page})=>{
-  await login(page);await page.getByLabel('Importe en USDC',{exact:true}).fill('2');await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Cotización'})).toContainText('2.000');await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();
-  await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('12.000');await expect(page.locator('#own-balance')).toContainText('12.000');await expect(page.getByText('Compra confirmada. Los puntos ya están en tu saldo.',{exact:true})).toBeVisible();
+  await login(page);await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Cotización'})).toContainText('5.000');await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('15.000');await expect(page.locator('#own-balance')).toContainText('15.000');await expect(page.getByText('Compra confirmada. Los puntos ya están en tu saldo.',{exact:true})).toBeVisible();
   await page.goto('/app');
   const market=await page.evaluate(async()=>{const {token}=await(await fetch('/api/pair')).json();return (await fetch('/api/demo',{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${token}`},body:'{}'})).json();});
   await page.reload();await page.getByRole('combobox',{name:'Buscar streamer'}).fill('demo_streamer');await page.getByRole('option').filter({hasText:'@demo_streamer'}).click();
-  await page.locator(`[data-key="${market.key}"]`).getByRole('button',{name:'Apostar a Gana',exact:true}).click();await page.getByLabel('Puntos a apostar',{exact:true}).fill('11000');await page.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('#own-balance')).toContainText('1.000');
+  await page.locator(`[data-key="${market.key}"]`).getByRole('button',{name:'Apostar a Gana',exact:true}).click();await page.getByLabel('Puntos a apostar',{exact:true}).fill('14000');await page.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(page.locator('#own-balance')).toContainText('1.000');
   await page.getByRole('button',{name:'Mi perfil',exact:true}).click();await page.getByRole('link',{name:'Comprar y retirar puntos',exact:false}).click();await page.getByRole('button',{name:'Retirar puntos',exact:true}).click();await page.getByLabel('Moneda',{exact:true}).selectOption('SOL');await page.getByLabel('Puntos a retirar',{exact:true}).fill('1000');
   await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await expect(page.getByRole('region',{name:'Cotización'})).toContainText('0.006666666 SOL');await page.getByRole('button',{name:'Confirmar retiro',exact:true}).click();
   await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('0 pts');await expect(page.getByText('Retiro confirmado. Los fondos llegaron a tu wallet.',{exact:true})).toBeVisible();
@@ -37,8 +37,8 @@ test('buy USDC, bet purchased points, withdraw SOL and recover the same account 
   await page.screenshot({path:'test-results/funding-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:'test-results/funding-mobile.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 test('buy SOL and withdraw USDC from the same points balance',async({page})=>{
-  await login(page);await page.getByLabel('Moneda',{exact:true}).selectOption('SOL');await page.getByLabel('Importe en SOL',{exact:true}).fill('0.01');await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('11.500');
-  await page.getByRole('button',{name:'Retirar puntos',exact:true}).click();await page.getByLabel('Moneda',{exact:true}).selectOption('USDC');await page.getByLabel('Puntos a retirar',{exact:true}).fill('1500');await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await expect(page.getByRole('region',{name:'Cotización'})).toContainText('1.500000 USDC');await page.getByRole('button',{name:'Confirmar retiro',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('10.000');
+  await login(page);await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();await page.getByRole('radio',{name:'SOL',exact:true}).check();await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('11.000');
+  await page.getByRole('button',{name:'Retirar puntos',exact:true}).click();await page.getByLabel('Moneda',{exact:true}).selectOption('USDC');await page.getByLabel('Puntos a retirar',{exact:true}).fill('1000');await page.getByRole('button',{name:'Ver cotización',exact:true}).click();await expect(page.getByRole('region',{name:'Cotización'})).toContainText('1.000000 USDC');await page.getByRole('button',{name:'Confirmar retiro',exact:true}).click();await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('10.000');
 });
 test('pending withdrawal survives reload, reserves points, then returns them on a finalized failure',async({page})=>{
   await login(page);const data=await state();data.finalize=false;await writeFile(await fixture(),JSON.stringify(data));
@@ -63,7 +63,52 @@ test('extension opens the same wallet balance and the form fits 700 and 360 pixe
       await expect(walletPage.getByRole('button',{name:'Comprar puntos',exact:true})).toBeVisible();
       await expect.poll(async()=>{const active=await walletPage.getByRole('button',{name:'Saldo',exact:true}).boundingBox(),indicator=await walletPage.locator('.phone-nav-indicator').boundingBox();return active&&indicator?Math.abs(active.x+active.width/2-indicator.x-indicator.width/2):999;}).toBeLessThan(2);
       expect(await walletPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+      expect(await walletPage.locator('.funding-package-grid').evaluate(el=>Array.from(el.querySelectorAll('label')).every(label=>label.scrollWidth<=label.clientWidth))).toBe(true);
+      await walletPage.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();
+      await expect(walletPage.getByRole('radio',{name:'SOL',exact:true})).toBeVisible();
       await walletPage.screenshot({path:`test-results/funding-${width}.png`,fullPage:true});
+      if(width===700){
+        const html=await walletPage.evaluate(()=>{const copy=document.documentElement.cloneNode(true) as HTMLElement;copy.querySelectorAll('script').forEach(el=>el.remove());copy.querySelectorAll('link[href],img[src]').forEach(el=>{const key=el.tagName==='LINK'?'href':'src',value=el.getAttribute(key);if(value?.startsWith('/'))el.setAttribute(key,'/public'+value);});return '<!doctype html>'+copy.outerHTML;});
+        await writeFile('test-results/packages-visual.html',html);
+      }
     }
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
+test('a temporary account refresh failure keeps the balance screen and entered withdrawal',async({page})=>{
+  await login(page);
+  await page.getByRole('button',{name:'Retirar puntos',exact:true}).click();
+  await page.getByLabel('Puntos a retirar',{exact:true}).fill('1234');
+  await page.route('**/api/points/me',route=>route.fulfill({status:503,json:{error:'Cuenta temporalmente no disponible'}}));
+  await page.waitForResponse(response=>response.url().endsWith('/api/points/me')&&response.status()===503);
+  // A parent poll used to turn any transport failure into a signed-out snapshot.
+  await page.waitForResponse(response=>response.url().endsWith('/api/channels'));
+  await expect(page.getByRole('button',{name:'Saldo',exact:true})).toHaveAttribute('aria-current','page');
+  await expect(page.getByLabel('Puntos a retirar',{exact:true})).toHaveValue('1234');
+  await expect(page.getByRole('region',{name:'Iniciar sesión',exact:true})).toHaveCount(0);
+});
+
+test('package selection survives a quote error and Phantom cancellation',async({page})=>{
+  await login(page);
+  await expect(page.getByRole('textbox',{name:/Importe en/})).toHaveCount(0);
+  await expect(page.getByRole('group',{name:'Pagá con',exact:true})).toHaveCount(0);
+  await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();
+  await page.getByRole('radio',{name:'SOL',exact:true}).check();
+  await page.route('**/api/funding/quote',route=>route.fulfill({status:503,json:{error:'No se pudo cotizar SOL. Intentá de nuevo.'}}));
+  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  await expect(page.getByText('No se pudo cotizar SOL. Intentá de nuevo.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true})).toBeChecked();
+  await page.unroute('**/api/funding/quote');
+  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Cotización'})).toContainText('0.006666667 SOL');
+  await page.evaluate(()=>{const w=window as unknown as {phantom:{solana:{signTransaction:()=>Promise<never>}}};w.phantom.solana.signTransaction=async()=>{throw Object.assign(new Error('Rejected'),{code:4001});};});
+  await page.getByRole('button',{name:'Confirmar compra en Phantom',exact:true}).click();
+  await expect(page.getByText('Cancelaste la operación en Phantom.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Cotización'})).toBeVisible();
+  expect((await state()).broadcasts).toBe(0);
+  await page.getByRole('radio',{name:'5.000 puntos 5 USDC',exact:true}).check();
+  await expect(page.getByRole('region',{name:'Cotización'})).toHaveCount(0);
+  await page.getByRole('radio',{name:'USDC',exact:true}).check();
+  await page.getByRole('button',{name:'Ver cotización',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Cotización'})).toContainText('5.000000 USDC');
 });

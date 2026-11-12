@@ -3,7 +3,7 @@ import {Connection,Keypair,PublicKey,SystemProgram,Transaction,TransactionInstru
 import {usdcTransfer} from './funding-transfer.js';
 import {getBase58Decoder} from '@solana/kit';
 import {DEVNET_GENESIS} from './byte-model.js';
-import {fundingAmount,publicOrder,POINTS_PER_USDC,MAINNET_GENESIS,USDC_MAINNET,USDC_DEVNET,type FundingNetwork,type Currency,type FundingOrder} from './funding-model.js';
+import {fundingAmount,fundingPackageAmount,POINT_PACKAGES,publicOrder,POINTS_PER_USDC,MAINNET_GENESIS,USDC_MAINNET,USDC_DEVNET,type FundingNetwork,type Currency,type FundingOrder} from './funding-model.js';
 import type {Points} from './points.js';
 
 export interface FundingChain {
@@ -44,18 +44,19 @@ export class Funding {
       return data.amount;
     });
   }
-  config(){return {enabled:this.enabled&&!!this.treasury,network:this.network,pointsPerUsdc:POINTS_PER_USDC,currencies:['USDC','SOL'],treasury:this.treasury?.publicKey.toBase58()??null,reason:!this.enabled?'Compras y retiros todavía no están habilitados.':!this.treasury?'Falta configurar la tesorería.':null};}
+  config(){return {enabled:this.enabled&&!!this.treasury,network:this.network,pointsPerUsdc:POINTS_PER_USDC,currencies:['USDC','SOL'],packages:POINT_PACKAGES,treasury:this.treasury?.publicKey.toBase58()??null,reason:!this.enabled?'Compras y retiros todavía no están habilitados.':!this.treasury?'Falta configurar la tesorería.':null};}
   private async ready(){
     if(!this.enabled||!this.treasury)throw new Error(this.config().reason??'Tesorería no disponible');
     if(await this.chain.getGenesisHash()!==(this.network==='devnet'?DEVNET_GENESIS:MAINNET_GENESIS))throw new Error(`El RPC de puntos debe corresponder a Solana ${this.network}`);
     return this.treasury;
   }
-  async quote(token:string,direction:FundingOrder['direction'],currency:Currency,input:string){
+  async quote(token:string,direction:FundingOrder['direction'],currency:Currency,input:string|{packageId:string}){
     const account=this.points.me(token);if(!account.wallet)throw new Error('Conectá Phantom primero');
     const treasury=await this.ready(),wallet=new PublicKey(account.wallet);
     if(wallet.equals(treasury.publicKey))throw new Error('La tesorería no puede operar como usuario');
     const solPrice=currency==='SOL'?await this.price():'1';
-    const amount=fundingAmount(direction,currency,input,solPrice);
+    if(typeof input!=='string'&&direction!=='deposit')throw new Error('Los paquetes son para comprar puntos');
+    const amount=typeof input==='string'?fundingAmount(direction,currency,input,solPrice):fundingPackageAmount(currency,input.packageId,solPrice);
     if(direction==='withdraw'&&amount.points>account.balance)throw new Error('Saldo insuficiente');
     const id=randomUUID(),latest=await this.chain.getLatestBlockhash('finalized');
     const sender=direction==='deposit'?wallet:treasury.publicKey,recipient=direction==='deposit'?treasury.publicKey:wallet;

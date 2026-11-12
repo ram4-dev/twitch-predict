@@ -1,4 +1,62 @@
 /* The balance view uses the app's existing PhoneGlass, typography and navigation. */
 .phone-nav[data-destinations="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
-.phone-funding{min-width:0}.phone-funding>.funding-title{margin:0 0 6px}.phone-funding>p{font-size:13px;color:#c9bcb1}.phone-funding .funding-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:14px 0 18px}.phone-funding .funding-summary>div>span{font-size:12px;color:#c9bcb1}.phone-funding .funding-summary strong{display:block;font-size:30px;line-height:1.2;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}.phone-funding .funding-summary strong small{font-size:14px;font-weight:400;color:#c9bcb1}.phone-funding .funding-summary p{font-size:12px;margin-top:4px}.phone-funding .funding-wallet{align-self:center;text-align:right;min-width:0}.phone-funding .funding-wallet p{overflow-wrap:anywhere}.phone-funding .funding-wallet a{display:inline-flex;min-height:44px;align-items:center;font-size:13px;text-decoration:underline}.phone-funding .funding-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}.phone-funding .funding-panel{padding:16px;border-radius:var(--panel-radius)}.phone-funding .funding-panel h2{font-size:20px;margin:0 0 12px}.phone-funding .funding-tabs{display:flex;gap:8px;margin-bottom:14px}.phone-funding .funding-tabs button{flex:1;min-height:44px;font-size:13px;padding:8px 12px}.phone-funding .funding-panel form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px}.phone-funding .funding-panel label{display:block;font-size:12px;align-self:end;color:#c9bcb1}.phone-funding label[for=funding-currency]{grid-column:1;grid-row:1}.phone-funding label[for=funding-amount]{grid-column:2;grid-row:1}.phone-funding #funding-currency{grid-column:1;grid-row:2}.phone-funding #funding-amount{grid-column:2;grid-row:2}.phone-funding input,.phone-funding select{font:inherit;width:100%;min-width:0;min-height:44px;padding:8px 12px;background:rgb(0 0 0 / .2);border:1px solid rgb(255 255 255 / .18);border-radius:12px;color:inherit;margin:0}.phone-funding select option{background:#1b1715;color:#f4f0ed}.phone-funding input:focus-visible,.phone-funding select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.phone-funding #funding-hint{grid-column:1/-1;margin:2px 0;font-size:12px;line-height:1.5;color:#c9bcb1}.phone-funding form>button{grid-column:1/-1;justify-self:start;min-height:44px;margin-top:4px}.phone-funding .funding-muted{font-size:12px;color:#c9bcb1}.phone-funding .funding-quote{margin-top:18px;padding-top:16px;border-top:1px solid rgb(255 255 255 / .1)}.phone-funding .funding-quote h3{font-size:16px;margin:0 0 12px}.phone-funding dl{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:13px}.phone-funding dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}.phone-funding .funding-quote p{margin:10px 0;font-size:12px}.phone-funding .funding-row{padding:14px 0;border-bottom:1px solid rgb(255 255 255 / .08)}.phone-funding .funding-row:last-child{border-bottom:0}.phone-funding .funding-row p{margin:4px 0;font-size:13px}.phone-funding .funding-row a{font-size:12px;display:inline-flex;min-height:44px;align-items:center;text-decoration:underline;overflow-wrap:anywhere}.phone-funding [role=status]{font-size:13px;margin:12px 0}.phone-funding [role=status]:empty{display:none}.phone-funding .funding-error{color:#ffa5aa}@container phone (min-width:850px){.phone-funding .funding-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
-.phone-nav[data-destinations="3"]>button{gap:6px;padding-inline:4px;white-space:nowrap;font-size:12px}.phone-nav[data-destinations="3"]>button>svg{flex:none;width:16px;height:16px}
+
+.phone-funding{min-width:0}
+.phone-funding>.funding-title{margin:0 0 6px}
+.phone-funding>p{font-size:13px;color:#c9bcb1}
+.phone-funding .funding-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:14px 0 18px}
+.phone-funding .funding-summary>div>span{font-size:12px;color:#c9bcb1}
+.phone-funding .funding-summary strong{display:block;font-size:30px;line-height:1.2;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+.phone-funding .funding-summary strong small{font-size:14px;font-weight:400;color:#c9bcb1}
+.phone-funding .funding-summary p{font-size:12px;margin-top:4px}
+.phone-funding .funding-wallet{align-self:center;text-align:right;min-width:0}
+.phone-funding .funding-wallet p{overflow-wrap:anywhere}
+.phone-funding .funding-wallet a{display:inline-flex;min-height:44px;align-items:center;font-size:13px;text-decoration:underline}
+.phone-funding .funding-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+.phone-funding .funding-panel{padding:16px;border-radius:var(--panel-radius)}
+.phone-funding .funding-panel h2{font-size:20px;margin:0 0 12px}
+.phone-funding .funding-tabs{display:flex;gap:8px;margin-bottom:14px}
+.phone-funding .funding-tabs button{flex:1;min-height:44px;font-size:13px;padding:8px 12px}
+.phone-funding .funding-panel form{display:flex;flex-direction:column;gap:12px}
+.phone-funding .funding-panel label{display:block;font-size:12px;align-self:end;color:#c9bcb1}
+.phone-funding input,.phone-funding select{font:inherit;width:100%;min-width:0;min-height:44px;padding:8px 12px;background:rgb(0 0 0 / .2);border:1px solid rgb(255 255 255 / .18);border-radius:12px;color:inherit;margin:0}
+.phone-funding select option{background:#1b1715;color:#f4f0ed}
+.phone-funding input:focus-visible,.phone-funding select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.phone-funding #funding-hint{grid-column:1/-1;margin:2px 0;font-size:12px;line-height:1.5;color:#c9bcb1}
+.phone-funding form>button{grid-column:1/-1;justify-self:start;min-height:44px;margin-top:4px}
+.phone-funding .funding-muted{font-size:12px;color:#c9bcb1}
+.phone-funding .funding-quote{margin-top:18px;padding-top:16px;border-top:1px solid rgb(255 255 255 / .1)}
+.phone-funding .funding-quote h3{font-size:16px;margin:0 0 12px}
+.phone-funding dl{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:13px}
+.phone-funding dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.phone-funding .funding-quote p{margin:10px 0;font-size:12px}
+.phone-funding .funding-row{padding:14px 0;border-bottom:1px solid rgb(255 255 255 / .08)}
+.phone-funding .funding-row:last-child{border-bottom:0}
+.phone-funding .funding-row p{margin:4px 0;font-size:13px}
+.phone-funding .funding-row a{font-size:12px;display:inline-flex;min-height:44px;align-items:center;text-decoration:underline;overflow-wrap:anywhere}
+.phone-funding [role=status]{font-size:13px;margin:12px 0}
+.phone-funding [role=status]:empty{display:none}
+.phone-funding .funding-error{color:#ffa5aa}
+@container phone (min-width:850px){.phone-funding .funding-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+
+.phone-nav[data-destinations="3"]>button{gap:6px;padding-inline:4px;white-space:nowrap;font-size:12px}
+.phone-nav[data-destinations="3"]>button>svg{flex:none;width:16px;height:16px}
+
+
+.phone-funding fieldset{border:0;margin:0;padding:0;min-width:0}
+.phone-funding legend{font-size:14px;margin-bottom:10px;color:inherit}
+.phone-funding .funding-package-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.phone-funding .funding-panel .funding-package{display:flex;position:relative;align-items:flex-start;gap:10px;min-height:104px;padding:12px;border:1px solid rgb(255 255 255 / .16);border-radius:12px;background:rgb(0 0 0 / .12);cursor:pointer;color:inherit}
+.phone-funding .funding-package[data-selected=true]{border-color:var(--accent);background:rgb(255 255 255 / .06)}
+.phone-funding .funding-package input,.phone-funding .funding-payment input{width:16px;height:16px;min-height:0;padding:0;flex:none;accent-color:var(--accent)}
+.phone-funding .funding-package>span{display:grid;gap:5px}
+.phone-funding .funding-package strong{display:block;padding-right:12px;font-size:20px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.phone-funding .funding-package small{display:block;margin-top:3px;line-height:1.3;font-size:12px;font-weight:400}
+.phone-funding .funding-package>span>span{font-size:13px;color:#c9bcb1}
+.phone-funding .funding-panel .funding-payment label{display:inline-flex;align-items:center;gap:8px;min-height:44px;margin-right:24px;font-size:14px;color:inherit;cursor:pointer}
+.phone-funding .funding-package:focus-within{outline:2px solid var(--accent);outline-offset:3px}
+.phone-funding fieldset:disabled label{cursor:wait;opacity:.65}
+.phone-funding .funding-purchase>button{align-self:stretch}
+
+.phone-funding .funding-package input{position:absolute;top:12px;right:12px}
