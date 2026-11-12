@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {Keypair,Transaction} from '@solana/web3.js';
+import {ComputeBudgetProgram,SystemProgram,Keypair,Transaction} from '@solana/web3.js';
 import {Points} from '../src/points.js';
 import {Funding} from '../src/funding.js';
 import {fundingAmount,fundingPackageAmount,POINT_PACKAGES,USDC_DEVNET,USDC_MAINNET,MAINNET_GENESIS,type PublicFundingOrder} from '../src/funding-model.js';
@@ -31,7 +31,7 @@ test('USDC purchase verifies signatures and finalized bytes, credits once across
   const s=await setup();try{
     const order=await s.funding.quote(s.token,'deposit','USDC','2');
     const tx=Transaction.from(Buffer.from(order.transaction,'base64'));
-    assert(tx.instructions[1].keys.some(k=>k.pubkey.toBase58()===USDC_DEVNET));
+    assert(tx.instructions.find(ix=>ix.programId.equals(TOKEN_PROGRAM))!.keys.some(k=>k.pubkey.toBase58()===USDC_DEVNET));
     const result=await s.funding.submit(s.token,order.id,sign(order,s.wallet));assert.equal(result.status,'pending');assert.equal(s.points.me(s.token).balance,10000);
     s.chain.finalize(result.signature!);await s.funding.submit(s.token,order.id);await s.funding.submit(s.token,order.id);
     assert.equal(s.points.me(s.token).balance,12000);assert.equal(s.points.me(s.token).ledger.filter(l=>l.kind==='deposit').length,1);
@@ -61,9 +61,9 @@ test('uncertain broadcast remains reserved, reuses the signature after restart, 
 test('modified or unsigned purchases and foreign accounts cannot send or credit funds',async()=>{
   const s=await setup();try{
     const order=await s.funding.quote(s.token,'deposit','SOL','0.1');
-    const altered=Transaction.from(Buffer.from(order.transaction,'base64'));altered.instructions[0].data[4]^=1;altered.sign(s.wallet);
+    const altered=Transaction.from(Buffer.from(order.transaction,'base64'));altered.instructions.find(ix=>ix.programId.equals(SystemProgram.programId))!.data[4]^=1;altered.sign(s.wallet);
     await assert.rejects(s.funding.submit(s.token,order.id,altered.serialize().toString('base64')),/no coincide/);
-    await assert.rejects(s.funding.submit(s.token,order.id,order.transaction),/no coincide/);
+    await assert.rejects(s.funding.submit(s.token,order.id,order.transaction),/firma.*no es válida/);
     const other=await s.points.walletLogin(Keypair.generate().publicKey.toBase58());assert.throws(()=>s.funding.submit(other.token,order.id),/inexistente/);
     assert.equal(s.chain.broadcasts,0);assert.equal(s.points.me(s.token).balance,10000);
   }finally{await rm(s.dir,{recursive:true,force:true});}
@@ -113,7 +113,7 @@ test('mainnet selects Circle mainnet USDC, verifies genesis, and cannot withdraw
     const mainnet=new Funding(s.points,{POINTS_NETWORK:'mainnet-beta'},s.options);
     assert.equal(mainnet.config().network,'mainnet-beta');
     const quote=await mainnet.quote(s.token,'deposit','USDC','1');
-    const tx=Transaction.from(Buffer.from(quote.transaction,'base64'));assert(tx.instructions[1].keys.some(k=>k.pubkey.toBase58()===USDC_MAINNET));
+    const tx=Transaction.from(Buffer.from(quote.transaction,'base64'));assert(tx.instructions.find(ix=>ix.programId.equals(TOKEN_PROGRAM))!.keys.some(k=>k.pubkey.toBase58()===USDC_MAINNET));
     s.chain.genesis=DEVNET_GENESIS;
     await assert.rejects(s.funding.quote(s.token,'withdraw','USDC','1000'),/otra red/);
     assert.throws(()=>s.funding.submit(s.token,quote.id),/otra red/);
@@ -158,9 +158,50 @@ test('a public treasury address receives purchases without a server signing key'
     assert.equal(funding.config().enabled,true);assert.equal(funding.config().withdrawalsEnabled,false);
     const order=await funding.quote(s.token,'deposit','SOL',{packageId:'points-1000'});
     const tx=Transaction.from(Buffer.from(order.transaction,'base64'));
-    assert.equal(tx.instructions[0].keys[1].pubkey.toBase58(),s.treasury.publicKey.toBase58());
+    assert.equal(tx.instructions.find(ix=>ix.programId.equals(SystemProgram.programId))!.keys[1].pubkey.toBase58(),s.treasury.publicKey.toBase58());
     const submitted=await funding.submit(s.token,order.id,sign(order,s.wallet));s.chain.finalize(submitted.signature!);await funding.submit(s.token,order.id);assert.equal(s.points.me(s.token).balance,11000);
     await assert.rejects(funding.quote(s.token,'withdraw','SOL','1000'),/firmante/);
     assert.throws(()=>new Funding(s.points,{POINTS_TREASURY_ADDRESS:Keypair.generate().publicKey.toBase58()},s.options),/no coincide/);
+  }finally{await rm(s.dir,{recursive:true,force:true});}
+});
+
+test('Phantom fee behavior preserves an explicit quote and still rejects changed payment intent',async()=>{
+  const s=await setup();try{
+    const order=await s.funding.quote(s.token,'deposit','SOL',{packageId:'points-1000'});
+    const tx=Transaction.from(Buffer.from(order.transaction,'base64'));
+    const budget=tx.instructions.filter(ix=>ix.programId.equals(ComputeBudgetProgram.programId));
+    assert.equal(budget.length,2);assert.equal(budget[0].data.readUInt32LE(1),200000);assert.equal(budget[1].data.readBigUInt64LE(1),1000n);
+    const original=tx.serializeMessage();
+    if(!budget.length)tx.instructions.unshift(ComputeBudgetProgram.setComputeUnitLimit({units:200000}),ComputeBudgetProgram.setComputeUnitPrice({microLamports:1000}));
+    tx.sign(s.wallet);assert(tx.serializeMessage().equals(original));
+    const pending=await s.funding.submit(s.token,order.id,tx.serialize().toString('base64'));
+    s.chain.finalize(pending.signature!);await s.funding.submit(s.token,order.id);assert.equal(s.points.me(s.token).balance,11000);
+    for(const change of ['recipient','amount','priority fee','extra instruction','blockhash'] as const){
+      const next=await s.funding.quote(s.token,'deposit','SOL',{packageId:'points-1000'});
+      const altered=Transaction.from(Buffer.from(next.transaction,'base64')),transfer=altered.instructions.find(ix=>ix.programId.equals(SystemProgram.programId))!;
+      if(change==='recipient')transfer.keys[1].pubkey=Keypair.generate().publicKey;
+      if(change==='amount')transfer.data[4]^=1;
+      if(change==='priority fee')altered.instructions[1]=ComputeBudgetProgram.setComputeUnitPrice({microLamports:1000000});
+      if(change==='extra instruction')altered.add(SystemProgram.transfer({fromPubkey:s.wallet.publicKey,toPubkey:Keypair.generate().publicKey,lamports:1}));
+      if(change==='blockhash')altered.recentBlockhash=Keypair.generate().publicKey.toBase58();
+      altered.sign(s.wallet);await assert.rejects(s.funding.submit(s.token,next.id,altered.serialize().toString('base64')));
+    }
+    assert.equal(s.chain.broadcasts,1);assert.equal(s.points.me(s.token).balance,11000);
+  }finally{await rm(s.dir,{recursive:true,force:true});}
+});
+
+test('a valid wallet account-table reorder is verified, finalized and credited exactly once',async()=>{
+  const {Message}=await import('@solana/web3.js');
+  const s=await setup();try{
+    const order=await s.funding.quote(s.token,'deposit','SOL',{packageId:'points-1000'});
+    const expected=Transaction.from(Buffer.from(order.transaction,'base64')),message=expected.compileMessage();
+    assert(message.header.numReadonlyUnsignedAccounts>=2);
+    const indices=message.accountKeys.map((_key,i)=>i),last=indices.length-1;[indices[last],indices[last-1]]=[indices[last-1],indices[last]];
+    const reordered=new Message({header:message.header,accountKeys:indices.map(i=>message.accountKeys[i].toBase58()),recentBlockhash:message.recentBlockhash,instructions:message.instructions.map(ix=>({...ix,programIdIndex:indices.indexOf(ix.programIdIndex),accounts:ix.accounts.map(i=>indices.indexOf(i))}))});
+    const signed=Transaction.populate(reordered);signed.sign(s.wallet);
+    assert(!signed.serializeMessage().equals(expected.serializeMessage()));assert(signed.verifySignatures());
+    const pending=await s.funding.submit(s.token,order.id,signed.serialize().toString('base64'));
+    s.chain.finalize(pending.signature!);await s.funding.submit(s.token,order.id);await s.funding.submit(s.token,order.id);
+    assert.equal(s.points.me(s.token).balance,11000);assert.equal(s.chain.broadcasts,1);
   }finally{await rm(s.dir,{recursive:true,force:true});}
 });

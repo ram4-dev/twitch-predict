@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {SystemInstruction,Transaction,PublicKey} from '@solana/web3.js';
+import {SystemInstruction,SystemProgram,Transaction,PublicKey} from '@solana/web3.js';
 import {signIn} from './fixtures/phantom.js';
 import {usdcAccount,TOKEN_PROGRAM} from '../src/funding-transfer.js';
 import {USDC_DEVNET} from '../src/funding-model.js';
@@ -13,7 +13,7 @@ for(const currency of ['USDC','SOL'])test(`live PVE buy opens the Phantom paymen
   await page.exposeBinding('__inspectPayment',(_source,raw:number[])=>{
     signingCalls++;const tx=Transaction.from(Buffer.from(raw));expect(tx.feePayer?.toBase58()).toBe(wallet.address);
     if(currency==='SOL'){
-      const transfer=SystemInstruction.decodeTransfer(tx.instructions[0]);expect(transfer.fromPubkey.toBase58()).toBe(wallet.address);expect(transfer.toPubkey.toBase58()).toBe(treasury);expect(transfer.lamports>0n).toBe(true);
+      const transfer=SystemInstruction.decodeTransfer(tx.instructions.find(ix=>ix.programId.equals(SystemProgram.programId))!);expect(transfer.fromPubkey.toBase58()).toBe(wallet.address);expect(transfer.toPubkey.toBase58()).toBe(treasury);expect(transfer.lamports>0n).toBe(true);
     }else{
       const transfer=tx.instructions.find(ix=>ix.programId.equals(TOKEN_PROGRAM))!;expect(transfer).toBeTruthy();expect(transfer.keys[2].pubkey.toBase58()).toBe(usdcAccount(new PublicKey(treasury),new PublicKey(USDC_DEVNET)).toBase58());expect(transfer.data.readBigUInt64LE(1)).toBe(1_000_000n);
     }

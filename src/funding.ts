@@ -1,5 +1,6 @@
+import {validateSignedFunding} from './funding-signed-transaction.js';
 import {randomUUID} from 'node:crypto';
-import {Connection,Keypair,PublicKey,SystemProgram,Transaction,TransactionInstruction} from '@solana/web3.js';
+import {ComputeBudgetProgram,Connection,Keypair,PublicKey,SystemProgram,Transaction,TransactionInstruction} from '@solana/web3.js';
 import {usdcTransfer} from './funding-transfer.js';
 import {getBase58Decoder} from '@solana/kit';
 import {DEVNET_GENESIS} from './byte-model.js';
@@ -65,6 +66,9 @@ export class Funding {
     const id=randomUUID(),latest=await this.chain.getLatestBlockhash('finalized');
     const sender=direction==='deposit'?wallet:treasury.publicKey,recipient=direction==='deposit'?treasury.publicKey:wallet;
     const tx=new Transaction({feePayer:sender,...latest});
+    // Explicit fee instructions prevent Phantom from rewriting the quoted message.
+    // 200,000 CU at 1,000 micro-lamports/CU caps the priority fee at 200 lamports.
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({units:200_000}),ComputeBudgetProgram.setComputeUnitPrice({microLamports:1000}));
     if(currency==='SOL')tx.add(SystemProgram.transfer({fromPubkey:sender,toPubkey:recipient,lamports:BigInt(amount.units)}));
     else tx.add(...usdcTransfer(sender,recipient,BigInt(amount.units),new PublicKey(this.network==='devnet'?USDC_DEVNET:USDC_MAINNET)));
     tx.add(new TransactionInstruction({programId:memoProgram,keys:[],data:Buffer.from(`plot:${id}`)}));
@@ -95,8 +99,7 @@ export class Funding {
       if(order.direction==='withdraw'){tx=expected;tx.sign(treasury.signer!);}
       else {
         if(!signed)throw new Error('Falta la firma de Phantom');
-        tx=Transaction.from(Buffer.from(signed,'base64'));
-        if(!tx.serializeMessage().equals(expected.serializeMessage())||!tx.verifySignatures())throw new Error('La transacción firmada no coincide con la compra');
+        tx=validateSignedFunding(expected,Transaction.from(Buffer.from(signed,'base64')));
       }
       const raw=tx.serialize();if(!tx.signature)throw new Error('Firma inválida');
       const signature=getBase58Decoder().decode(tx.signature);
@@ -116,7 +119,7 @@ export class Funding {
       if(status.err)return publicOrder(await this.points.fundingFinish(token,order.id,'failed'));
       const transaction=await this.chain.getTransaction(order.signature!,{commitment:'finalized',maxSupportedTransactionVersion:0});
       // Do not accept a signature alone: finalized bytes must match the exact quoted transfer.
-      if(transaction?.meta&&Buffer.from(transaction.transaction.message.serialize()).equals(Transaction.from(Buffer.from(order.transaction,'base64')).serializeMessage())){
+      if(transaction?.meta&&Buffer.from(transaction.transaction.message.serialize()).equals(Transaction.from(Buffer.from(order.signedTransaction??order.transaction,'base64')).serializeMessage())){
         return publicOrder(await this.points.fundingFinish(token,order.id,transaction.meta.err?'failed':'confirmed'));
       }
     }
