@@ -1,6 +1,5 @@
 import {PointsResolution} from './points-resolution.js';
 import {hasPointsIdentity} from '../points-identity.js';
-import {PointsFees} from './components/points-fees.js';
 import {PointsSignIn} from './components/points-sign-in.js';
 import {PreviewHeader} from './components/preview-header.js';
 import {PlotLogo} from './components/plot.js';
@@ -13,6 +12,7 @@ import {AnimatedBackdrop,backdropOptions,isBackdrop,type Backdrop} from './vendo
 import {MarketDetail,detailLayouts,isDetailLayout,type DetailLayout} from './market-detail.js';
 import {Button} from './components/button.js';
 import {LiquidGlass} from './vendor/opaline/liquid-glass.js';
+import {PhoneGlass as Glass} from './components/phone-glass.js';
 import {useActiveIndicator} from './vendor/opaline/use-active-indicator.js';
 import {createPointsClient,number} from './points-ui.js';
 import {enhancePointerGlow} from '@/components/ui/spotlight-card';
@@ -24,7 +24,6 @@ type SearchResult={login:string;displayName:string;live:boolean};
 const client=createPointsClient('',{get:async()=>localStorage.getItem('pointsToken'),set:async value=>localStorage.setItem('pointsToken',value),clear:async()=>localStorage.removeItem('pointsToken')});
 const normalize=(value:string)=>value.trim().replace(/^@/,'').toLowerCase();
 
-function Glass({children,className='',...props}:React.HTMLAttributes<HTMLDivElement>){return <LiquidGlass {...props} refraction={0} blur={8} tint="var(--surface)" shadow={false} className={`phone-glass ${className}`}>{children}</LiquidGlass>;}
 
 function useSnapshot(demo:boolean){
  const [snapshot,setSnapshot]=useState<AppSnapshot>(()=>demo?demoSnapshot():{markets:[],followed:[]});
@@ -106,7 +105,7 @@ function OwnBets({snapshot,demo,onClaim,onDetail,theme='ember'}:{snapshot:AppSna
     {market?.winnerId&&<p className="phone-result">Ganó {market.outcomes.find(o=>o.id===market.winnerId)?.title} · Perdió {market.outcomes.filter(o=>o.id!==market.winnerId).map(o=>o.title).join(', ')}</p>}
     {bets[0].phase==='void'&&<p className="phone-result phone-result-refund">{market?.reason??'Cancelada · Reembolso'}</p>}
     <dl className="phone-receipt"><div><dt>Apuesta</dt><dd>{number(stake)} pts</dd></div>{ended&&<><div><dt>Cobro total</dt><dd>{number(payout)} pts</dd></div><div><dt>Neto</dt><dd>{payout-stake>0?'+':''}{number(payout-stake)} pts</dd></div></>}</dl>
-    {ended&&market&&<PointsFees pool={market.totalPoints} fees={market.fees} canceled={market.phase==='void'} historical/>}{pending>0&&<Button disabled={!!busy} onClick={async()=>{setBusy(key);setError('');try{await onClaim(key);}catch(e){setError(e instanceof Error?e.message:'No pudimos cobrar.');}finally{setBusy('');}}}>{busy===key?'Cobrando…':`${demo?'Simular cobro':'Cobrar'} ${number(pending)} pts`}</Button>}
+    {pending>0&&<Button disabled={!!busy} onClick={async()=>{setBusy(key);setError('');try{await onClaim(key);}catch(e){setError(e instanceof Error?e.message:'No pudimos cobrar.');}finally{setBusy('');}}}>{busy===key?'Cobrando…':`${demo?'Simular cobro':'Cobrar'} ${number(pending)} pts`}</Button>}
    </div>
   </div>;})}</div>;
 }

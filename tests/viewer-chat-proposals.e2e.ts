@@ -35,7 +35,7 @@ test('viewer chat proposal appears in the open streamer inbox and bot delivers h
  // Keep the owner inbox open before the viewer's command arrives.
  await page.goto('/app#markets');
  await page.getByRole('button',{name:'Propuestas',exact:true}).click();
- await expect(page.getByText('Todavía no hay propuestas para este canal.')).toBeVisible();
+ await expect(page.getByText('No hay propuestas pendientes para este canal.')).toBeVisible();
  const viewerId=String(Number(ownerId)+1);
  await writeFile(resolve('test-results/twitch-oauth.json'),JSON.stringify({id:viewerId,login:`viewer_${login}`,display_name:'Viewer'}));
  const start=await context.request.post('/api/twitch/start',{data:{}});expect(start.ok()).toBe(true);

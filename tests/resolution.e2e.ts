@@ -10,7 +10,7 @@ test('resolution variants distinguish outcome, personal profit, payout and refun
   await expect(card.locator('.loser')).toContainText('Perdió');await expect(card.locator('.resolution-net')).toHaveText('+220 pts');
   await expect(card.locator('.resolution-receipt')).toContainText('320 pts');
  }
- await cards.first().getByRole('button',{name:'Ver detalle'}).click();await expect(cards.first().locator('.resolution-detail')).toContainText('incluye los puntos recuperados');
+ await expect(page.locator('.resolution-detail-toggle,.resolution-detail')).toHaveCount(0);
  await page.getByRole('button',{name:'Perdiste',exact:true}).click();
  for(const card of await cards.all()){
   await expect(card.locator('.resolution-net')).toHaveText('−100 pts');await expect(card.locator('.resolution-receipt>div').last()).toHaveText('Cobro total0 pts');await expect(card.locator('.winner')).toContainText('Lo baja');
@@ -23,7 +23,7 @@ test('resolution variants distinguish outcome, personal profit, payout and refun
  expect(writes).toEqual([]);expect(errors).toEqual([]);
 });
 
-test('resolution fits compact and popup widths, keyboard detail and motion replay work',async({page})=>{
+test('resolution fits compact and popup widths and keyboard motion replay works',async({page})=>{
  await page.goto('/resolution.html');
  for(const width of [320,360,700,768,1440]){
   await page.setViewportSize({width,height:900});
@@ -34,8 +34,7 @@ test('resolution fits compact and popup widths, keyboard detail and motion repla
  await page.getByRole('button',{name:'Acertaste',exact:true}).click();
  await page.getByRole('button',{name:'360 px · Compacto'}).click();await expect(page.locator('.variant-grid')).toHaveClass(/wide/);
  expect(await page.locator('.extension-preview').first().evaluate(el=>el.getBoundingClientRect().width)).toBe(700);
- const detail=page.locator('.plot-resolution').first().locator('.resolution-detail-toggle');await detail.focus();await page.keyboard.press('Enter');await expect(detail).toHaveAttribute('aria-expanded','true');
- await page.getByRole('button',{name:'Repetir',exact:true}).click();await expect(page.locator('.plot-resolution').first().getByRole('button',{name:'Ver detalle'})).toHaveAttribute('aria-expanded','false');
+ const replay=page.getByRole('button',{name:'Repetir',exact:true});await replay.focus();await page.keyboard.press('Enter');await expect(page.locator('.resolution-detail-toggle,.resolution-detail')).toHaveCount(0);
  await page.getByRole('button',{name:'700 px · Popup'}).click();
  await page.screenshot({path:'test-results/resolution-desktop.png',fullPage:true});
  await page.setViewportSize({width:360,height:900});await page.screenshot({path:'test-results/resolution-compact.png',fullPage:true});

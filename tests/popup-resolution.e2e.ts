@@ -26,7 +26,7 @@ test('MV3 liquid resolution uses account totals for winner, mixed bets, loser, r
    await chrome.storage.local.set({pointsToken:'fixture-only',lastPoll:{channel:'demo_streamer'},'channel:demo_streamer':{fetchedAt:new Date().toISOString(),predictions:[{prediction}]}});
   },prediction);
   const page=await context.newPage();await page.goto(`chrome-extension://${id}/popup.html`);
-  const card=page.locator('.plot-resolution.count');await expect(card).toHaveAttribute('data-state','won');
+  const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(card.locator('.points-fees,.points-fee-note,.manager-earnings')).toHaveCount(0);await expect(card).toHaveAttribute('data-state','won');
   await expect(card.locator('.resolution-result')).toContainText('Se completa');await expect(card.locator('.resolution-outcomes')).toHaveCount(0);
   await expect(card.locator('.resolution-net')).toHaveText('+330 pts');await expect(card.locator('.resolution-receipt')).toContainText('530 pts');
   expect(await card.locator('.resolution-net-value').evaluate(el=>parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(48);
@@ -67,7 +67,7 @@ test('MV3 SOL resolution uses animated glass and does not invent a wallet payout
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
   await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({byteOperation:{marketId:'pm_liquid',status:'confirmed',receipt:{signature:'test-signature'}}});});
   const page=await context.newPage();await page.goto(`chrome-extension://${id}/popup.html`);
-  const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(page.getByText('Stake confirmed on Solana.',{exact:false})).toHaveCount(0);await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.resolution-result')).toContainText('Gana');await expect(card.locator('.resolution-outcomes')).toHaveCount(0);await expect(card).toContainText('Your payout amount is not available.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
+  const card=page.locator('.plot-resolution.count');await expect(card).toBeVisible();await expect(card.locator('.points-fees,.points-fee-note,.manager-earnings')).toHaveCount(0);await expect(card).toBeVisible();await expect(page.getByText('Stake confirmed on Solana.',{exact:false})).toHaveCount(0);await expect(page.locator('#freshness')).toBeHidden();await expect(card.locator('.resolution-result')).toContainText('Gana');await expect(card.locator('.resolution-outcomes')).toHaveCount(0);await expect(card).toContainText('Your payout amount is not available.');await expect(card.locator('.resolution-net,.resolution-receipt')).toHaveCount(0);
   await expect(card).toContainText('Waiting for byte to finish payouts.');
   expect(await card.evaluate(el=>getComputedStyle(el,'::before').animationName)).toBe('none');
   market.chain.settled=true;await page.reload();await expect(card).toContainText('Payouts or refunds completed on-chain.');await expect(card.locator('.resolution-net')).toHaveCount(0);

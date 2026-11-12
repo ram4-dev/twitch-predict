@@ -18,6 +18,7 @@ function Button({
   size = "default",
   asChild = false,
   loading = false,
+  materialWhenDisabled = false,
   tone = "neutral",
   disabled,
   children,
@@ -27,11 +28,13 @@ function Button({
   VariantProps<typeof buttonVariants> & {
     tone?: MetalTone
     loading?: boolean
+    /** Keep the static material on read-only streamer outcomes. */
+    materialWhenDisabled?: boolean
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot : "button"
   const [active,setActive]=React.useState(false)
-  const metal=variant==='default'&&!asChild&&!disabled&&!loading
+  const metal=variant==='default'&&!asChild&&(!disabled||materialWhenDisabled)&&!loading
 
   return (
     <Comp
@@ -47,7 +50,7 @@ function Button({
       onBlur={e=>{setActive(false);onBlur?.(e)}}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-    >{asChild ? children : <>{metal&&<LiquidMetalSurface active={active} tone={tone}/>}<span className="plot-button-content">{loading && <span className="plot-spinner" aria-hidden="true"/>}{children}</span></>}</Comp>
+    >{asChild ? children : <>{metal&&<LiquidMetalSurface active={!disabled&&active} tone={tone}/>}<span className="plot-button-content">{loading && <span className="plot-spinner" aria-hidden="true"/>}{children}</span></>}</Comp>
   )
 }
 

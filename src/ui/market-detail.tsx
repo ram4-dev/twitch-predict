@@ -1,4 +1,3 @@
-import {PointsFees} from './components/points-fees.js';
 import type {ReactNode} from 'react';
 import {ArrowLeft,ArrowUpRight,Check} from 'lucide-react';
 import {OutcomeFrame} from './vendor/corsair/outcome-frame.js';
@@ -39,7 +38,7 @@ export function MarketDetail({market,layout,account,receipt,onBack,onChoose}:{ma
    {layout==='direct'&&<>{duel}{split}<p className="detail-summary">{number(total)} pts en juego <span>· {number(market.participants)} personas</span></p></>}
    {(layout==='pool'||layout==='hybrid')&&<>{layout==='hybrid'?<div className="detail-pool-overview"><div className="detail-pool-total"><span>Pozo total</span><strong>{number(total)} <small>pts</small></strong><span>{number(market.totalBets)} apuestas</span></div><div className="detail-people"><span>Personas</span><strong>{number(market.participants)}</strong></div></div>:<div className="detail-pool-total"><span>Pozo total</span><strong>{number(total)} <small>pts</small></strong><span>{number(market.participants)} personas · {number(market.totalBets)} apuestas</span></div>}{layout==='hybrid'?<>{duel}{split}</>:<>{split}<div className="detail-pool-rows">{market.outcomes.map((outcome,index)=><div key={outcome.id} className="detail-pool-row" data-side={index===0?'first':'second'}><div><strong>{outcome.title}</strong><span>{number(outcome.bets)} apuestas</span></div><div><strong>{number(outcome.points)} pts</strong><span>{share(outcome.points)}% del pozo</span></div></div>)}</div></>}<p className="detail-note">Los porcentajes muestran puntos apostados, no probabilidades.</p></>}
    {layout==='context'&&<><div className="detail-source"><span>{market.demo?'Datos de ejemplo':'Fuente del mercado'}</span>{market.demo?<strong>@{market.prediction.channel}</strong>:<a href={`https://www.twitch.tv/${encodeURIComponent(market.prediction.channel)}`} target="_blank" rel="noreferrer">Ver a @{market.prediction.channel}<ArrowUpRight size={16}/></a>}</div>{context}<p className="detail-note">El cierre de apuestas no es la hora del resultado.</p>{split}<div className="detail-inline-outcomes">{market.outcomes.map((outcome,index)=><span key={outcome.id} data-side={index===0?'first':'second'}>{outcome.title} <strong>{share(outcome.points)}%</strong></span>)}</div></>}
-   <PointsFees pool={total} fees={market.fees} canceled={market.phase==='void'} historical={ended}/>
+
    {bets.length?<div className="detail-own"><h3>Tu jugada</h3>{receipt}</div>:<p className="detail-no-position">Todavía no apostaste en este mercado.</p>}
    {layout!=='context'&&<details className="detail-more"><summary>Fuente y tiempos</summary>{context}</details>}
   </div>

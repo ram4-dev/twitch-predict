@@ -104,7 +104,15 @@ test('full flow: viewer proposes, owner accepts -> one published market; withdra
     {data:{intentId:'e2e-viewer-accept-01'},headers:{authorization:`Bearer ${viewerToken}`}});
   expect(forbidden.status()).toBe(403);
 
-  // 4) Owner accepts → exactly one published market on the aggregate.
+  // 4) One click in the real inbox accepts and publishes; there is no confirmation dialog.
+  await page.goto('/app#markets');await page.getByRole('button',{name:'Propuestas',exact:true}).click();
+  const card=page.locator(`[data-proposal-id="${proposal.id}"]`);await expect(card).toBeVisible();
+  let acceptWrites=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname===`/api/proposals/${proposal.id}/accept`)acceptWrites++;});
+  await card.getByRole('button',{name:'Aceptar y publicar',exact:true}).click();
+  await expect(card).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('Propuesta aceptada y mercado publicado.');
+  await expect(card.getByRole('button',{name:'Aceptar y publicar',exact:true})).toHaveCount(0);await expect(page.getByRole('dialog')).toHaveCount(0);expect(acceptWrites).toBe(1);
+  // An API replay returns the same published market receipt.
   const accept=await request.post(`/api/proposals/${proposal.id}/accept`,
     {data:{intentId:'e2e-owner-accept-01'},headers:{authorization:`Bearer ${ownerToken}`}});
   expect(accept.ok()).toBeTruthy();

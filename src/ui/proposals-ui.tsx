@@ -2,28 +2,32 @@
  * Accessible by default: no hover-only information, no color-only state, keyboard reachable, reduced-motion safe. */
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from './components/button.js';
+import {PhoneGlass} from './components/phone-glass.js';
+import {LiquidMetalSurface} from './components/materials.js';
 import {Badge} from './components/badge.js';
 import type {ProposalsClient,ProposalItem} from './proposals-client.js';
 
 const statusLabels:{[k in ProposalItem['status']]:string}={pending:'Pendiente',accepted:'Aceptada',rejected:'Rechazada',withdrawn:'Retirada'};
-const time=(s:string)=>new Date(s).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+const time=(s:string)=>new Date(s).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 
 export function ProposalStatusBadge({status}:{status:ProposalItem['status']}){
   return <Badge variant={status==='pending'?'default':'secondary'} data-proposal-status={status}>{statusLabels[status]}</Badge>;
 }
 
-export function ProposalCard({proposal,children}:{proposal:ProposalItem;children?:React.ReactNode}){
+export function ProposalCard({proposal,children,management=false}:{proposal:ProposalItem;children?:React.ReactNode;management?:boolean}){
   const content=proposal.editedInput??proposal.input;
-  return <article className="proposal-card" data-proposal-id={proposal.id}>
-    <div className="console-section-title"><span className="proposal-meta">#{proposal.shortId} · {time(proposal.createdAt)}</span>
+  const card=<article className="proposal-card" data-proposal-id={proposal.id} data-proposal-state={proposal.status} data-accepted-market-id={proposal.acceptedMarketId}>
+    <div className="console-section-title"><span className="proposal-meta">Propuesta #{proposal.shortId}</span>
       <ProposalStatusBadge status={proposal.status}/></div>
     <h3>{content.title}</h3>
-    <ol className="proposal-options">{content.options.map((o,i)=><li key={i}>{o}</li>)}</ol>
+    <ol className="proposal-options" aria-label="Opciones de la propuesta">{content.options.map((o,i)=><li key={i} className={management?'liquid-metal-frame':undefined} data-tone={management?(i===0?'positive':'negative'):undefined}>{management&&<LiquidMetalSurface active={false} tone={i===0?'positive':'negative'}/>}<span className="proposal-option-label">Opción {i+1}</span><strong>{o}</strong></li>)}</ol>
+    <p className="proposal-details">{content.durationSeconds!==undefined&&<>{content.durationSeconds>=60?`${new Intl.NumberFormat('es-AR',{maximumFractionDigits:1}).format(content.durationSeconds/60)} min`:`${content.durationSeconds} s`} para apostar · </>}Recibida el {time(proposal.createdAt)}</p>
     {proposal.editedInput&&<p className="fine">Contenido ajustado por el streamer antes de publicar (original conservado).</p>}
     {proposal.status==='rejected'&&proposal.rejectionReason&&<p className="fine">Motivo: {proposal.rejectionReason}</p>}
-    {proposal.status==='accepted'&&proposal.acceptedMarketId&&<p className="fine">Publicado como mercado {proposal.acceptedMarketId}.</p>}
+    {proposal.status==='accepted'&&proposal.acceptedMarketId&&<p className="fine proposal-published">Mercado publicado.</p>}
     {children}
   </article>;
+  return management?<PhoneGlass asChild className="phone-market" data-choice-tone={proposal.status==='accepted'?'positive':proposal.status==='rejected'?'negative':'neutral'}>{card}</PhoneGlass>:card;
 }
 
 /** Streamer inbox. Only rendered with server-verified owner capabilities; actions call the API and show its result. */
@@ -33,7 +37,7 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
   const [busy,setBusy]=useState<string>();
   const [message,setMessage]=useState('');
   const [loadError,setLoadError]=useState('');
-  const requestSequence=useRef(0);
+  const requestSequence=useRef(0),actionPending=useRef(false);
   const refresh=useCallback(async()=>{
     const sequence=++requestSequence.current;
     try{const data=await client.forChannel(channelId);if(sequence!==requestSequence.current)return;setProposals(data.proposals);setLoaded(true);setLoadError('');}
@@ -45,27 +49,30 @@ export function ProposalInbox({client,channelId,onChanged,initial}:{client:Propo
     return ()=>{clearInterval(timer);requestSequence.current++;};
   },[refresh,initial?.loaded]);
   const act=async(action:'accept'|'reject'|'withdraw',proposal:ProposalItem)=>{
+    if(actionPending.current)return;actionPending.current=true;
     setBusy(proposal.id);setMessage('');
     try{
       if(action==='accept')await client.accept(proposal.id,`inbox-${proposal.id}-${Date.now()}`);
       else if(action==='reject')await client.reject(proposal.id,`inbox-${proposal.id}-${Date.now()}`);
       else await client.withdraw(proposal.id,`inbox-${proposal.id}-${Date.now()}`);
+      requestSequence.current++;
+      setProposals(current=>current.filter(item=>item.id!==proposal.id));
       setMessage(action==='accept'?'Propuesta aceptada y mercado publicado.':action==='reject'?'Propuesta rechazada.':'Propuesta retirada.');
       await refresh();onChanged?.();
-    }catch(e){setMessage((e as Error).message);}finally{setBusy(undefined);}
+    }catch(e){setMessage((e as Error).message);}finally{actionPending.current=false;setBusy(undefined);}
   };
-  const pending=proposals.filter(p=>p.status==='pending');
+  const pending=proposals.filter(p=>p.status==='pending').sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
   return <section className="proposal-inbox" aria-label="Bandeja de propuestas">
     <div className="console-section-title"><h2>Propuestas</h2><Badge variant="secondary">{pending.length} pendientes</Badge></div>
     {message&&<p role="status">{message}</p>}
     {loadError&&<p role="alert">{loadError} <Button variant="ghost" onClick={()=>void refresh()}>Reintentar</Button></p>}
     {!loaded&&<p role="status">Cargando propuestas…</p>}
-    {loaded&&!loadError&&!proposals.length&&<p className="console-empty">Todavía no hay propuestas para este canal.</p>}
-    <div className="proposal-list">{proposals.map(p=><ProposalCard key={p.id} proposal={p}>{p.status==='pending'&&
+    {loaded&&!loadError&&!pending.length&&<p className="console-empty">No hay propuestas pendientes para este canal.</p>}
+    <div className="proposal-list">{pending.map(p=><ProposalCard key={p.id} proposal={p} management>
       <div className="proposal-actions">
-        <Button className="console-primary" disabled={busy===p.id} onClick={()=>void act('accept',p)}>{busy===p.id?'Publicando…':'Aceptar y publicar'}</Button>
-        <Button variant="ghost" disabled={busy===p.id} onClick={()=>void act('reject',p)}>Rechazar</Button>
-      </div>}</ProposalCard>)}</div>
+        <Button tone="positive" disabled={!!busy} onClick={()=>void act('accept',p)}>{busy===p.id?'Publicando…':'Aceptar y publicar'}</Button>
+        <Button tone="negative" disabled={!!busy} onClick={()=>void act('reject',p)}>Rechazar</Button>
+      </div></ProposalCard>)}</div>
   </section>;
 }
 
@@ -83,7 +90,7 @@ export function MyProposals({client,initial}:{client:ProposalsClient;initial?:{l
     {message&&<p role="status">{message}</p>}
     {loaded&&!proposals.length&&<p className="console-empty">No enviaste propuestas. Podés proponer un mercado desde la página del canal.</p>}
     <div className="proposal-list">{proposals.map(p=><ProposalCard key={p.id} proposal={p}>{p.status==='pending'&&
-      <Button variant="ghost" disabled={busy===p.id} onClick={()=>void withdraw(p)}>{busy===p.id?'Retirando…':'Retirar propuesta'}</Button>}</ProposalCard>)}</div>
+      <Button variant="ghost" disabled={!!busy} onClick={()=>void withdraw(p)}>{busy===p.id?'Retirando…':'Retirar propuesta'}</Button>}</ProposalCard>)}</div>
   </section>;
 }
 
