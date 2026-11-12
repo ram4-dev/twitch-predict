@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {getAddressDecoder} from '@solana/kit';
-import {ComputeBudgetProgram,Keypair,Transaction} from '@solana/web3.js';
+import {ComputeBudgetProgram,Message,Keypair,Transaction} from '@solana/web3.js';
 import {createPrivateKey,sign} from 'node:crypto';
 import {phantomProvider} from './fixtures/phantom.js';
 async function fixture(){return (await readFile(resolve('test-results/funding-fixture-path'),'utf8')).trim();}
@@ -11,9 +11,15 @@ test.skip(process.env.MARKET_MODE==='solana'||process.env.E2E_MARKET_MODE==='byt
 async function installWallet(page:Page){
   const wallet=Keypair.generate(),privateKey=createPrivateKey({key:Buffer.concat([Buffer.from('302e020100300506032b657004220420','hex'),Buffer.from(wallet.secretKey.subarray(0,32))]),format:'der',type:'pkcs8'});
   await phantomProvider(page,{address:getAddressDecoder().decode(wallet.publicKey.toBytes()),sign:message=>Array.from(sign(null,Buffer.from(message),privateKey))});
-  await page.exposeBinding('__fundingSign',(_source,raw:number[])=>{const tx=Transaction.from(Buffer.from(raw));
+  await page.exposeBinding('__fundingSign',(_source,raw:number[])=>{let tx=Transaction.from(Buffer.from(raw));
     // Match Phantom's documented fee injection; previous fixtures signed unchanged bytes.
     if(!tx.instructions.some(ix=>ix.programId.equals(ComputeBudgetProgram.programId)))tx.instructions.unshift(ComputeBudgetProgram.setComputeUnitLimit({units:200_000}),ComputeBudgetProgram.setComputeUnitPrice({microLamports:1000}));
+    // Wallets can also recompile the readonly account table without changing payment intent.
+    const message=tx.compileMessage(),indices=message.accountKeys.map((_key,i)=>i),last=indices.length-1;
+    if(message.header.numReadonlyUnsignedAccounts>=2){
+      [indices[last],indices[last-1]]=[indices[last-1],indices[last]];
+      tx=Transaction.populate(new Message({header:message.header,accountKeys:indices.map(i=>message.accountKeys[i].toBase58()),recentBlockhash:message.recentBlockhash,instructions:message.instructions.map(ix=>({...ix,programIdIndex:indices.indexOf(ix.programIdIndex),accounts:ix.accounts.map(i=>indices.indexOf(i))}))}));
+    }
     tx.sign(wallet);return Array.from(tx.serialize());});
   await page.addInitScript(()=>{
     const w=window as unknown as {phantom:{solana:{signTransaction:(tx:{serialize(options:unknown):Uint8Array;constructor:{from(raw:Uint8Array):unknown}})=>Promise<unknown>}};__fundingSign:(raw:number[])=>Promise<number[]>};
