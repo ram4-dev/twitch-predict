@@ -18,7 +18,7 @@ async function installWallet(page:Page){
     const message=tx.compileMessage(),indices=message.accountKeys.map((_key,i)=>i),last=indices.length-1;
     if(message.header.numReadonlyUnsignedAccounts>=2){
       [indices[last],indices[last-1]]=[indices[last-1],indices[last]];
-      tx=Transaction.populate(new Message({header:message.header,accountKeys:indices.map(i=>message.accountKeys[i].toBase58()),recentBlockhash:message.recentBlockhash,instructions:message.instructions.map(ix=>({...ix,programIdIndex:indices.indexOf(ix.programIdIndex),accounts:ix.accounts.map(i=>indices.indexOf(i))}))}));
+      tx=Transaction.populate(new Message({header:message.header,accountKeys:indices.map(i=>message.accountKeys[i].toBase58()),recentBlockhash:message.recentBlockhash,instructions:message.instructions.map(ix=>({...ix,programIdIndex:indices.indexOf(ix.programIdIndex),accounts:ix.accounts.map(i=>indices.indexOf(i))}))}),['1'.repeat(64)]);
     }
     tx.sign(wallet);return Array.from(tx.serialize());});
   await page.addInitScript(()=>{

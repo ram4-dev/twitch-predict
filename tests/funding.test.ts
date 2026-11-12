@@ -198,7 +198,7 @@ test('a valid wallet account-table reorder is verified, finalized and credited e
     assert(message.header.numReadonlyUnsignedAccounts>=2);
     const indices=message.accountKeys.map((_key,i)=>i),last=indices.length-1;[indices[last],indices[last-1]]=[indices[last-1],indices[last]];
     const reordered=new Message({header:message.header,accountKeys:indices.map(i=>message.accountKeys[i].toBase58()),recentBlockhash:message.recentBlockhash,instructions:message.instructions.map(ix=>({...ix,programIdIndex:indices.indexOf(ix.programIdIndex),accounts:ix.accounts.map(i=>indices.indexOf(i))}))});
-    const signed=Transaction.populate(reordered);signed.sign(s.wallet);
+    const signed=Transaction.populate(reordered,['1'.repeat(64)]);signed.sign(s.wallet);
     assert(!signed.serializeMessage().equals(expected.serializeMessage()));assert(signed.verifySignatures());
     const pending=await s.funding.submit(s.token,order.id,signed.serialize().toString('base64'));
     s.chain.finalize(pending.signature!);await s.funding.submit(s.token,order.id);await s.funding.submit(s.token,order.id);
