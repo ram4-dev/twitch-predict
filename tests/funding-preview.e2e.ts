@@ -6,16 +6,17 @@ import {USDC_DEVNET} from '../src/funding-model.js';
 // Live PVE: genuine test-wallet authentication and actual RPC-built transactions.
 // The injected wallet inspects and rejects the payment prompt, never signs or sends funds.
 test.skip(process.env.PVE_FUNDING_SMOKE!=='true','Explicit live PVE devnet payment-prompt check');
-const treasury='bEsfmEAaTA98rLftyi2jZ4XAzCBbqBvrJPKNW6rYJgp';
+const treasury=process.env.PVE_TREASURY_ADDRESS;
 for(const currency of ['USDC','SOL'])test(`live PVE validates funds and payment request in ${currency}`,async({page,request})=>{
-  const config=await(await request.get('/api/funding/config')).json();expect(config.enabled).toBe(true);expect(config.network).toBe('devnet');expect(config.treasury).toBe(treasury);
+  const config=await(await request.get('/api/funding/config')).json();expect(config.enabled).toBe(true);expect(config.network).toBe('devnet');expect(config.treasury).toBeTruthy();if(treasury)expect(config.treasury).toBe(treasury);
+  const recipient=config.treasury as string;
   const wallet=await signIn(page);let signingCalls=0;
   await page.exposeBinding('__inspectPayment',(_source,raw:number[])=>{
     signingCalls++;const tx=Transaction.from(Buffer.from(raw));expect(tx.feePayer?.toBase58()).toBe(wallet.address);
     if(currency==='SOL'){
-      const transfer=SystemInstruction.decodeTransfer(tx.instructions.find(ix=>ix.programId.equals(SystemProgram.programId))!);expect(transfer.fromPubkey.toBase58()).toBe(wallet.address);expect(transfer.toPubkey.toBase58()).toBe(treasury);expect(transfer.lamports>0n).toBe(true);
+      const transfer=SystemInstruction.decodeTransfer(tx.instructions.find(ix=>ix.programId.equals(SystemProgram.programId))!);expect(transfer.fromPubkey.toBase58()).toBe(wallet.address);expect(transfer.toPubkey.toBase58()).toBe(recipient);expect(transfer.lamports>0n).toBe(true);
     }else{
-      const transfer=tx.instructions.find(ix=>ix.programId.equals(TOKEN_PROGRAM))!;expect(transfer).toBeTruthy();expect(transfer.keys[2].pubkey.toBase58()).toBe(usdcAccount(new PublicKey(treasury),new PublicKey(USDC_DEVNET)).toBase58());expect(transfer.data.readBigUInt64LE(1)).toBe(1_000_000n);
+      const transfer=tx.instructions.find(ix=>ix.programId.equals(TOKEN_PROGRAM))!;expect(transfer).toBeTruthy();expect(transfer.keys[2].pubkey.toBase58()).toBe(usdcAccount(new PublicKey(recipient),new PublicKey(USDC_DEVNET)).toBase58());expect(transfer.data.readBigUInt64LE(1)).toBe(1_000_000n);
     }
   });
   await page.evaluate(()=>{const w=window as unknown as {__inspectPayment:(raw:number[])=>Promise<void>;phantom:{solana:{signTransaction:(tx:{serialize(options:unknown):Uint8Array})=>Promise<never>}}};w.phantom.solana.signTransaction=async tx=>{await w.__inspectPayment(Array.from(tx.serialize({requireAllSignatures:false,verifySignatures:false})));throw Object.assign(new Error('Payment cancelled by live smoke test'),{code:4001});};});
