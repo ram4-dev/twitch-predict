@@ -68,8 +68,8 @@ export class Funding {
       let balance;
       try{balance=await this.chain.getTokenAccountBalance(usdcAccount(wallet,mint),'confirmed');}
       catch(error){
-        if(/could not find account|InvalidAccountData|not a Token account/i.test((error as Error).message))throw new Error(`No tenés USDC de Circle en ${this.network}. Necesitás ese token para pagar el paquete.`);
-        throw new Error('No se pudo consultar tu saldo USDC. Intentá de nuevo.');
+        if(/could not find account|InvalidAccountData|not a Token account/i.test((error as Error).message))throw new Error(`No tenés USDC de Circle en ${this.network}. Necesitás ese token para pagar el paquete.`,{cause:error});
+        throw new Error('No se pudo consultar tu saldo USDC. Intentá de nuevo.',{cause:error});
       }
       if(BigInt(balance.value.amount)<BigInt(amount.units))throw new Error(`Saldo insuficiente de USDC de Circle en ${this.network} para este paquete.`);
     }
