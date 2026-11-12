@@ -205,3 +205,11 @@ test('a valid wallet account-table reorder is verified, finalized and credited e
     assert.equal(s.points.me(s.token).balance,11000);assert.equal(s.chain.broadcasts,1);
   }finally{await rm(s.dir,{recursive:true,force:true});}
 });
+
+test('missing or insufficient Circle USDC fails before generating a payment request',async()=>{
+  const s=await setup();try{
+    s.chain.missingUsdc=true;await assert.rejects(s.funding.quote(s.token,'deposit','USDC',{packageId:'points-1000'}),/No tenés USDC de Circle en devnet/);
+    s.chain.missingUsdc=false;s.chain.tokenBalance=999999n;await assert.rejects(s.funding.quote(s.token,'deposit','USDC',{packageId:'points-1000'}),/Saldo insuficiente de USDC de Circle/);
+    assert.equal(s.points.fundingOrders(s.token).length,0);assert.equal(s.chain.broadcasts,0);
+  }finally{await rm(s.dir,{recursive:true,force:true});}
+});

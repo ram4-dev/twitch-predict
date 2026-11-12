@@ -7,7 +7,7 @@ import {USDC_DEVNET} from '../src/funding-model.js';
 // The injected wallet inspects and rejects the payment prompt, never signs or sends funds.
 test.skip(process.env.PVE_FUNDING_SMOKE!=='true','Explicit live PVE devnet payment-prompt check');
 const treasury='bEsfmEAaTA98rLftyi2jZ4XAzCBbqBvrJPKNW6rYJgp';
-for(const currency of ['USDC','SOL'])test(`live PVE buy opens the Phantom payment request in ${currency}`,async({page,request})=>{
+for(const currency of ['USDC','SOL'])test(`live PVE validates funds and payment request in ${currency}`,async({page,request})=>{
   const config=await(await request.get('/api/funding/config')).json();expect(config.enabled).toBe(true);expect(config.network).toBe('devnet');expect(config.treasury).toBe(treasury);
   const wallet=await signIn(page);let signingCalls=0;
   await page.exposeBinding('__inspectPayment',(_source,raw:number[])=>{
@@ -22,6 +22,7 @@ for(const currency of ['USDC','SOL'])test(`live PVE buy opens the Phantom paymen
   const submitted:string[]=[];page.on('request',r=>{if(r.url().endsWith('/api/funding/submit'))submitted.push(r.url());});
   await page.getByRole('button',{name:'Saldo',exact:true}).click();await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();await page.getByRole('radio',{name:currency,exact:true}).check();
   await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();
-  await expect(page.locator('.funding-error')).toContainText('Cancelaste la operación en Phantom.');expect(signingCalls).toBe(1);expect(submitted).toEqual([]);await expect(page.locator('#own-balance')).toContainText('10.000');
+  if(currency==='SOL'){await expect(page.locator('.funding-error')).toContainText('Cancelaste la operación en Phantom.');expect(signingCalls).toBe(1);}
+  else{await expect(page.locator('.funding-error')).toContainText('No tenés USDC de Circle en devnet');expect(signingCalls).toBe(0);}expect(submitted).toEqual([]);await expect(page.locator('#own-balance')).toContainText('10.000');
   await page.setViewportSize({width:360,height:600});await page.locator('.funding-error').scrollIntoViewIfNeeded();await page.screenshot({path:`test-results/pve-buy-${currency}.png`});
 });

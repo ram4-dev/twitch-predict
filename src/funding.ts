@@ -1,7 +1,7 @@
 import {validateSignedFunding} from './funding-signed-transaction.js';
 import {randomUUID} from 'node:crypto';
 import {ComputeBudgetProgram,Connection,Keypair,PublicKey,SystemProgram,Transaction,TransactionInstruction} from '@solana/web3.js';
-import {usdcTransfer} from './funding-transfer.js';
+import {usdcAccount,usdcTransfer} from './funding-transfer.js';
 import {getBase58Decoder} from '@solana/kit';
 import {DEVNET_GENESIS} from './byte-model.js';
 import {fundingAmount,fundingPackageAmount,POINT_PACKAGES,publicOrder,POINTS_PER_USDC,MAINNET_GENESIS,USDC_MAINNET,USDC_DEVNET,type FundingNetwork,type Currency,type FundingOrder,type FundingEstimate} from './funding-model.js';
@@ -9,6 +9,7 @@ import type {Points} from './points.js';
 
 export interface FundingChain {
   getGenesisHash():Promise<string>;
+  getTokenAccountBalance:Connection['getTokenAccountBalance'];
   getLatestBlockhash(commitment:'finalized'):Promise<{blockhash:string;lastValidBlockHeight:number}>;
   sendRawTransaction(raw:Buffer,options:{skipPreflight:boolean;maxRetries:number}):Promise<string>;
   getSignatureStatuses(signatures:string[],options:{searchTransactionHistory:boolean}):ReturnType<Connection['getSignatureStatuses']>;
@@ -62,6 +63,16 @@ export class Funding {
     const solPrice=currency==='SOL'?await this.price():'1';
     if(typeof input!=='string'&&direction!=='deposit')throw new Error('Los paquetes son para comprar puntos');
     const amount=typeof input==='string'?fundingAmount(direction,currency,input,solPrice):fundingPackageAmount(currency,input.packageId,solPrice);
+    if(direction==='deposit'&&currency==='USDC'){
+      const mint=new PublicKey(this.network==='devnet'?USDC_DEVNET:USDC_MAINNET);
+      let balance;
+      try{balance=await this.chain.getTokenAccountBalance(usdcAccount(wallet,mint),'confirmed');}
+      catch(error){
+        if(/could not find account|InvalidAccountData|not a Token account/i.test((error as Error).message))throw new Error(`No tenés USDC de Circle en ${this.network}. Necesitás ese token para pagar el paquete.`);
+        throw new Error('No se pudo consultar tu saldo USDC. Intentá de nuevo.');
+      }
+      if(BigInt(balance.value.amount)<BigInt(amount.units))throw new Error(`Saldo insuficiente de USDC de Circle en ${this.network} para este paquete.`);
+    }
     if(direction==='withdraw'&&amount.points>account.balance)throw new Error('Saldo insuficiente');
     const id=randomUUID(),latest=await this.chain.getLatestBlockhash('finalized');
     const sender=direction==='deposit'?wallet:treasury.publicKey,recipient=direction==='deposit'?treasury.publicKey:wallet;

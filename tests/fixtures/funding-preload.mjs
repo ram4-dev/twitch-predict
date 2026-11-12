@@ -15,6 +15,7 @@ if(fixture&&process.env.MARKET_MODE!=='byte'){
     const request=JSON.parse(init.body),state=JSON.parse(await readFile(fixture,'utf8'));
     let result;
     switch(request.method){
+      case 'getTokenAccountBalance':result={context:{slot:1},value:{amount:'1000000000',decimals:6,uiAmount:1000,uiAmountString:'1000'}};break;
       case 'getGenesisHash':result='EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';break;
       case 'getLatestBlockhash':result={context:{slot:1},value:{blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:100}};break;
       case 'getBlockHeight':result=state.height??10;break;

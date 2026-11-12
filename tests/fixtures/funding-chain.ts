@@ -5,6 +5,8 @@ import {DEVNET_GENESIS} from '../../src/byte-model.js';
 import type {FundingChain} from '../../src/funding.js';
 export class FundingChainFixture implements FundingChain {
   statuses=new Map<string,SignatureStatus>();transactions=new Map<string,Transaction>();broadcasts=0;failSend=false;height=10;genesis=DEVNET_GENESIS;
+  tokenBalance=1_000_000_000n;missingUsdc=false;
+  async getTokenAccountBalance(){if(this.missingUsdc)throw new Error('could not find account');return {context:{slot:1},value:{amount:String(this.tokenBalance),decimals:6,uiAmount:Number(this.tokenBalance)/1e6,uiAmountString:String(Number(this.tokenBalance)/1e6)}};}
   async getGenesisHash(){return this.genesis;}
   async getLatestBlockhash(){return {blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:100};}
   async getBlockHeight(){return this.height;}
