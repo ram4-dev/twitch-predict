@@ -20,7 +20,7 @@ function Stat({label,value,hint}:{label:string;value:string;hint?:string}){retur
 export function renderUserConsole(node:HTMLElement,account:Account|undefined,markets:Market[],claim:(key:string)=>Promise<void>){mount(node,<UserConsole account={account} markets={markets} claim={claim}/>);}
 function UserConsole({account,markets,claim}:{account?:Account;markets:Market[];claim:(key:string)=>Promise<void>}){
   const [filter,setFilter]=useState('all'),[busy,setBusy]=useState<string>(),[message,setMessage]=useState('');
-  if(!account?.wallet)return <div className="console-empty"><Wallet size={28}/><h2>Tu consola de usuario</h2><p>Conectá Phantom para ver tus apuestas y movimientos.</p><a href="/onboarding">Conectar Phantom →</a></div>;
+  if(!account?.wallet)return <div className="console-empty"><Wallet size={28}/><h2>Tu consola de usuario</h2><p>Conectá Phantom para ver tus apuestas y movimientos.</p><a href="/app?connect=phantom#profile">Conectar Phantom →</a></div>;
   const groups=[...new Set(account.bets.map(b=>b.marketKey))].reverse().map(key=>({key,bets:account.bets.filter(b=>b.marketKey===key),market:markets.find(m=>m.key===key)}));
   const inPlay=account.bets.filter(b=>['open','locked'].includes(b.phase)).reduce((n,b)=>n+b.amount,0);
   const credited=account.bets.filter(b=>b.claimed).reduce((n,b)=>n+b.payout,0);

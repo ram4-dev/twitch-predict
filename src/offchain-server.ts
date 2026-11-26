@@ -172,8 +172,8 @@ app.post('/api/twitch/bot/account/start',botStart('account'));
 app.get('/auth/twitch/bot/callback',async(req,res)=>{
   try{const result=await bot.callback(typeof req.query.state==='string'?req.query.state:'',botCookie(req),typeof req.query.code==='string'?req.query.code:'',!!req.query.error);
     if(result.kind==='account'){res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${twitchOrigin}/bot-setup.html?connected=1`);return;}
-    res.redirect(`${twitchOrigin}/onboarding?streamer=1&bot_ticket=${encodeURIComponent(result.ticket)}`);
-  }catch{res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${twitchOrigin}/onboarding?streamer=1&bot_error=failed`);}
+    res.redirect(`${twitchOrigin}/app?bot_ticket=${encodeURIComponent(result.ticket)}#profile`);
+  }catch{res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${twitchOrigin}/app?bot_error=failed#profile`);}
 });
 app.post('/api/twitch/bot/complete',route(async(req,res)=>{const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const result=await bot.complete(bearer(req),ticket,botCookie(req));res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).json(result);}));
 app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disable(bearer(req)))));
@@ -188,18 +188,20 @@ app.post('/api/twitch/start',route((req,res)=>{
 app.get('/auth/twitch/callback',async(req,res)=>{
   if(!trustedRequestOrigin(req)){res.status(400).send('Origen de conexión inválido');return;}
   const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
+  // The app is the only entry now; the cookie only records that the flow started as streamer onboarding.
+  void onboarding;
   try{
     const state=typeof req.query.state==='string'?req.query.state:'';
     const ticket=await twitchAuth.callback(state,linkCookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);
-    res.redirect(onboarding?`/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`/app?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);
+    res.redirect(`/app?twitch_ticket=${encodeURIComponent(ticket)}#profile`);
   }catch(e){
     // Log the OAuth failure server-side (the redirect target stays a fixed internal path).
     console.error('TWITCH_CALLBACK_FAILED:',String((e as Error).message??'').replace(/[^A-Za-z0-9 :.,_-]/g,'').slice(0,140));
     res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined});
     // Failure lands on a constant internal path; only a fixed enum token is appended.
     const error=req.query.error==='access_denied'?'canceled':'failed';
-    if(onboarding){res.redirect(`/onboarding?streamer=1&twitch_error=${error}`);return;}
-    res.redirect(`/app?twitch_error=${error}#streamer`);
+    if(onboarding){res.redirect(`/app?twitch_error=${error}#profile`);return;}
+    res.redirect(`/app?twitch_error=${error}#profile`);
   }
 });
 app.post('/api/twitch/complete',route(async(req,res)=>{
@@ -307,7 +309,12 @@ app.delete('/api/channels/:channel',route(async(req,res)=>res.json({channels:awa
 app.post('/api/demo',route(async(_req,res)=>res.status(201).json(await points.accept(demoPrediction(),true))));
 app.post('/api/demo/resolve',route(async(req,res)=>{const input=z.object({key:z.string().max(300),winnerId:z.string().max(128).nullable()}).parse(req.body);res.json(await points.demoResolve(input.key,input.winnerId));}));
 app.post('/api/sync',route(async(_req,res)=>{await source.sync();res.json({ok:true,sourceError:source.lastError});}));
-app.get('/onboarding',(req,res)=>{if(process.env.AUTH_ORIGIN&&!trustedRequestOrigin(req)){res.redirect(`${resolveTwitchOrigin()}${req.originalUrl}`);return;}res.sendFile('onboarding.html',{root:`${root}/public`});});
+// The app is the only entry: every legacy /onboarding*.html URL lands on the app too.
+app.get(['/onboarding','/onboarding.html'],(req,res)=>{
+  if(process.env.AUTH_ORIGIN&&!trustedRequestOrigin(req)){res.redirect(`${resolveTwitchOrigin()}${req.originalUrl}`);return;}
+  const query=req.originalUrl.includes('?')?req.originalUrl.slice(req.originalUrl.indexOf('?')):'';
+  res.redirect(302,`/app${query}`);
+});
 // Public streamer pages: the bot, QR codes and search all target /s/twitch/:login.
 app.get(['/s/:platform/:login','/join/:platform/:login','/overlay/:platform/:login'],(_req,res)=>{
   res.sendFile('streamer.html',{root:`${root}/public`});

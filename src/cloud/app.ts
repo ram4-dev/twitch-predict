@@ -123,16 +123,18 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
  app.get('/auth/twitch/bot/callback',async(req,res)=>{
   try{const result=await bot.callback(typeof req.query.state==='string'?req.query.state:'',botCookie(req),typeof req.query.code==='string'?req.query.code:'',!!req.query.error);
    if(result.kind==='account'){res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/bot-setup.html?connected=1`);return;}
-   res.redirect(`${config.origin}/onboarding?streamer=1&bot_ticket=${encodeURIComponent(result.ticket)}`);
-  }catch{res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/onboarding?streamer=1&bot_error=failed`);}
+   res.redirect(`${config.origin}/app?bot_ticket=${encodeURIComponent(result.ticket)}#profile`);
+  }catch{res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/app?bot_error=failed#profile`);}
  });
  app.post('/api/twitch/bot/complete',route(async(req,res)=>{const {ticket}=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const result=await bot.complete(bearer(req),ticket,botCookie(req));res.clearCookie(botCookieName,{...cookieOptions,maxAge:undefined}).json(result);}));
  app.post('/api/twitch/bot/disable',route(async(req,res)=>res.json(await bot.disable(bearer(req)))));
  app.post('/api/twitch/start',route(async(req,res)=>{if(req.get('origin')!==config.origin)throw new Error('Abrí el panel para conectar Twitch');const r=await context(res).twitch.start(bearer(req)||undefined);res.cookie(cookieName,r.cookie,cookieOptions);res.cookie('twitch_destination',req.body?.streamerOnboarding===true?'onboarding':'dashboard',cookieOptions);res.json({url:r.url});}));
  app.get('/auth/twitch/callback',async(req,res)=>{
   const onboarding=req.get('cookie')?.split(';').some(v=>v.trim()==='twitch_destination=onboarding');res.clearCookie('twitch_destination',{...cookieOptions,maxAge:undefined});
-  try{const ticket=await context(res).twitch.callback(typeof req.query.state==='string'?req.query.state:'',cookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);res.redirect(onboarding?`${config.origin}/onboarding?streamer=1&twitch_ticket=${encodeURIComponent(ticket)}`:`${config.origin}/app?twitch_ticket=${encodeURIComponent(ticket)}#streamer`);}
-  catch{res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/app?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#streamer`);}
+  // The app is the only entry now; the cookie only records that the flow started as streamer onboarding.
+  void onboarding;
+  try{const ticket=await context(res).twitch.callback(typeof req.query.state==='string'?req.query.state:'',cookie(req),typeof req.query.code==='string'?req.query.code:undefined,!!req.query.error);res.redirect(`${config.origin}/app?twitch_ticket=${encodeURIComponent(ticket)}#profile`);}
+  catch{res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).redirect(`${config.origin}/app?twitch_error=${req.query.error==='access_denied'?'canceled':'failed'}#profile`);}
  });
  app.post('/api/twitch/complete',route(async(req,res)=>{const i=z.object({ticket:z.string().regex(/^[a-f0-9]{64}$/)}).parse(req.body);const r=await context(res).twitch.complete(bearer(req)||undefined,i.ticket,cookie(req));res.clearCookie(cookieName,{...cookieOptions,maxAge:undefined}).json(r);}));
  app.post('/api/twitch/disconnect',route(async(req,res)=>res.json(await context(res).points.unlinkTwitch(bearer(req)))));

@@ -115,7 +115,7 @@ async function startAuth(provider){
   const response=await fetch(`${base}/api/auth/extension/start`,{method:'POST',headers:{'Content-Type':'application/json',...(stored.pointsToken?{Authorization:`Bearer ${stored.pointsToken}`}:{})},body:JSON.stringify({extensionId:chrome.runtime.id,state}),signal:AbortSignal.timeout(12000)});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not open access');
   await chrome.storage.local.set({pendingAuth:{flowId:result.flowId,state,base,expiresAt:result.expiresAt}});
-  if(byteMode)await chrome.windows.create({url:`${base}/onboarding?extension=1#flow=${result.flowId}`,type:'popup',width:480,height:700});else await chrome.tabs.create({url:`${base}/onboarding${provider==='twitch'?'?connect=twitch':''}#flow=${result.flowId}`});return {ok:true};
+  if(byteMode)await chrome.windows.create({url:`${base}/app?extension=1#flow=${result.flowId}`,type:'popup',width:480,height:700});else await chrome.tabs.create({url:`${base}/app${provider==='twitch'?'?connect=twitch':''}#flow=${result.flowId}`});return {ok:true};
 }
 chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
   if(!['CONNECT_PHANTOM','CONNECT_TWITCH'].includes(message.type))return;

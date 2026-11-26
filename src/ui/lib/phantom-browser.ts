@@ -7,7 +7,7 @@ export function phantomBrowseUrl(target:string):string{
 export function mobileBrowser(){return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);}
 /** Onboarding handoff only carries the public role, never OAuth tickets or extension pairing state. */
 export function onboardingPhantomUrl(){
-  const target=new URL('/onboarding',location.origin);
+  const target=new URL('/app',location.origin);
   if(new URLSearchParams(location.search).get('streamer')==='1')target.searchParams.set('streamer','1');
   return phantomBrowseUrl(target.href);
 }

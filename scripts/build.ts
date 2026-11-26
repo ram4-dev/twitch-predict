@@ -15,7 +15,6 @@ await build({entryPoints:['src/popup-cache.ts'],outfile:'extension/popup-cache.j
 await build({ entryPoints: ['src/extension-model.ts'], outfile: 'extension/model.js', platform: 'browser', format: 'esm', bundle: true, minify: true });
 await build({entryPoints:['src/ui/points-ui.tsx'],outfile:'public/points-ui.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/landing.tsx'],outfile:'public/landing.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
-await build({entryPoints:['src/ui/onboarding.tsx'],outfile:'public/onboarding.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/ui/consoles.tsx'],outfile:'public/consoles.js',platform:'browser',format:'esm',bundle:true,minify:true,define:{'process.env.NODE_ENV':'"production"'}});
 await build({entryPoints:['src/extension-transaction.ts'],outfile:'extension/byte-transaction.js',platform:'browser',format:'esm',bundle:true,minify:true});
 await build({entryPoints:['src/extension-page-wallet.ts'],outfile:'extension/page-wallet.js',platform:'browser',format:'iife',bundle:true,minify:true});

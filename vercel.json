@@ -13,7 +13,7 @@
     },
     {
       "source": "/onboarding",
-      "destination": "/onboarding.html"
+      "destination": "/app.html"
     },
     {
       "source": "/s/:platform/:login",

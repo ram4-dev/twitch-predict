@@ -415,3 +415,21 @@ html,body{margin:0;min-width:0;background:#080808;color:#f2f2f2}*{box-sizing:bor
 .phone-manager .manager-settlement-amounts [data-settlement-share=winners][data-tone=positive] strong{color:#91e9bd}
 @container phone (max-width:26rem){.phone-manager .manager-settlement-amounts{grid-template-columns:minmax(0,1fr)}}
 .phone-manager .manager-settlement-amounts .resolution-count{transform-origin:left center}
+
+/* Streamer channel configuration hosted by the profile tab (formerly the /onboarding screen). */
+.phone-streamer-config{margin-top:24px;padding:24px;background:var(--surface,#161616);border:1px solid rgb(255 255 255 / .15);border-radius:20px}
+.phone-streamer-config h2{margin:0;font-size:20px;line-height:1.2}
+.phone-streamer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.phone-streamer-config>p{margin:12px 0 0;font-size:14px;line-height:1.5;color:var(--muted-foreground)}
+.phone-streamer-config .auth-progress{margin-bottom:16px}
+.phone-streamer-config .plot-mascot{width:96px;margin:16px 0 12px}
+.phone-streamer-config .streamer-steps{margin:20px 0 0}
+.phone-streamer-config .streamer-steps li{display:flex;align-items:stretch;flex-direction:column;gap:12px;padding:16px 0;border-top:1px solid rgb(255 255 255 / .12)}
+.phone-streamer-config .streamer-steps p{margin:4px 0 0;font-size:13px;line-height:1.5;color:var(--muted-foreground)}
+.phone-streamer-config .streamer-steps .plot-button,.phone-streamer-config .auth-primary{width:100%;justify-content:center;min-height:48px}
+.phone-streamer-config .streamer-finish{display:grid;gap:16px;margin-top:16px}
+.phone-streamer-config .streamer-finish p{margin:0;font-size:14px;line-height:1.5}
+.phone-streamer-config .streamer-tools{display:grid;gap:8px}
+.phone-streamer-config .streamer-tools a{color:var(--foreground);font-size:14px}
+.phone-streamer-config .auth-error{margin-top:16px;font-size:13px;color:var(--destructive);overflow-wrap:anywhere}
+@media(min-width:36rem){.phone-streamer-config .streamer-steps li{align-items:center;flex-direction:row;justify-content:space-between}.phone-streamer-config .streamer-steps .plot-button{width:auto}}
