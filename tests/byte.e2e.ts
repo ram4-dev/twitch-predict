@@ -88,14 +88,14 @@ test('MV3 popup signs through an existing Twitch tab and retains receipts and ca
   await context.route('**/api/health',route=>route.fulfill({json:{ok:true,marketMode:'byte',network:'devnet'}}));
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const extensionId=new URL(worker.url()).host;
   // Authenticate before the betting test. Reuse the original browser tab so
-  // install-time onboarding cannot race creation of a tab in a closing window.
+  // install-time pairing cannot race creation of a tab in a closing window.
   const dashboard=context.pages().find(p=>p.url()==='about:blank')??await context.newPage();
   await dashboard.goto(`${base}/byte`);
   await dashboard.getByRole('button',{name:'Conectar Phantom',exact:true}).click();
   await expect(dashboard.getByText('Wallet conectada.',{exact:false})).toBeVisible();
   await dashboard.getByRole('button',{name:'Vincular extensión',exact:true}).click();
   await expect(dashboard.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
-  for(const auth of context.pages().filter(p=>p.url().includes('/onboarding')))await auth.close();
+  for(const auth of context.pages().filter(p=>p.url().includes('/app#flow=')))await auth.close();
   await dashboard.bringToFront();
   await dashboard.reload();await expect(dashboard.getByRole('button',{name:'Reconectar wallet',exact:true})).toBeVisible();
   let popup=await context.newPage();await popup.goto(`chrome-extension://${extensionId}/popup.html`);

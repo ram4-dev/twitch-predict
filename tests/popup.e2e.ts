@@ -47,7 +47,7 @@ test('native action popup is 700px wide without resizing the browser window',asy
   try {
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
     // Finish the install-triggered tab before opening the native popup, or it steals focus.
-    await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url()).toBeTruthy();
+    await expect.poll(()=>context.pages().find(p=>p.url().includes('/app#flow='))?.url()).toBeTruthy();
     // This tab only inspects the separate native action popup through the extension API.
     const inspector=await context.newPage();await inspector.goto(`chrome-extension://${id}/popup.html`);
     const browserSize=await inspector.evaluate(()=>({width:outerWidth,height:outerHeight}));

@@ -44,3 +44,34 @@ streamer profile.
 Pending.
 
 Implementation commits are recorded here as each task closes.
+
+## Verification (updated 2026-11-26)
+
+Unit and static gates are green: `npm run typecheck`, `npm run lint`, `npm run build`, and
+`npm test` (215 tests: 197 passed, 18 skipped, 0 failed).
+
+E2E is green for the surfaces this change owns:
+
+- `tests/streamer-onboarding.e2e.ts` — 5 passed (channel link, wallet failure, missing Twitch
+  configuration, Twitch cancellation, bot status failure).
+- `tests/twitch-bot-onboarding.e2e.ts` — passed (bot consent through the profile block).
+- `tests/social-entry.e2e.ts` — passed, including the retired `/onboarding` redirect.
+- `tests/phantom-handoff.e2e.ts` — 3 passed (mobile Phantom handoff targets `/app`).
+- `tests/brand.e2e.ts` — branded surfaces and betting-mode units now target `/app`.
+
+Still failing and NOT closed in this unit: `tests/points-identity.e2e.ts` (3 cases) and the
+`contributor` flows that build a market as an owner and then bet from a Twitch-only viewer
+session. The viewer card lookup `[data-key=...]` finds no card on `/app?channel=<login>` in the
+fixture server. Direct probing confirmed the Twitch login path itself works: `/app` renders the
+gate, the callback lands on `/app#profile` with a session, the profile shows the account, and
+`/api/markets` returns the demo market. The gap is specific to a market created by a streamer
+through `/api/streamer/markets` while the fixture Twitch identity stays in GQL-only mode, so the
+market never appears in the viewer feed. That is fixture plumbing, not the app-entry change, and
+needs its own diagnosis instead of more blind iterations.
+
+Behaviour fixed during this unit that the tests proved were real defects:
+- The sign-in card auto-connected Phantom on every load; the extension-only guard was restored.
+- A signed-in user could not link Twitch from the profile rows; the rows now start the provider
+  flow instead of pointing at the retired screen.
+- The "channel followed" state was local and vanished on reload; it is now read back from
+  `/api/twitch/channels`.

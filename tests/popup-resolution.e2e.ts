@@ -18,7 +18,7 @@ test('MV3 liquid resolution uses account totals for winner, mixed bets, loser, r
   await context.route('http://twitch-predict.localhost:1356/**',route=>{
    const path=new URL(route.request().url()).pathname;
    if(path==='/api/points/bet'||path==='/api/points/claim')writes.push(path);
-   return route.fulfill({json:path==='/api/health'?{marketMode:'offchain'}:path==='/api/markets'?[market]:path==='/api/points/me'?{id:'fixture-account',wallet:'fixture-wallet',name:'Fixture',balance:10000,bets,streamerChannels:[]}:path==='/api/auth/extension/start'?{url:'http://twitch-predict.localhost:1356/onboarding',flowId:'fixture'}:{}});
+   return route.fulfill({json:path==='/api/health'?{marketMode:'offchain'}:path==='/api/markets'?[market]:path==='/api/points/me'?{id:'fixture-account',wallet:'fixture-wallet',name:'Fixture',balance:10000,bets,streamerChannels:[]}:path==='/api/auth/extension/start'?{url:'http://twitch-predict.localhost:1356/app',flowId:'fixture'}:{}});
   });
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
   await worker.evaluate(async prediction=>{
@@ -62,7 +62,7 @@ test('MV3 SOL resolution uses animated glass and does not invent a wallet payout
  try{
   await context.route('http://twitch-predict.localhost:1356/**',route=>{
    const path=new URL(route.request().url()).pathname;
-   return route.fulfill({json:path==='/api/health'?{marketMode:'byte'}:path==='/api/byte/markets'?{markets:[market]}:path==='/api/byte/config'?{enabled:true}:path==='/api/auth/extension/start'?{url:'http://twitch-predict.localhost:1356/onboarding',flowId:'fixture'}:{}});
+   return route.fulfill({json:path==='/api/health'?{marketMode:'byte'}:path==='/api/byte/markets'?{markets:[market]}:path==='/api/byte/config'?{enabled:true}:path==='/api/auth/extension/start'?{url:'http://twitch-predict.localhost:1356/app',flowId:'fixture'}:{}});
   });
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
   await worker.evaluate(async()=>{await (globalThis as unknown as {chrome:{storage:{local:{set(value:unknown):Promise<void>}}}}).chrome.storage.local.set({byteOperation:{marketId:'pm_liquid',status:'confirmed',receipt:{signature:'test-signature'}}});});

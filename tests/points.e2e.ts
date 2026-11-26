@@ -13,7 +13,7 @@ test('consumer UI: two accounts bet, winner claims, loser cannot claim, refund p
  await signIn(page);const market=await operator(page,'/api/demo',{});
  const stake=async(target:typeof page,key:string,outcome:string,amount:number)=>{await target.reload();await target.getByRole('button',{name:'Mis apuestas',exact:true}).click();await target.getByRole('combobox',{name:'Buscar streamer'}).fill('demo_streamer');await target.getByRole('option').filter({hasText:'@demo_streamer'}).click();await target.locator(`[data-key="${key}"]`).getByRole('button',{name:`Apostar a ${outcome}`,exact:true}).click();await target.getByLabel('Puntos a apostar',{exact:true}).fill(String(amount));await target.getByRole('button',{name:'Confirmar apuesta',exact:false}).click();await expect(target.getByRole('dialog')).toHaveCount(0);};
  await stake(page,market.key,'Gana',300);await expect(page.locator('#own-balance')).toContainText('9.700');
- const second=await browser.newContext();try{const other=await second.newPage();await phantomProvider(other);await other.goto(`${base}/onboarding`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL('**/app#markets');await stake(other,market.key,'Pierde',700);await expect(other.locator('#own-balance')).toContainText('9.300');
+ const second=await browser.newContext();try{const other=await second.newPage();await phantomProvider(other);await other.goto(`${base}/app`);await other.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await other.waitForURL('**/app#markets');await stake(other,market.key,'Pierde',700);await expect(other.locator('#own-balance')).toContainText('9.300');
  await operator(page,'/api/demo/resolve',{key:market.key,winnerId:'victory'});await page.getByRole('button',{name:'Mis jugadas',exact:true}).click();await page.reload();const receipt=page.locator(`[data-position-key="${market.key}"]`);await receipt.getByRole('button',{name:'Cobrar 960 pts',exact:true}).click();await expect(page.locator('#own-balance')).toContainText('10.660');expect((await ownRequest(page,'/api/points/claim',{key:market.key,requestId:randomUUID()})).status).toBe(400);
  await other.getByRole('button',{name:'Mis jugadas',exact:true}).click();await other.reload();const loss=other.locator(`[data-position-key="${market.key}"]`);await expect(loss.locator('.plot-resolution.count')).toHaveAttribute('data-state','lost');await expect(loss.locator('.resolution-label')).toHaveText('Pérdida neta');await expect(loss.locator('.resolution-net')).toHaveText('−700 pts');// The shared resolution card shows the loss and never offers a claim.
  await expect(loss.getByRole('button',{name:/Cobrar/})).toHaveCount(0);
@@ -34,12 +34,12 @@ test('MV3 detects a prediction, automatically creates one mirror, bets own point
     const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');const id=new URL(worker.url()).host;
     const dashboard=await context.newPage();await dashboard.goto(`${base}/app`);
     await phantomProvider(context);
-    await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url(),{timeout:15000}).toBeTruthy();
+    await expect.poll(()=>context.pages().find(p=>p.url().includes('/app#flow='))?.url(),{timeout:15000}).toBeTruthy();
     // This install tab may have been created while exposeBinding was being registered.
     // Continue the same real auth flow in a new document created after fixture installation.
-    const installedTab=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;
-    const onboarding=await context.newPage();await onboarding.goto(installedTab.url());await installedTab.close();
-    await onboarding.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await onboarding.waitForURL('**/app#markets');
+    const installedTab=context.pages().find(p=>p.url().includes('/app#flow='))!;
+    const entry=await context.newPage();await entry.goto(installedTab.url());await installedTab.close();
+    await entry.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await entry.waitForURL('**/app#markets');
     const twitch=await context.newPage();await twitch.goto(`https://www.twitch.tv/${prediction.channel}`);
     const popup=await context.newPage();await popup.goto(`chrome-extension://${id}/popup.html`);await expect(popup.getByRole('heading',{name:prediction.title})).toBeVisible();await expect(popup.locator('.points-pool')).toContainText('0 pts');await expect(popup.locator('#own-balance')).toHaveText('10,000');
     await popup.getByLabel('Points to stake').fill('250');await popup.getByRole('button',{name:'Refresh prediction',exact:true}).click();await expect(popup.getByRole('button',{name:'Refresh prediction',exact:true})).toBeEnabled();await expect(popup.getByLabel('Points to stake')).toHaveValue('250');await popup.getByRole('button',{name:'Stake on Azul',exact:true}).click();await expect(popup.locator('#own-balance')).toHaveText('9,750');await expect(popup.locator('.points-pool')).toContainText('250 pts');

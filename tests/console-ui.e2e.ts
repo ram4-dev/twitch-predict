@@ -77,7 +77,7 @@ test('full console from the app: create, close, resolve, cancel — by clicking,
 
   // Viewer-only guard: a viewer account never sees the streamer console.
   const viewerPage=await page.context().newPage();
-  await viewerPage.goto('/onboarding');
+  await viewerPage.goto('/app');
   await viewerPage.evaluate(()=>localStorage.removeItem('pointsToken'));
   await viewerPage.goto('/app#profile');
   await expect(viewerPage.getByLabel('Consola del streamer')).toHaveCount(0);

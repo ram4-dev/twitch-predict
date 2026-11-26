@@ -16,7 +16,7 @@ test('a real closed action popup opens once when the watched Twitch round resolv
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:false,viewport:null,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
-  await expect.poll(()=>context.pages().some(p=>p.url().includes('/onboarding?extension=1#flow='))).toBe(true);
+  await expect.poll(()=>context.pages().some(p=>p.url().includes('/app?extension=1#flow='))).toBe(true);
   const panel=await context.newPage();await panel.goto(`${base}/app?channel=${channel}`);await panel.getByRole('button',{name:'Vincular extensión',exact:true}).click();await expect(panel.getByText('Extensión vinculada.',{exact:false})).toBeVisible();
   const inspector=await context.newPage();await inspector.goto(`chrome-extension://${id}/popup.html`);
   const readView=()=>inspector.evaluate(()=>{

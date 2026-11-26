@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 const surfaces=[
   ['landing','/'],['usuario','/app'],['pearl','/app?theme=pearl'],['jade','/app?theme=jade'],
-  ['acceso','/onboarding'],['streamer','/onboarding?streamer=1'],['canal','/s/twitch/demo_streamer'],
+  ['acceso','/app'],['streamer','/app#profile'],['canal','/s/twitch/demo_streamer'],
   ['componentes','/components.html'],['navegaciones','/navbars.html'],['bot','/bot-setup.html'],
   ['beta','/beta.html'],['privacidad','/privacy.html'],['espera','/waitlist-success.html'],['error','/waitlist-error.html'],
   ['variantes-app','/app-options.html'],['variantes-detalle','/market-details.html'],['variantes-fondo','/background-options.html'],
@@ -33,9 +33,10 @@ test('all branded surfaces load the canonical logo without cropping at compact a
     }
   }
 });
-for(const mode of ['offchain','byte'])test(`${mode}: onboarding units match the active transport`,async({page})=>{
+for(const mode of ['offchain','byte'])test(`${mode}: sign-in units match the active transport`,async({page})=>{
   await page.route('**/api/health',route=>route.fulfill({json:{marketMode:mode}}));
-  for(const path of ['/onboarding','/onboarding?streamer=1']){
+  // The signed-out app entry is the only place the betting currency is announced to a new visitor.
+  for(const path of ['/app','/app#profile']){
     await page.goto(path);
     if(mode==='byte')await expect(page.locator('.auth-note')).toContainText('Las apuestas usan SOL de devnet.');
     else{
@@ -47,9 +48,10 @@ for(const mode of ['offchain','byte'])test(`${mode}: onboarding units match the 
 });
 test('unknown transport does not claim a betting currency',async({page})=>{
   await page.route('**/api/health',route=>route.fulfill({status:503,json:{error:'Unavailable'}}));
-  await page.goto('/onboarding?streamer=1');
-  await expect(page.getByText('Modo no disponible',{exact:true})).toBeVisible();
+  await page.goto('/app#profile');
+  // Without a known transport the sign-in card must not announce either currency.
   await expect(page.locator('.auth-note')).toHaveText('La firma de acceso no envía una transacción.');
+  await expect(page.getByText(/SOL de devnet|internos y de prueba/,{exact:false})).toHaveCount(0);
 });
 test('static support pages retain their logo without JavaScript',async({browser})=>{
   const context=await browser.newContext({javaScriptEnabled:false,viewport:{width:360,height:600}});

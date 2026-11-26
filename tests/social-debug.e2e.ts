@@ -10,9 +10,9 @@ test('debug social entry',async({page})=>{
   });
   page.on('request',r=>{if(r.url().includes('/api/'))console.log('REQ:',r.method(),r.url().slice(-60));});
   const completeResponse=page.waitForResponse(r=>r.url().includes('/api/twitch/complete'),{timeout:8000}).catch(()=>null);
-  await page.goto('/onboarding');
+  await page.goto('/app');
   await page.getByRole('button',{name:'Continuar con Twitch'}).click();
-  await expect(page).toHaveURL(/id.twitch.tv|onboarding/);
+  await expect(page).toHaveURL(/id.twitch.tv/);
   await page.getByRole('link',{name:'Autorizar'}).click();
   await page.waitForTimeout(4000);
   console.log('URL:',page.url().slice(0,80));

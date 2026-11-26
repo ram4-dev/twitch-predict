@@ -105,7 +105,7 @@ test('owner publishes over HTTP regardless of evidence age; viewer is always den
   await page.goto('/');
   await page.evaluate(t=>localStorage.setItem('pointsToken',t),ownerToken);
   await phantomProvider(page);
-  await page.goto('/onboarding');
+  await page.goto('/app');
   await page.getByRole('button',{name:/Entrar con Phantom|Conectar Phantom/}).click();
   await page.waitForURL('**/app#markets');
   // Re-link Twitch now that the account has a wallet: registers the streamers row.

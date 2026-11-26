@@ -13,7 +13,7 @@ test('viewer chat proposal appears in the open streamer inbox and bot delivers h
   const url=new URL(route.request().url()),callback=new URL(url.searchParams.get('redirect_uri')!);callback.searchParams.set('state',url.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');
   await route.fulfill({contentType:'text/html',body:`<a href="${callback.href}">Autorizar canal</a>`});
  });
- await page.goto('/onboarding?streamer=1');await page.getByRole('button',{name:'Conectar Phantom'}).click();
+ await page.goto('/app#profile');await page.getByRole('button',{name:'Conectar Phantom'}).click();
  await page.getByRole('button',{name:'Conectar Twitch'}).click();await page.getByRole('link',{name:'Autorizar canal'}).click();await expect(page.getByText(`@${login}`)).toBeVisible();
  const token=await page.evaluate(()=>localStorage.getItem('pointsToken')!),origin=new URL(page.url()).origin;
  const authorize=async(path:string,identity:unknown)=>{

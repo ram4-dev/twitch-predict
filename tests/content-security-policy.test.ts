@@ -21,7 +21,8 @@ test('pitch deck CSP allowlists its inline script and stays off every other rout
  assert.ok(pitchContentSecurityPolicy.includes('font-src \'self\' data:'));
  assert.ok(pitchContentSecurityPolicy.includes('img-src \'self\' data:'));
  assert.ok(!pitchContentSecurityPolicy.includes('unsafe-eval'));
- for(const path of ['/','/byte','/onboarding','/onboarding.html','/components.html','/api/health','/downloads/plot-extension.zip','/pitchdeck'])assert.equal(contentSecurityPolicyForPath(path),contentSecurityPolicy);
+ // /onboarding now redirects to the app, but the retired path still answers and keeps this policy.
+ for(const path of ['/','/byte','/app','/onboarding','/onboarding.html','/components.html','/api/health','/downloads/plot-extension.zip','/pitchdeck'])assert.equal(contentSecurityPolicyForPath(path),contentSecurityPolicy);
  for(const path of ['/pitch','/pitch/','/pitch/index.html'])assert.equal(contentSecurityPolicyForPath(path),pitchContentSecurityPolicy);
  const vercel=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));
  const policy=(source:string)=>vercel.headers.find((rule:{source:string})=>rule.source===source)?.headers.find((header:{key:string})=>header.key==='Content-Security-Policy')?.value;

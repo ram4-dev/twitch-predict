@@ -8,7 +8,7 @@ import {TwitchIcon,GoogleIcon} from '../brand-icons.js';
 
 type Provider={isPhantom?:boolean;connect():Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
 type Login={token:string;account:{wallet?:string;id:string};handoff?:{flowId:string;extensionId:string;code:string}};
-const provider=()=>(window as unknown as {phantom?:{solana?:Provider}}).phantom?.solana;
+const phantomWallet=()=>(window as unknown as {phantom?:{solana?:Provider}}).phantom?.solana;
 const extensionFlow=()=>{const raw=new URLSearchParams(location.hash.slice(1)).get('flow')??'';return /^[a-f0-9]{64}$/.test(raw)?raw:undefined;};
 async function request<T>(path:string,body?:unknown):Promise<T>{
  const token=localStorage.getItem('pointsToken');
@@ -26,11 +26,31 @@ export async function completeExtensionFlow(flowId:string){
  sessionStorage.removeItem('plotExtensionFlow');
  return handoff;
 }
+/**
+ * Start a provider connection for an account that is already signed in. The profile rows and
+ * deep links use this instead of a separate screen: a connected user must still be able to
+ * link Twitch, Google or Phantom without signing out first.
+ */
+export async function connectProvider(provider:'twitch'|'google'|'phantom',options:{streamerOnboarding?:boolean}={}):Promise<string|void>{
+ if(provider==='twitch'||provider==='google'){
+  const result=await request<{url:string}>(`/api/${provider}/start`,options.streamerOnboarding?{streamerOnboarding:true}:{});
+  return result.url;
+ }
+ const wallet=phantomWallet();if(!wallet?.isPhantom)throw new Error('Instalá Phantom en este navegador y volvé a esta página.');
+ const {publicKey}=await wallet.connect();const address=publicKey.toString();
+ const challenge=await request<{challengeId:string;message:string}>('/api/auth/challenge',{address});
+ const signed=await wallet.signMessage(new TextEncoder().encode(challenge.message),'utf8');
+ if(signed.publicKey&&signed.publicKey.toString()!==address)throw new Error('Cambiaste de wallet durante el acceso. Volvé a conectar.');
+ const signature=btoa(String.fromCharCode(...new Uint8Array(signed.signature)));
+ const result=await request<Login>('/api/auth/verify',{challengeId:challenge.challengeId,signature});
+ const previous=localStorage.getItem('pointsToken');if(previous&&previous!==result.token)localStorage.setItem('previousPointsToken',previous);
+ localStorage.setItem('pointsToken',result.token);
+}
 /** The one sign-in surface. It used to live on /onboarding; the app renders it inline. */
 export function AuthGate({onSignedIn}:{onSignedIn:()=>Promise<void>|void}){
  const mode=useBettingMode();
  const flowId=useRef(extensionFlow()).current;
- const [phase,setPhase]=useState('ready'),[error,setError]=useState(''),[installed,setInstalled]=useState(!!provider()?.isPhantom),[login,setLogin]=useState<Login>(),[flowReady,setFlowReady]=useState(!flowId);
+ const [phase,setPhase]=useState('ready'),[error,setError]=useState(''),[installed,setInstalled]=useState(!!phantomWallet()?.isPhantom),[login,setLogin]=useState<Login>(),[flowReady,setFlowReady]=useState(!flowId);
  // Social-first entry: Twitch is the primary access, Google appears only when the server has it configured.
  const [googleConfigured,setGoogleConfigured]=useState<boolean|null>(null);
  useEffect(()=>{let active=true;void request<{configured:boolean}>('/api/google/config').then(c=>{if(active)setGoogleConfigured(c.configured);}).catch(()=>{if(active)setGoogleConfigured(false);});return()=>{active=false;};},[]);
@@ -64,7 +84,7 @@ export function AuthGate({onSignedIn}:{onSignedIn:()=>Promise<void>|void}){
   setError('');
   try{
    if(login){await finish(login);return;}
-   const wallet=provider();if(!wallet?.isPhantom){setInstalled(false);throw new Error('Instalá Phantom en este navegador y volvé a esta página.');}
+   const wallet=phantomWallet();if(!wallet?.isPhantom){setInstalled(false);throw new Error('Instalá Phantom en este navegador y volvé a esta página.');}
    setPhase('connecting');const {publicKey}=await wallet.connect();const address=publicKey.toString();
    const challenge=await request<{challengeId:string;message:string}>('/api/auth/challenge',{address,...(flowId?{flowId}:{})});
    setPhase('signing');const signed=await wallet.signMessage(new TextEncoder().encode(challenge.message),'utf8');
@@ -85,9 +105,11 @@ export function AuthGate({onSignedIn}:{onSignedIn:()=>Promise<void>|void}){
   if(wanted==='twitch'||wanted==='google'){void social(wanted);return;}
   if(wanted==='phantom'){void connect();}
  },[]);
- useEffect(()=>{let active=true;const timer=setInterval(()=>setInstalled(!!provider()?.isPhantom),500);if(flowId)void request('/api/auth/flow/'+encodeURIComponent(flowId)).then(()=>{if(active)setFlowReady(true);}).catch(problem=>{if(active)setError((problem as Error).message);});return()=>{active=false;clearInterval(timer);};},[]);
+ useEffect(()=>{let active=true;const timer=setInterval(()=>setInstalled(!!phantomWallet()?.isPhantom),500);if(flowId)void request('/api/auth/flow/'+encodeURIComponent(flowId)).then(()=>{if(active)setFlowReady(true);}).catch(problem=>{if(active)setError((problem as Error).message);});return()=>{active=false;clearInterval(timer);};},[]);
  const autoStarted=useRef(false);
- useEffect(()=>{if(flowReady&&installed&&!new URLSearchParams(location.search).get('connect')&&!autoStarted.current){autoStarted.current=true;void connect();}},[flowReady,installed]);
+ // Only a tab the extension opened may connect the wallet on its own; a plain visit always clicks first.
+ const autoConnect=new URLSearchParams(location.search).has('extension');
+ useEffect(()=>{if(autoConnect&&flowReady&&installed&&!new URLSearchParams(location.search).get('connect')&&!autoStarted.current){autoStarted.current=true;void connect();}},[autoConnect,flowReady,installed]);
  const busy=phase!=='ready';
  const labels:Record<string,string>={ready:login?'Reintentar vinculación':'Conectar Phantom',connecting:'Conectá tu wallet en Phantom…',signing:'Confirmá el inicio de sesión en Phantom…',linking:'Vinculando tu extensión…',done:'Abriendo tu panel…'};
  return <section className="phone-sign-in" aria-label="Iniciar sesión">

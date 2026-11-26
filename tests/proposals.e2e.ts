@@ -34,7 +34,7 @@ async function ownerWithWalletAndChannel(page:Page,request:APIRequestContext):Pr
   await page.goto('/');
   await page.evaluate(t=>localStorage.setItem('pointsToken',t),token);
   await phantomProvider(page);
-  await page.goto('/onboarding');
+  await page.goto('/app');
   await page.getByRole('button',{name:/Entrar con Phantom|Conectar Phantom/}).click();
   await page.waitForURL('**/app#markets');
   const linked=await loginTwitchLinked(request,token);

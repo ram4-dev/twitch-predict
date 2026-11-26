@@ -29,7 +29,7 @@ async function installWallet(page:Page){
 }
 async function login(page:Page){
   const wallet=await installWallet(page);
-  await page.goto('/onboarding');await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await page.waitForURL('**/app#markets');await page.goto('/wallet.html');
+  await page.goto('/app');await page.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await page.waitForURL('**/app#markets');await page.goto('/wallet.html');
   await expect(page.getByRole('region',{name:'Saldo',exact:true})).toContainText('10.000');return wallet;
 }
 async function reset(){await writeFile(await fixture(),JSON.stringify({transactions:{},broadcasts:0,finalize:true,fail:false,height:10}));}
@@ -144,7 +144,7 @@ test('a Twitch account links Phantom during purchase and retains its account and
   const id=String(Date.now()),loginName=`buyer_${randomUUID().slice(0,8)}`;
   await writeFile(resolve('.e2e-fixtures/twitch-oauth.json'),JSON.stringify({id,login:loginName,display_name:loginName}));
   await page.route('https://id.twitch.tv/oauth2/authorize?**',async route=>{const url=new URL(route.request().url()),callback=new URL(url.searchParams.get('redirect_uri')!);callback.searchParams.set('state',url.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');await route.fulfill({status:302,headers:{location:callback.href}});});
-  await installWallet(page);await page.goto('/onboarding');await page.getByRole('button',{name:'Continuar con Twitch',exact:true}).click();await page.waitForURL(/\/app(?:[?#]|$)/);await expect(page.getByRole('button',{name:'Saldo',exact:true})).toBeVisible();
+  await installWallet(page);await page.goto('/app');await page.getByRole('button',{name:'Continuar con Twitch',exact:true}).click();await page.waitForURL(/\/app(?:[?#]|$)/);await expect(page.getByRole('button',{name:'Saldo',exact:true})).toBeVisible();
   const before=await page.evaluate(async()=>await(await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}})).json());expect(before.wallet).toBeFalsy();
   await page.getByRole('button',{name:'Saldo',exact:true}).click();await page.getByRole('radio',{name:'1.000 puntos 1 USDC',exact:true}).check();await page.getByRole('button',{name:'Comprar con Phantom',exact:true}).click();await expect(page.locator('#own-balance')).toContainText('11.000');
   const after=await page.evaluate(async()=>await(await fetch('/api/points/me',{headers:{Authorization:`Bearer ${localStorage.getItem('pointsToken')}`}})).json());expect(after.id).toBe(before.id);expect(after.wallet).toBeTruthy();expect(after.twitch.id).toBe(id);expect((await state()).broadcasts).toBe(1);

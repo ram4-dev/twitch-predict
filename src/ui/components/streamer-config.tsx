@@ -63,6 +63,8 @@ export function StreamerChannelConfig({account,onChanged}:{account:Account;onCha
   }catch(problem){if(active)setError((problem as Error).message);}finally{if(active)setBusy('');}})();
   return()=>{active=false;clearInterval(timer);};
  },[]);
+ // The follow lives on the server: read it back so a reload keeps reporting the real state.
+ useEffect(()=>{if(!account.twitch)return;let active=true;void request<{channels:string[]}>('/api/byte/twitch/channels').then(result=>{if(active)setWatching(result.channels.includes(account.twitch!.login));}).catch(()=>{if(active)setWatching(false);});return()=>{active=false;};},[account.twitch?.login]);
  useEffect(()=>{if(!account.twitch)return;let active=true;const update=()=>void request<BotStatus>('/api/twitch/bot/status').then(result=>{if(active){setBot(result);setBotError('');}}).catch((problem:Error)=>{if(active)setBotError(problem.message);});update();const timer=setInterval(update,5000);return()=>{active=false;clearInterval(timer);};},[account.twitch?.login]);
  const connectWallet=async()=>{setError('');setBusy('Conectando wallet…');try{
   const wallet=provider();if(!wallet?.isPhantom)throw new Error('Instalá Phantom y volvé a esta página.');

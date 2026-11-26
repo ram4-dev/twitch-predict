@@ -29,8 +29,9 @@ async function demo(page:Page){return page.evaluate(async()=>{
 test('anonymous, expired and providerless sessions show a login card without profile or active bets',async({page})=>{
  await page.goto('/app#profile');
  const login=page.getByRole('region',{name:'Iniciar sesión'});
- await expect(login.getByRole('link',{name:'Continuar con Twitch'})).toBeVisible();
- await expect(login.getByRole('link',{name:'Conectar Phantom'})).toBeVisible();
+ await expect(login.getByRole('button',{name:'Continuar con Twitch'})).toBeVisible();
+ // Without an injected wallet the card offers the Phantom install handoff instead of a dead button.
+ await expect(login.getByRole('link',{name:'Instalar Phantom'})).toBeVisible();
  await expect(page.locator('.phone-profile,.phone-market')).toHaveCount(0);
  await expect(page.getByRole('button',{name:'Mi perfil',exact:true})).toBeHidden();
  await expect(page.locator('#own-balance')).toBeHidden();
@@ -42,31 +43,31 @@ test('anonymous, expired and providerless sessions show a login card without pro
  await page.evaluate(()=>localStorage.setItem('pointsToken','expired-session'));
  await page.reload();await expect(login).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('pointsToken'))).toBeNull();
- await twitch(page);await login.getByRole('link',{name:'Continuar con Twitch'}).click();
- await expect(page.locator('.phone-profile')).toBeVisible({timeout:20000});
+ await twitch(page);await login.getByRole('button',{name:'Continuar con Twitch'}).click();
+ await page.waitForURL(/\/app(\?|#|$)/);await page.goto('/app#profile');await expect(page.locator('.phone-profile')).toBeVisible({timeout:20000});
  const me=await api(page,'/api/points/me');expect(me.body.wallet).toBeNull();expect(me.body.balance).toBe(10000);
  const market=await demo(page);
  await page.getByRole('button',{name:'Desconectar',exact:true}).click();
  await expect(login).toBeVisible();
- await page.goto('/app#history');await expect(login).toBeVisible();await expect(page.locator('#own-balance')).toBeHidden();
+ await page.goto('/app');await expect(login).toBeVisible();await expect(page.locator('#own-balance')).toBeHidden();
  await expect(page.locator('.phone-profile,.phone-market,.phone-position')).toHaveCount(0);
  const denied=await api(page,'/api/points/bet',{key:market.key,outcomeId:'victory',amount:100,requestId:randomUUID()});
  expect(denied.status).toBe(400);expect(denied.body.error).toContain('Twitch o Phantom');
- await login.getByRole('link',{name:'Continuar con Twitch'}).click();await expect(page.locator('.phone-profile')).toBeVisible({timeout:20000});
+ await login.getByRole('button',{name:'Continuar con Twitch'}).click();await page.waitForURL(/\/app(\?|#|$)/);await page.goto('/app#profile');await expect(page.locator('.phone-profile')).toBeVisible({timeout:20000});
  const restored=await api(page,'/api/points/me');expect(restored.body.id).toBe(me.body.id);expect(restored.body.balance).toBe(10000);
  expect(restored.body.ledger.filter((l:{kind:string})=>l.kind==='welcome')).toHaveLength(1);
 });
 
 test('Twitch alone can spend existing points in the app and public page without a Phantom provider',async({page,browser})=>{
- await twitch(page);await page.goto('/app');await page.getByRole('link',{name:'Continuar con Twitch'}).click();
- await expect(page.locator('.phone-profile')).toBeVisible({timeout:20000});
+ await twitch(page);await page.goto('/app');await page.getByRole('button',{name:'Continuar con Twitch'}).click();
+ await page.waitForURL(/\/app(\?|#|$)/);await expect(page.locator('#own-balance')).toBeVisible();
  expect(await page.evaluate(()=>!!(window as unknown as {phantom?:unknown}).phantom)).toBe(false);
  const owner=await browser.newPage();let market:{key:string},login:string;
  try{
   const identity=await twitch(owner);login=identity.login;
   await signIn(owner);
   const start=await api(owner,'/api/twitch/start',{});await owner.goto(start.body.url);
-  await expect(owner.locator('.phone-profile')).toBeVisible({timeout:20000});
+  await owner.waitForURL(/\/app(\?|#|$)/);await owner.goto('/app#profile');await expect(owner.locator('.phone-profile')).toBeVisible({timeout:20000});
   const created=await api(owner,'/api/streamer/markets',{channelLogin:login,title:'¿Gana el equipo?',options:['Gana','Pierde'],durationSeconds:1800,intentId:randomUUID()});
   expect(created.status).toBe(201);market=created.body;
  }finally{await owner.close();}
@@ -89,8 +90,8 @@ test('extension signs in with Twitch and spends internal points without connecti
  const context=await chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
  try{
   const identity=await twitch(context),worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker');
-  await expect.poll(()=>context.pages().find(p=>p.url().includes('/onboarding#flow='))?.url(),{timeout:15000}).toBeTruthy();
-  const page=context.pages().find(p=>p.url().includes('/onboarding#flow='))!;
+  await expect.poll(()=>context.pages().find(p=>p.url().includes('/app#flow='))?.url(),{timeout:15000}).toBeTruthy();
+  const page=context.pages().find(p=>p.url().includes('/app#flow='))!;
   await page.getByRole('button',{name:'Continuar con Twitch'}).click();
   await page.waitForURL(`${base}/app#markets`);await expect(page.locator('#own-balance')).toContainText('10.000');
   const stored=await worker.evaluate(async()=>{

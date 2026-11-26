@@ -12,7 +12,7 @@ test('streamer creates a Plot prediction in chat; viewer stakes on the public pa
   const url=new URL(route.request().url()),callback=new URL(url.searchParams.get('redirect_uri')!);callback.searchParams.set('state',url.searchParams.get('state')!);callback.searchParams.set('code','e2e-code');
   await route.fulfill({contentType:'text/html',body:`<a href="${callback.href}">Autorizar canal</a>`});
  });
- await page.goto('/onboarding?streamer=1');await page.getByRole('button',{name:'Conectar Phantom'}).click();
+ await page.goto('/app#profile');await page.getByRole('button',{name:'Conectar Phantom'}).click();
  await page.getByRole('button',{name:'Conectar Twitch'}).click();await page.getByRole('link',{name:'Autorizar canal'}).click();await expect(page.getByText(`@${login}`)).toBeVisible();
  const token=await page.evaluate(()=>localStorage.getItem('pointsToken')!),origin=new URL(page.url()).origin;
  const authorize=async(path:string,identity:unknown)=>{
@@ -35,7 +35,7 @@ test('streamer creates a Plot prediction in chat; viewer stakes on the public pa
  const markets=await (await context.request.get('/api/markets')).json();const native=markets.filter((m:{source?:string;prediction:{channel:string}})=>m.source==='plot'&&m.prediction.channel===login);expect(native).toHaveLength(1);expect(native[0].demo).toBe(false);
  const viewerContext=await browser.newContext({baseURL:origin});
  try{
-  const viewer=await viewerContext.newPage();await phantomProvider(viewer);await viewer.goto('/onboarding');await viewer.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await viewer.waitForURL('**/app#markets');
+  const viewer=await viewerContext.newPage();await phantomProvider(viewer);await viewer.goto('/app');await viewer.getByRole('button',{name:'Conectar Phantom',exact:true}).click();await viewer.waitForURL('**/app#markets');
   await viewer.goto(`/s/twitch/${login}`);await expect(viewer.getByText('¿Ganamos la partida?',{exact:true})).toBeVisible();
   for(const width of [360,700]){await viewer.setViewportSize({width,height:600});expect(await viewer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}
   await expect(viewer.getByText('Puntos internos de Plot · sin dinero real',{exact:true})).toBeVisible();
