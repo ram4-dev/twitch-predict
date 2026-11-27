@@ -94,7 +94,8 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env,p
    res.locals.context={points,byte,mirror,auth:new CloudAuth(points,documents),twitch:new CloudTwitchAuth(points,documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin})};next();
   }catch{res.status(503).json({error:'La base de Plot no está disponible'});}
  });
- if(env.PLOT_ONCHAIN_TWITCH_ENABLED==='true')app.get('/api/plot/v1/markets',marketReadHandler(documents.pool,documents.namespace));
+ if(env.PLOT_ONCHAIN_TWITCH_ENABLED==='true')app.get('/api/plot/v1/markets',marketReadHandler(documents.pool,documents.namespace,plot?.chainMarketRead));
+ if(plot?.intentsRouter)app.use('/api/plot/v1/intents',plot.intentsRouter);
  if(plot)app.use('/api/plot/v1',plotRouter(plot));
  const context=(res:express.Response)=>res.locals.context as {points:Points;byte:ByteService;mirror:ByteTwitchMirror;auth:CloudAuth;twitch:CloudTwitchAuth};
  app.get('/api/auth/config',(_req,res)=>res.json({origin:config.origin}));

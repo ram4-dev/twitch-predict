@@ -1,5 +1,5 @@
 /** Implementations must inspect the authoritative PaymentReceipt and verify every field. */
-export interface CreditReceipt { key:string; wallet:string; amount:string; signature:string; finalized:boolean; }
+export interface CreditReceipt { key:string; wallet:string; amount:string; signature:string|null; finalized:boolean; }
 export interface PlotChain {
  findPaymentReceipt(key:string):Promise<CreditReceipt|null>;
  /** Must use the same receipt key on every retry; the chain enforces uniqueness. */

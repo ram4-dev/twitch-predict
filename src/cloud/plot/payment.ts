@@ -1,4 +1,4 @@
-import {createHash} from 'node:crypto';
+import {plotIdentityHash} from './identity.js';
 
 /** Amounts are decimal PLOT strings; a provider never chooses the package or wallet. */
 export interface PaymentOrder { id:string; environment:'test'; wallet:string; amount:string; status:'pending'|'paid'; }
@@ -24,7 +24,7 @@ export class MockPaymentProvider implements PaymentProvider {
 
 /** Canonical provider identity; separate environments cannot collide. */
 export function paymentReceiptKey(provider:string,environment:string,id:string):string {
- return createHash('sha256').update(JSON.stringify([provider,environment,id])).digest('hex');
+ return plotIdentityHash('plot:payment:v1',[provider,environment,id]);
 }
 
 /** Durable sandbox provider. Confirmation must be exposed only in explicitly enabled test flows. */
