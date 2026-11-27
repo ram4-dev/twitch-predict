@@ -19,7 +19,8 @@ import {CloudTwitchBot} from './twitch-bot.js';
 import {proposalsRouter, type ProposalActorResolver} from '../proposals-router.js';
 import {ProposalService} from '../proposals-service.js';
 import {cloudConfig} from './config.js';
-export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
+import {plotRouter,type PlotRouterDependencies} from './plot/router.js';
+export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env,plot?:PlotRouterDependencies){
  const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
  const bot=new CloudTwitchBot(documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
  // Plan 2 mount: the bot derives viewer !plot crear to the proposal service (same aggregate + Documents).
@@ -82,6 +83,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
    res.locals.context={points,byte,mirror,auth:new CloudAuth(points,documents),twitch:new CloudTwitchAuth(points,documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin})};next();
   }catch{res.status(503).json({error:'La base de Plot no está disponible'});}
  });
+ if(plot)app.use('/api/plot/v1',plotRouter(plot));
  const context=(res:express.Response)=>res.locals.context as {points:Points;byte:ByteService;mirror:ByteTwitchMirror;auth:CloudAuth;twitch:CloudTwitchAuth};
  app.get('/api/auth/config',(_req,res)=>res.json({origin:config.origin}));
  app.post('/api/auth/extension/start',route(async(req,res)=>{

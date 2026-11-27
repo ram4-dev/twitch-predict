@@ -23,7 +23,7 @@ export class PaymentReconciler {
   if(!order||order.status!=='paid'||order.environment!=='test'||order.wallet!==expected.wallet||order.amount!==expected.amount)throw new Error('Payment not verified');
   await this.pool.query("UPDATE plot_private.plot_payment_orders SET status=CASE WHEN status='pending' THEN 'verified' ELSE status END,updated_at=now() WHERE namespace=$1 AND id=$2",[this.namespace,id]);
   const receipt=await this.chain.findPaymentReceipt(expected.key);
-  if(receipt){verifyReceipt(receipt,expected);await this.pool.query('UPDATE plot_private.plot_payment_orders SET status=CASE WHEN status='finalized' THEN status ELSE $3 END,signature=$4,updated_at=now() WHERE namespace=$1 AND id=$2',[this.namespace,id,receipt.finalized?'finalized':'submitted',receipt.signature]);return receipt;}
+  if(receipt){verifyReceipt(receipt,expected);await this.pool.query("UPDATE plot_private.plot_payment_orders SET status=CASE WHEN status='finalized' THEN status ELSE $3 END,signature=$4,updated_at=now() WHERE namespace=$1 AND id=$2",[this.namespace,id,receipt.finalized?'finalized':'submitted',receipt.signature]);return receipt;}
   // Persist intent before submission; retries use the same on-chain receipt key.
   const claim=await this.pool.query("UPDATE plot_private.plot_payment_orders SET status='submitted',updated_at=now() WHERE namespace=$1 AND id=$2 AND status='verified' RETURNING id",[this.namespace,id]);
   if(!claim.rowCount)return {...expected,signature:row.signature??'',finalized:false};

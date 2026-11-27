@@ -6,3 +6,18 @@ CREATE TABLE IF NOT EXISTS plot_private.plot_payment_orders (
  PRIMARY KEY(namespace,id), UNIQUE(namespace,provider,environment,id), UNIQUE(namespace,receipt_key)
 );
 REVOKE ALL ON plot_private.plot_payment_orders FROM PUBLIC;
+CREATE TABLE IF NOT EXISTS plot_private.plot_mock_payments (
+ namespace text NOT NULL, id text NOT NULL, wallet text NOT NULL, amount numeric(20,0) NOT NULL,
+ status text NOT NULL CHECK(status IN ('pending','paid')), PRIMARY KEY(namespace,id)
+);
+REVOKE ALL ON plot_private.plot_mock_payments FROM PUBLIC;
+CREATE TABLE IF NOT EXISTS plot_private.plot_twitch_markets (
+ namespace text NOT NULL, broadcaster text NOT NULL, prediction text NOT NULL, wallet text NOT NULL,
+ outcomes jsonb NOT NULL, closes_at timestamptz NOT NULL, timeout_at timestamptz NOT NULL,
+ phase text NOT NULL DEFAULT 'open', winner text, source text, PRIMARY KEY(namespace,broadcaster,prediction)
+);
+CREATE TABLE IF NOT EXISTS plot_private.plot_twitch_events (
+ namespace text NOT NULL, event_id text NOT NULL, fingerprint text NOT NULL,
+ PRIMARY KEY(namespace,event_id)
+);
+REVOKE ALL ON plot_private.plot_twitch_markets,plot_private.plot_twitch_events FROM PUBLIC;
