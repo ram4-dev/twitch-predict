@@ -36,3 +36,24 @@ test('account rejects another wallet and preserves confirming amounts', () => {
  assert.equal(parsePlotAccount(data,'wallet').balance,null); assert.throws(()=>parsePlotAccount(data,'other'));
  assert.throws(()=>parsePlotAccount({...data,balance:'-1'},'wallet'));
 });
+test('a persistence failure before submission never sends signed bytes', async () => {
+ const base=storage(); let fail=false, sent=0;
+ const store={getItem:base.getItem,async setItem(k:string,v:string){ if(fail && JSON.parse(v).stage==='submitting') throw new Error('disk'); await base.setItem(k,v); }};
+ const api:PlotIntentApi={async prepare(){return {id:'i',transaction:'YWJj',lastValidBlockHeight:4,status:'prepared'};},async submit(){sent++;},async reconcile(){return 'confirmed';}};
+ const controller=new PlotIntentController(store,api,{async sign(){return 'c2ln';}},'test'); await controller.start('key',request); fail=true;
+ await assert.rejects(()=>controller.signAndSubmit()); assert.equal(sent,0); assert.equal((await controller.state())?.stage,'prepared');
+});
+test('a persistence failure after submission retains the uncertain state', async () => {
+ const base=storage(); let fail=false, sent=0;
+ const store={getItem:base.getItem,async setItem(k:string,v:string){if(fail && JSON.parse(v).stage==='submitted') throw new Error('disk'); await base.setItem(k,v);}};
+ const api:PlotIntentApi={async prepare(){return {id:'i',transaction:'YWJj',lastValidBlockHeight:4,status:'prepared'};},async submit(){sent++;},async reconcile(){return 'confirmed';}};
+ const controller=new PlotIntentController(store,api,{async sign(){return 'c2ln';}},'test'); await controller.start('key',request); fail=true;
+ await assert.rejects(()=>controller.signAndSubmit()); assert.equal(sent,1); assert.equal((await controller.state())?.stage,'submitting'); assert.equal((await controller.reconcile()).stage,'confirmed');
+});
+test('authenticated transport keeps idempotency header and sends bearer only to the injected endpoint', async () => {
+ const {plotTransport}=await import('../mobile/src/lib/plot-account-client.js'); const {PlotHttpIntentApi}=await import('../mobile/src/lib/plot-intent-client.js');
+ let actualUrl='', headers: Record<string,string> = {};
+ const transport=plotTransport('https://fixture.invalid',async()=> 'fixture-token',async (url,init)=>{actualUrl=String(url);headers=init?.headers as Record<string,string>;return new Response(JSON.stringify({id:'i',transaction:'YWJj',lastValidBlockHeight:1,status:'prepared'}),{status:200});});
+ await new PlotHttpIntentApi(transport).prepare('key',request);
+ assert.equal(actualUrl,'https://fixture.invalid/api/plot/v1/intents'); assert.equal(headers.authorization,'Bearer fixture-token'); assert.equal(headers['Idempotency-Key'],'key');
+});
