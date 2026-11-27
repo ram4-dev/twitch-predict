@@ -6,7 +6,7 @@ export type IntentStatus = 'prepared' | 'submitted' | 'confirmed' | 'failed' | '
 export type Prepared = { id: string; transaction: string; lastValidBlockHeight: number; status: IntentStatus };
 export type IntentState = { key: string; request: PlotRequest; id?: string; stage: 'preparing' | 'prepared' | 'submitting' | 'submitted' | 'confirmed' | 'failed' | 'expired_absent' };
 export interface PlotIntentApi { prepare(key: string, request: PlotRequest): Promise<Prepared>; submit(id: string, transaction: string): Promise<void>; reconcile(id: string): Promise<IntentStatus> }
-export interface PlotTransactionSigner { sign(transaction: string, expectedWallet: string): Promise<string> }
+export interface PlotTransactionSigner { sign(transaction: string, expectedWallet: string, request: PlotRequest): Promise<string> }
 const statuses: IntentStatus[] = ['prepared','submitted','confirmed','failed','expired_absent'];
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const u64 = (x: unknown) => typeof x === 'string' && /^(0|[1-9]\d*)$/.test(x) && BigInt(x) <= 18446744073709551615n;
@@ -62,7 +62,7 @@ export class PlotIntentController {
     const state = await this.load(); if (!state || state.stage !== 'prepared' || !state.id) throw new Error('Intención no preparada.');
     const { prepared } = await this.prepareSaved(state);
     if (prepared.status !== 'prepared') return state;
-    const signed = await this.signer.sign(prepared.transaction, state.request.wallet);
+    const signed = await this.signer.sign(prepared.transaction, state.request.wallet, state.request);
     state.stage = 'submitting'; await this.save(state);
     await this.api.submit(prepared.id, signed);
     state.stage = 'submitted'; await this.save(state); return state;
