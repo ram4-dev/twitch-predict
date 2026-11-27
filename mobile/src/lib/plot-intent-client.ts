@@ -11,7 +11,7 @@ const statuses: IntentStatus[] = ['prepared','submitted','confirmed','failed','e
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const u64 = (x: unknown) => typeof x === 'string' && /^(0|[1-9]\d*)$/.test(x) && BigInt(x) <= 18446744073709551615n;
 function validateRequest(r: PlotRequest) {
-  if (!r.wallet || !/^[0-9a-f]{64}$/i.test(r.parameters.marketIdentity) || !['place_prediction','claim'].includes(r.operation)) throw new Error('Intención PLOT inválida.');
+  if (!r.wallet || !/^[0-9a-f]{64}$/.test(r.parameters.marketIdentity) || !['place_prediction','claim'].includes(r.operation)) throw new Error('Intención PLOT inválida.');
   if (r.operation === 'place_prediction' && (!Number.isInteger(r.parameters.option) || r.parameters.option! < 0 || r.parameters.option! > 5 || !u64(r.parameters.amount) || r.parameters.amount === '0' || !u64(r.parameters.sequence))) throw new Error('Predicción PLOT inválida.');
   if (r.operation === 'claim' && (r.parameters.option !== undefined || r.parameters.amount !== undefined || r.parameters.sequence !== undefined)) throw new Error('Cobro PLOT inválido.');
 }
