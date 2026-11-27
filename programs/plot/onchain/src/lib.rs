@@ -4,7 +4,7 @@ use anchor_spl::token_2022::{self, spl_token_2022, Burn, MintTo, Token2022};
 use anchor_spl::token_interface::{Mint, TokenAccount};
 use spl_token_2022::extension::ExtensionType;
 
-declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZ7FEfcYkgMQHGc8XzX9W");
+declare_id!("8mL78rx2dZufBaBiMnFQG2hCzENKd7euRWurZtp8gEpc");
 
 #[program]
 pub mod plot {
@@ -386,13 +386,14 @@ pub struct CreateMarket<'info> {
 
 #[derive(Accounts)]
 pub struct PlacePrediction<'info> {
-    #[account(mut)]
     pub owner: Signer<'info>,
+    #[account(mut)]
+    pub payer: Signer<'info>,
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
     #[account(mut, has_one = config, seeds = [b"market", config.key().as_ref(), market.identity.as_ref()], bump = market.bump)]
     pub market: Account<'info, Market>,
-    #[account(init_if_needed, payer = owner, space = 8 + Position::INIT_SPACE, seeds = [b"position", market.key().as_ref(), owner.key().as_ref()], bump)]
+    #[account(init_if_needed, payer = payer, space = 8 + Position::INIT_SPACE, seeds = [b"position", market.key().as_ref(), owner.key().as_ref()], bump)]
     pub position: Account<'info, Position>,
     #[account(mut, address = config.mint, mint::token_program = token_program)]
     pub mint: InterfaceAccount<'info, Mint>,

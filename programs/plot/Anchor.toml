@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-plot = "Fg6PaFpoGXkYsidMpWxTWqkZ7FEfcYkgMQHGc8XzX9W"
+plot = "8mL78rx2dZufBaBiMnFQG2hCzENKd7euRWurZtp8gEpc"
 
 [provider]
 cluster = "Localnet"
