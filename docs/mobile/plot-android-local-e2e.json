@@ -29,5 +29,13 @@
   "claimSignature": "H4xCQdMzBssGxt79jpyKRJdLyVBjVuN8HCQ6NWnBLSyUw64cPZ87U19N4QPDm8nshdhiwKwSdK2g5yp254TWm6f",
   "signatureVerification": "Both signatures queried from the local validator with searchTransactionHistory: finalized, err null.",
   "limitations": "The 600/400 resolved winner case was validated by the backend team locally, not in this Android run. A separate earlier prepared intention survived force-stop but its blockhash expired during the interruption; its ambiguous submitted state was preserved and was not retried.",
-  "method": "Android UI driven by uiautomator2 and explicit test harness signal; local RPC and sponsor database were checked separately. The script is provided for reproduction but was assembled after the observed run."
+  "method": "Android UI driven by uiautomator2 and explicit test harness signal; local RPC and sponsor database were checked separately. The script is provided for reproduction but was assembled after the observed run.",
+  "priorAmbiguousIntent": {
+    "scope": "separate first local validator; not retried",
+    "id": "1959067a-fe8c-4c3a-968a-1d09e2a1ddf1",
+    "status": "submitted",
+    "signature": "5zH2muVVXv7Um52HHp4TqnRarDq6dgZkuHDUvJY2gsFVVkbZXbt6MVTnkvfSYsGWCGz4aXjGxjxw97NQuZtvrsKJ",
+    "block_height": 578,
+    "historyResult": null
+  }
 }
