@@ -1,9 +1,9 @@
 /** PLOT quantities are decimal integer strings; never mix them with Byte. */
 export type PlotAmount = string;
 export type PlotMarket = {
-  id: string; title: string; status: 'open' | 'pending' | 'resolved' | 'cancelled';
-  options: { id: string; label: string; stake: PlotAmount }[];
-  winnerId?: string; streamerFee: PlotAmount; treasuryFee: PlotAmount;
+  id: string; title: string; status: 'open' | 'pending' | 'resolved' | 'cancelled' | null;
+  options: { id: string; label: string; stake: PlotAmount | null }[];
+  winnerId?: string; streamerFee: PlotAmount | null; treasuryFee: PlotAmount | null;
 };
 export type PlotPosition = { marketId: string; optionId: string; stake: PlotAmount; payout: PlotAmount; claimed: boolean };
 export type PlotSnapshot = { balance: PlotAmount; markets: PlotMarket[]; positions: PlotPosition[] };
@@ -26,12 +26,13 @@ function integer(value: string): bigint {
 }
 /** Estimate includes the new stake in both the selected side and the pool. */
 export function estimatePayout(market: PlotMarket, optionId: string, amount: PlotAmount, existingStake: PlotAmount = '0'): PlotAmount {
+  if (market.status !== 'open' || market.streamerFee === null || market.treasuryFee === null || market.options.some(item => item.stake === null)) throw new Error('Datos del mercado confirmando');
   const stake = integer(amount);
   const ownStake = stake + integer(existingStake);
   const option = market.options.find(item => item.id === optionId);
   if (!option) throw new Error('Opción desconocida');
-  const total = market.options.reduce((sum, item) => sum + integer(item.stake), 0n) + stake;
-  const selected = integer(option.stake) + stake;
+  const total = market.options.reduce((sum, item) => sum + integer(item.stake!), 0n) + stake;
+  const selected = integer(option.stake!) + stake;
   if (selected === 0n) return '0';
   const net = total - total * 200n / 10000n - total * 200n / 10000n;
   return (ownStake * net / selected).toString();

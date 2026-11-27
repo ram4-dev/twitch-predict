@@ -36,14 +36,14 @@ export class PlotFixtureClient implements PlotPort {
     if (request.operation === 'purchase') amount(request.amount);
     if (request.operation === 'predict') {
       const n = amount(request.amount), market = s.snapshot.markets.find(m => m.id === request.marketId);
-      if (!market || market.status !== 'open' || !market.options.some(o => o.id === request.optionId)) throw new Error('Mercado u opción no disponible.');
+      if (!market || market.status !== 'open' || market.streamerFee === null || market.treasuryFee === null || market.options.some(o => o.stake === null) || !market.options.some(o => o.id === request.optionId)) throw new Error('Mercado u opción no disponible.');
       if (n > BigInt(s.snapshot.balance)) throw new Error('Saldo PLOT insuficiente.');
       const position = s.snapshot.positions.find(p => p.marketId === market.id);
       if (position && position.optionId !== request.optionId) throw new Error('Ya elegiste otra opción en este mercado.');
     }
     if (request.operation === 'claim') {
       const market = s.snapshot.markets.find(m => m.id === request.marketId), position = s.snapshot.positions.find(p => p.marketId === request.marketId);
-      if (!market || !['resolved', 'cancelled'].includes(market.status) || !position || position.claimed || BigInt(position.payout) === 0n) throw new Error('No hay cobro disponible.');
+      if (!market || (market.status !== 'resolved' && market.status !== 'cancelled') || !position || position.claimed || BigInt(position.payout) === 0n) throw new Error('No hay cobro disponible.');
     }
     const intent: Pending = { id: `fixture-${++s.sequence}`, operation: request.operation, status: 'pending', request };
     s.pending = intent;
@@ -62,7 +62,7 @@ export class PlotFixtureClient implements PlotPort {
       const option = market.options.find(o => o.id === request.optionId)!;
       const n = amount(request.amount);
       s.snapshot.balance = (BigInt(s.snapshot.balance) - n).toString();
-      option.stake = (BigInt(option.stake) + n).toString();
+      option.stake = (BigInt(option.stake!) + n).toString();
       const position = s.snapshot.positions.find(p => p.marketId === market.id);
       if (position) position.stake = (BigInt(position.stake) + n).toString();
       else s.snapshot.positions.push({ marketId: market.id, optionId: option.id, stake: request.amount, payout: '0', claimed: false });

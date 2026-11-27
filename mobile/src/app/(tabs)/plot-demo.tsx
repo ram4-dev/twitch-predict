@@ -2,11 +2,22 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Action, Copy, Notice, Screen, Title, styles } from '../../components/ui';
+import { PlotLiveMarkets } from '../../components/plot-live-markets';
+import { usePlot } from '../../lib/state';
 import { PlotFixtureClient } from '../../lib/plot-fixture-client';
 import { estimatePayout, type PlotIntent, type PlotSnapshot, type PlotPort } from '../../lib/plot-onchain';
 
 const fixture = new PlotFixtureClient(AsyncStorage);
-export default function PlotDemo() { return <PlotFixtureScreen client={fixture} />; }
+export default function PlotDemo() {
+  const [mode, setMode] = useState<'choose' | 'fixture' | 'read'>('choose');
+  const { base } = usePlot();
+  if (mode === 'fixture') return <PlotFixtureScreen client={fixture} />;
+  return <Screen>
+    <Title>PLOT</Title>
+    <Notice>Los puntos PLOT se mantienen separados de Byte y del saldo retirable.</Notice>
+    {mode === 'choose' ? <><Action title="Consultar mercados" onPress={() => setMode('read')} /><Action title="Abrir simulación local" secondary onPress={() => setMode('fixture')} /></> : <><Action title="Cambiar modo" secondary onPress={() => setMode('choose')} /><PlotLiveMarkets base={base} /></>}
+  </Screen>;
+}
 export function PlotFixtureScreen({ client }: { client: PlotPort }) {
   const [amount, setAmount] = useState('600');
   const [option, setOption] = useState('yes');
@@ -50,11 +61,11 @@ export function PlotFixtureScreen({ client }: { client: PlotPort }) {
           </View>}
           {market && <View style={styles.panel}>
             <Copy style={styles.section}>{market.title}</Copy>
-            <Copy>Abierta · Elegí un resultado</Copy>
+            <Copy>{market.status === 'open' && estimate !== null ? 'Abierta · Elegí un resultado' : 'Datos del mercado confirmando'}</Copy>
             {market.options.map(item => <Action key={item.id} title={`${item.label}${option === item.id ? ' · elegida' : ''}`} secondary={option !== item.id} onPress={() => setOption(item.id)} />)}
             <Copy>Monto en PLOT</Copy>
             <TextInput accessibilityLabel="Monto en PLOT" keyboardType="number-pad" value={amount} onChangeText={setAmount} style={styles.input} />
-            <Copy>{estimate === null ? 'Ingresá una cantidad entera válida.' : `Cobro total estimado: ${estimate} PLOT`}</Copy>
+            <Copy>{estimate === null ? 'Estimación no disponible mientras faltan datos confirmados o el monto es inválido.' : `Cobro total estimado: ${estimate} PLOT`}</Copy>
             {estimate !== null && <Copy>Ganancia neta estimada: {(BigInt(estimate) - BigInt(amount) - BigInt(currentPosition?.optionId === option ? currentPosition.stake : '0')).toString()} PLOT</Copy>}
             <Copy>Incluye tu apuesta y comisiones del 2% para el streamer y 2% para tesorería. La estimación puede cambiar.</Copy>
             <Action title="Simular predicción" disabled={disabled || estimate === null || amount === '0'} onPress={() => action(() => client.predict(market.id, option, amount), 'Predicción simulada pendiente.')} />
@@ -67,11 +78,11 @@ export function PlotFixtureScreen({ client }: { client: PlotPort }) {
             const terminal = item.status === 'cancelled' || item.status === 'resolved';
             return <View key={item.id} style={styles.panel}>
               <Copy style={styles.section}>{item.title}</Copy>
-              <Copy>{item.status === 'cancelled' ? 'Cancelada · devolución completa' : item.status === 'resolved' ? `Ganó ${winner?.label} · perdió ${item.options.filter(o => o.id !== item.winnerId).map(o => o.label).join(', ')}` : 'Abierta · resultado pendiente'}</Copy>
+              <Copy>{item.status === 'cancelled' ? 'Cancelada · devolución completa' : item.status === 'resolved' ? `Ganó ${winner?.label} · perdió ${item.options.filter(o => o.id !== item.winnerId).map(o => o.label).join(', ')}` : item.status === 'open' ? 'Abierta · resultado pendiente' : 'Estado confirmando'}</Copy>
               <Copy>Tu opción: {chosen.label} · Apuesta: {position.stake} PLOT</Copy>
               {terminal && <><Copy>Cobro total: {position.payout} PLOT · Neto: {(BigInt(position.payout) - BigInt(position.stake)).toString()} PLOT</Copy>
-                <Copy>Comisión streamer: {item.streamerFee} PLOT · Tesorería: {item.treasuryFee} PLOT</Copy>
-                <Action title={position.claimed ? 'Cobrado en simulación' : 'Simular cobro'} disabled={disabled || position.claimed || position.payout === '0'} onPress={() => action(() => client.claim(item.id), 'Cobro simulado pendiente.')} /></>}
+                <Copy>Comisión streamer: {item.streamerFee === null ? 'confirmando' : `${item.streamerFee} PLOT`} · Tesorería: {item.treasuryFee === null ? 'confirmando' : `${item.treasuryFee} PLOT`}</Copy>
+                <Action title={position.claimed ? 'Cobrado en simulación' : 'Simular cobro'} disabled={disabled || position.claimed || position.payout === '0' || item.streamerFee === null || item.treasuryFee === null || item.options.some(o => o.stake === null)} onPress={() => action(() => client.claim(item.id), 'Cobro simulado pendiente.')} /></>}
             </View>;
           })}
         </>}

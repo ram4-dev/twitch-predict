@@ -19,3 +19,16 @@ test('fixture recovers a pending operation across reopening without duplicating 
  const refund = await reopened.claim('cancelled'); await reopened.reconcile(refund.id);
  assert.equal((await reopened.read()).balance, '1560');
 });
+test('failed persistence cannot confirm or apply a purchase', async () => {
+ const base = storage(); let fail = false;
+ const store = { getItem: base.getItem, async setItem(k: string, v: string) { if (fail) throw new Error('storage unavailable'); await base.setItem(k, v); } };
+ const client = new PlotFixtureClient(store); await client.login();
+ fail = true; await assert.rejects(() => client.purchase('600'));
+ fail = false; assert.equal((await client.session()).pending, null); assert.equal((await client.read()).balance, '0');
+});
+test('concurrent fixture requests admit only one pending intention', async () => {
+ const client = new PlotFixtureClient(storage()); await client.login();
+ const results = await Promise.allSettled([client.purchase('600'), client.purchase('600')]);
+ assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+ assert.equal(results.filter(r => r.status === 'rejected').length, 1);
+});
