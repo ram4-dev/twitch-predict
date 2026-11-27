@@ -7,6 +7,8 @@ import {TwitchSource} from '../twitch-source.js';
 import {cloudConfig} from './config.js';
 import {Documents} from './documents.js';
 import {CloudTwitchBot} from './twitch-bot.js';
+import {HelixPredictionSource,ensurePredictionSubscriptions} from './plot/twitch-adapter.js';
+import {TwitchProjection} from './plot/twitch.js';
 const config=cloudConfig(),documents=new Documents(config.database,config.namespace),owner=randomUUID();
 await documents.migrate();
 const bot=new CloudTwitchBot(documents,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
@@ -41,6 +43,13 @@ while(!stopping){
     const byte=new ByteService('',process.env.BYTE_API_KEY??'',process.env.BYTE_BASE_URL||undefined,fetch,documents);await byte.load();
     const source=new TwitchSource(points);
     const mirror=new ByteTwitchMirror('',byte,source,Date.now,documents);await mirror.load();
+    if(process.env.PLOT_ONCHAIN_TWITCH_ENABLED==='true'&&!lost&&!stopping){
+     try{if(process.env.PLOT_TWITCH_EVENTSUB_REGISTER==='true')await ensurePredictionSubscriptions({clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',userToken:process.env.PLOT_TWITCH_USER_TOKEN??'',secret:process.env.PLOT_TWITCH_EVENTSUB_SECRET??'',callback:`${config.origin}/api/plot/v1/twitch/eventsub`});
+     const projection=new TwitchProjection(documents.pool,documents.namespace);
+     const source=new HelixPredictionSource(documents.pool,documents.namespace,process.env.TWITCH_CLIENT_ID??'',process.env.PLOT_TWITCH_USER_TOKEN??'');
+     for(const event of await source.poll()){if(lost||stopping)break;await projection.ingest(event);}
+     }catch{console.error('PLOT Twitch reconciliation unavailable; retrying');}
+    }
     // Configured channels seed the list; authenticated viewers can enqueue any valid channel.
     await documents.update('byte-twitch',()=>({version:1,channels:[] as string[],mirrors:{}}),s=>{s.channels=[...new Set([...s.channels,...config.channels])];});
     if(!lost&&!stopping){if(process.env.POINTS_PAYMENTS_ENABLED==='true'){for(const channel of config.channels)if(!points.channels().includes(channel))await points.watch(channel);await source.sync();}else await mirror.sync();}

@@ -57,3 +57,33 @@ test('worker locks before resolving and cancels on timeout with Twitch offline',
   phase='open';await reconcileTwitchMarkets(d.pool,d.namespace,chain,Date.parse('2100-01-01'));assert.equal(phase,'canceled');
  }finally{await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
 });
+
+test('signed EventSub HTTP and nullable mobile market DTO', {skip:!url||!process.env.PORTLESS_URL},async()=>{
+ const {cloudApp}=await import('../src/cloud/app.js');const {createHmac}=await import('node:crypto');
+ const d=new Documents(url!,`plot_test_${randomUUID()}`);await d.migrate();const projection=new TwitchProjection(d.pool,d.namespace);
+ await projection.register({wallet:'w',twitch:{id:'b'}},{broadcaster:'b',prediction:'p',outcomes:['yes','no'],closesAt:'2030-01-01T00:00:00Z',timeoutAt:'2030-01-02T00:00:00Z'});
+ const secret='fixture-secret-only',app=cloudApp(d,{AUTH_ORIGIN:'https://plot.example',DATABASE_URL:url!,PLOT_NAMESPACE:d.namespace,PLOT_ONCHAIN_TWITCH_ENABLED:'true',PLOT_TWITCH_EVENTSUB_SECRET:secret});
+ const server=app.listen(Number(process.env.PORT),'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
+ try{
+  const base=process.env.PORTLESS_URL!,time=new Date().toISOString(),id='message-one';
+  const body=JSON.stringify({subscription:{type:'channel.prediction.end',version:'1',condition:{broadcaster_user_id:'b'}},event:{id:'p',broadcaster_user_id:'b',status:'resolved',winning_outcome_id:'yes'}});
+  const sig='sha256='+createHmac('sha256',secret).update(id+time).update(body).digest('hex');
+  const headers={'content-type':'application/json','twitch-eventsub-message-id':id,'twitch-eventsub-message-timestamp':time,'twitch-eventsub-message-signature':sig,'twitch-eventsub-message-type':'notification'};
+  const webhook=()=>fetch(`${base}/api/plot/v1/twitch/eventsub`,{method:'POST',headers,body});
+  assert.equal((await webhook()).status,204);assert.equal((await webhook()).status,204);
+  assert.equal((await fetch(`${base}/api/plot/v1/twitch/eventsub`,{method:'POST',headers:{...headers,'twitch-eventsub-message-signature':'bad'},body})).status,403);
+  const response=await fetch(`${base}/api/plot/v1/markets`);assert.equal(response.status,200);
+  const result=await response.json() as {markets:{id:string;winnerId:string;chainStatus:null;streamerFee:null;options:{stake:null}[]}[]};
+  assert.equal(result.markets[0].id,'b:p');assert.equal(result.markets[0].winnerId,'yes');assert.equal(result.markets[0].chainStatus,null);assert.equal(result.markets[0].streamerFee,null);assert.equal(result.markets[0].options[0].stake,null);
+ }finally{app.locals.liveMarkets.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
+});
+
+test('Helix requires scoped broadcaster token and preserves labels without treating Twitch points as PLOT', {skip:!url},async()=>{
+ const {HelixPredictionSource}=await import('../src/cloud/plot/twitch-adapter.js');const d=new Documents(url!,`plot_test_${randomUUID()}`);await d.migrate();try{
+  const p=new TwitchProjection(d.pool,d.namespace);await p.register({wallet:'w',twitch:{id:'b'}},{broadcaster:'b',prediction:'p',outcomes:['yes','no'],closesAt:'2030-01-01T00:00:00Z',timeoutAt:'2030-01-02T00:00:00Z'});
+  const request:typeof fetch=async input=>String(input).includes('/validate')?Response.json({client_id:'client',user_id:'b',scopes:['channel:read:predictions']}):Response.json({data:[{id:'p',broadcaster_id:'b',status:'RESOLVED',title:'Match',outcomes:[{id:'yes',title:'Sí',channel_points:999},{id:'no',title:'No'}],winning_outcome_id:'yes'}]});
+  const source=new HelixPredictionSource(d.pool,d.namespace,'client','fixture-token',request),events=await source.poll();assert.equal(events[0].winner,'yes');await p.ingest(events[0]);
+  const {rows}=await d.pool.query('SELECT title,outcome_labels FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);assert.deepEqual(rows[0],{title:'Match',outcome_labels:{yes:'Sí',no:'No'}});
+  await assert.rejects(new HelixPredictionSource(d.pool,d.namespace,'other','fixture-token',request).poll());
+ }finally{await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
+});
