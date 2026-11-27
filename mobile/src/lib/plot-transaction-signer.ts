@@ -1,14 +1,16 @@
 import { Buffer } from 'buffer';
 import { PublicKey, Transaction } from '@solana/web3.js';
-import type { PlotTransactionSigner } from './plot-intent-client';
+import { validatePlotTransaction, type PlotSigningPolicy } from './plot-transaction-policy';
+import type { PlotRequest, PlotTransactionSigner } from './plot-intent-client';
 export interface PlotWalletPort { connect(): Promise<{ publicKey: PublicKey }>; signTransaction(tx: Transaction): Promise<Transaction> }
 /** Checks the wallet and exact message independently of the fee payer. */
 export class PlotWalletSigner implements PlotTransactionSigner {
-  constructor(private readonly wallet: PlotWalletPort) {}
-  async sign(encoded: string, expectedWallet: string): Promise<string> {
+  constructor(private readonly wallet: PlotWalletPort, private readonly policy?: PlotSigningPolicy) {}
+  async sign(encoded: string, expectedWallet: string, request?: PlotRequest): Promise<string> {
     if (encoded.length > 2000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new Error('Transacción inválida.');
     const tx = Transaction.from(Buffer.from(encoded, 'base64'));
     const expected = new PublicKey(expectedWallet);
+    if (this.policy) { if (!request || request.wallet !== expectedWallet) throw new Error('Falta la solicitud PLOT verificada.'); validatePlotTransaction(tx, request, this.policy); }
     const account = await this.wallet.connect();
     if (!account.publicKey.equals(expected)) throw new Error('La wallet cambió.');
     const message = Buffer.from(tx.serializeMessage());
