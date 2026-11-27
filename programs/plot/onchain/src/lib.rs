@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{program::invoke, system_instruction};
-use anchor_spl::token_2022::{spl_token_2022, Token2022};
+use anchor_spl::token_2022::{self, spl_token_2022, MintTo, Token2022};
+use anchor_spl::token_interface::{Mint, TokenAccount};
 use spl_token_2022::extension::ExtensionType;
 
 declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZ7FEfcYkgMQHGc8XzX9W");
@@ -93,6 +94,43 @@ pub mod plot {
         ctx.accounts.config.mint = ctx.accounts.mint.key();
         Ok(())
     }
+    pub fn credit_points(
+        ctx: Context<CreditPoints>,
+        payment_hash: [u8; 32],
+        amount: u64,
+    ) -> Result<()> {
+        require!(amount > 0, PlotError::InvalidAmount);
+        let receipt = &mut ctx.accounts.receipt;
+        if receipt.initialized {
+            require!(
+                receipt.owner == ctx.accounts.owner.key()
+                    && receipt.amount == amount
+                    && receipt.mint == ctx.accounts.mint.key(),
+                PlotError::ReceiptMismatch
+            );
+            return Ok(());
+        }
+        let bump = ctx.bumps.mint_authority;
+        let seeds: &[&[u8]] = &[b"mint_authority", &[bump]];
+        token_2022::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.destination.to_account_info(),
+                    authority: ctx.accounts.mint_authority.to_account_info(),
+                },
+                &[seeds],
+            ),
+            amount,
+        )?;
+        receipt.initialized = true;
+        receipt.owner = ctx.accounts.owner.key();
+        receipt.mint = ctx.accounts.mint.key();
+        receipt.amount = amount;
+        receipt.payment_hash = payment_hash;
+        Ok(())
+    }
 }
 
 #[derive(Accounts)]
@@ -123,6 +161,38 @@ pub struct InitializeMint<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(payment_hash: [u8; 32])]
+pub struct CreditPoints<'info> {
+    #[account(mut, address = config.payment_authority)]
+    pub payment_authority: Signer<'info>,
+    #[account(seeds = [b"config"], bump = config.bump)]
+    pub config: Account<'info, Config>,
+    #[account(mut, address = config.mint, mint::token_program = token_program)]
+    pub mint: InterfaceAccount<'info, Mint>,
+    /// CHECK: owner is used only for associated account derivation and receipt identity.
+    pub owner: UncheckedAccount<'info>,
+    #[account(mut, associated_token::mint = mint, associated_token::authority = owner, associated_token::token_program = token_program)]
+    pub destination: InterfaceAccount<'info, TokenAccount>,
+    /// CHECK: verified mint authority PDA.
+    #[account(seeds = [b"mint_authority"], bump)]
+    pub mint_authority: UncheckedAccount<'info>,
+    #[account(init_if_needed, payer = payment_authority, space = 8 + PaymentReceipt::INIT_SPACE, seeds = [b"payment", config.key().as_ref(), payment_hash.as_ref()], bump)]
+    pub receipt: Account<'info, PaymentReceipt>,
+    pub token_program: Program<'info, Token2022>,
+    pub system_program: Program<'info, System>,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct PaymentReceipt {
+    pub initialized: bool,
+    pub owner: Pubkey,
+    pub mint: Pubkey,
+    pub amount: u64,
+    pub payment_hash: [u8; 32],
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct Config {
@@ -145,4 +215,8 @@ pub enum PlotError {
     InvalidAuthority,
     #[msg("Mint is already initialized")]
     MintAlreadyInitialized,
+    #[msg("Amount must be positive")]
+    InvalidAmount,
+    #[msg("Payment receipt differs from retry")]
+    ReceiptMismatch,
 }
