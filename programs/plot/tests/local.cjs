@@ -107,7 +107,42 @@ async function main() {
     while ((await connection.getBlockTime(await connection.getSlot('confirmed'))) < now4 + 10) await new Promise(r => setTimeout(r, 500));
     await program.methods.cancelMarket().accountsStrict({actor: bob.publicKey, config, market: market4}).signers([bob]).rpc();
     assert.equal((await program.account.market.fetch(market4)).state, 3);
-    console.log('PASS: Token-2022, idempotent credit, zero-SOL sponsor, rollback, resolution, fees, cancellation, timeout and zero-winner refund');
+    // Fill supply so the first 20-point fee can mint, but the second overflows u64.
+    const identity5 = bytes(16), market5 = pda(Buffer.from('market'), config.toBuffer(), Buffer.from(identity5));
+    const now5 = await connection.getBlockTime(await connection.getSlot('confirmed'));
+    await program.methods.createMarket(identity5, [bytes(10), bytes(11)], new BN(now5 + 8), new BN(now5 + 120), streamer.publicKey).accountsStrict({operator: admin.publicKey, config, market: market5, systemProgram}).rpc();
+    for (const [user, source, option, amount] of [[alice, a, 0, 600], [bob, b, 1, 400]]) {
+      const position = pda(Buffer.from('position'), market5.toBuffer(), user.publicKey.toBuffer());
+      await program.methods.placePrediction(option, new BN(amount), new BN(0)).accountsStrict({owner: user.publicKey, payer: admin.publicKey, config, market: market5, position, mint: mint.publicKey, source, tokenProgram, systemProgram}).signers([user]).rpc();
+    }
+    await program.methods.lockMarket().accountsStrict({actor: admin.publicKey, config, market: market5}).rpc();
+    const supplyBeforeFill = (await spl.getMint(connection, mint.publicKey, 'confirmed', tokenProgram)).supply;
+    const max = (1n << 64n) - 1n;
+    await credit(admin.publicKey, t, 17, (max - 20n - supplyBeforeFill).toString());
+    const beforeSupply = (await spl.getMint(connection, mint.publicKey, 'confirmed', tokenProgram)).supply;
+    const beforeTreasury = await balance(t), beforeStreamer = await balance(st);
+    assert.equal(beforeSupply, max - 20n);
+    while ((await connection.getBlockTime(await connection.getSlot('confirmed'))) < now5 + 8) await new Promise(r => setTimeout(r, 500));
+    const block = await connection.getLatestBlockhash('confirmed');
+    const overflowTx = await program.methods.resolveMarket(0).accountsStrict({resolver: admin.publicKey, config, market: market5, mint: mint.publicKey, treasury: admin.publicKey, streamer: streamer.publicKey, treasuryAta: t, streamerAta: st, mintAuthority, tokenProgram}).transaction();
+    overflowTx.feePayer = admin.publicKey; overflowTx.recentBlockhash = block.blockhash; overflowTx.sign(admin);
+    const overflowSignature = await connection.sendRawTransaction(overflowTx.serialize(), {skipPreflight: true});
+    const confirmation = await connection.confirmTransaction({...block, signature: overflowSignature}, 'confirmed');
+    assert.ok(confirmation.value.err, 'second fee mint must overflow on chain');
+    const overflowReceipt = await connection.getTransaction(overflowSignature, {commitment: 'confirmed', maxSupportedTransactionVersion: 0});
+    assert.ok(overflowReceipt?.meta?.err, 'failed transaction receipt must be recorded');
+    const overflowLogs = overflowReceipt.meta.logMessages.join('\n');
+    assert.equal((overflowLogs.match(/Instruction: MintTo/g) || []).length, 2, overflowLogs);
+    assert.match(overflowLogs, /Operation overflowed/);
+    assert.equal((await spl.getMint(connection, mint.publicKey, 'confirmed', tokenProgram)).supply, beforeSupply);
+    assert.equal(await balance(t), beforeTreasury); assert.equal(await balance(st), beforeStreamer);
+    assert.equal((await program.account.market.fetch(market5)).state, 1);
+    await credit(admin.publicKey, t, 18, 20);
+    assert.equal((await spl.getMint(connection, mint.publicKey, 'confirmed', tokenProgram)).supply, max);
+    await assert.rejects(credit(admin.publicKey, t, 19, 1));
+    assert.equal(await connection.getAccountInfo(receipt(19)), null);
+    assert.equal((await spl.getMint(connection, mint.publicKey, 'confirmed', tokenProgram)).supply, max);
+    console.log('PASS: Token-2022, credit, sponsor, resolution, refunds, timeout and second-CPI rollback at u64 limit');
   } finally { if (connection) connection._rpcWebSocket.close(); if (validator.exitCode === null && validator.signalCode === null) { validator.kill('SIGTERM'); await new Promise(resolve => validator.once('exit', resolve)); } rmSync(ledger, { recursive: true, force: true }); }
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });

@@ -20,7 +20,9 @@ Use SHA-256 over the UTF-8 domain `plot:market:v1` followed by the UTF-8
 strings `provider`, `channel ID`, `prediction ID`, each prefixed with its byte
 length as an unsigned four-byte little-endian integer. For payments use domain
 `plot:payment:v1` and fields `provider`, `environment`, `payment ID` in that
-order. These are client conventions: the program accepts 32-byte hashes and
+order. For an option use domain `plot:outcome:v1` and fields `broadcaster ID`,
+`prediction ID`, `outcome ID`; the backend must validate those hashes against
+the Market before exposing indices or submitting instructions. These are client conventions: the program accepts 32-byte hashes and
 cannot verify their original strings. Use exact provider IDs and environment
 names consistently, without implicit Unicode normalization. The sample vectors
 in `../idl/seed-vectors.json` can be reproduced by `node tests/vectors.cjs`.
@@ -41,3 +43,10 @@ isolated validator with temporary keys and ledger, then stops it. Verify the
 generated `target/idl/plot.json` matches the committed `idl/plot.json` after
 any change. The local test does not cover every required adversarial scenario,
 HTTP integration, Android, or devnet deployment.
+
+The local test also sends a resolution without preflight at supply
+`u64::MAX - 20`: the first 20-point fee succeeds, the second overflows,
+and the failed transaction receipt must contain both Token-2022 mint CPIs.
+It checks that the supply, fee accounts and locked market are unchanged.
+It then credits exactly 20 to reach `u64::MAX` and verifies that another
+credit fails without retaining its receipt. These are local test tokens.
