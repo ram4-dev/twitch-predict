@@ -32,7 +32,7 @@ async function authorize(wallet: Web3MobileWallet) {
   if (!account) throw new Error("La wallet no devolvió una cuenta.");
   return new PublicKey(Buffer.from(account.address, "base64"));
 }
-export function walletProvider(kind: WalletKind): WalletProvider & { signMessage(message: Uint8Array, expectedWallet: string): Promise<Uint8Array> } {
+export function walletProvider(kind: WalletKind): WalletProvider & { connect(): Promise<{ publicKey: PublicKey }>; signMessage(message: Uint8Array, expectedWallet: string): Promise<Uint8Array> } {
   let key: PublicKey | undefined;
   return {
     get publicKey() {
