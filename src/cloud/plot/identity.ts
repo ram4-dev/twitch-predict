@@ -6,3 +6,4 @@ export function plotIdentityHash(domain:string,parts:string[]):string{
  return h.digest('hex');
 }
 export const twitchMarketHash=(broadcaster:string,prediction:string)=>plotIdentityHash('plot:market:v1',['twitch',broadcaster,prediction]);
+export const twitchOutcomeHash=(broadcaster:string,prediction:string,outcome:string)=>plotIdentityHash('plot:outcome:v1',[broadcaster,prediction,outcome]);
