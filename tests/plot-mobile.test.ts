@@ -4,6 +4,8 @@ import { estimatePayout } from '../mobile/src/lib/plot-onchain.js';
 import { plotFixtureV1 } from '../mobile/src/fixtures/plot-v1.js';
 test('estimate includes own stake and separately rounded fees', () => {
   assert.equal(estimatePayout(plotFixtureV1.markets[0], 'yes', '600'), '960');
+  const market = { ...plotFixtureV1.markets[0], options: [{ id: 'yes', label: 'Sí', stake: '300' }, { id: 'no', label: 'No', stake: '400' }] };
+  assert.equal(estimatePayout(market, 'yes', '300', '300'), '960');
   assert.throws(() => estimatePayout(plotFixtureV1.markets[0], 'yes', '-1'));
   assert.throws(() => estimatePayout(plotFixtureV1.markets[0], 'missing', '1'));
 });

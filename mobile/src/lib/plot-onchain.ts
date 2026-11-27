@@ -11,6 +11,7 @@ export type PlotIntent = { id: string; operation: 'purchase' | 'predict' | 'clai
 /** Implementations must reconcile ambiguous submissions before accepting a retry. */
 export interface PlotPort {
   login(): Promise<void>;
+  session(): Promise<{ loggedIn: boolean; pending: PlotIntent | null }>;
   read(): Promise<PlotSnapshot>;
   purchase(amount: PlotAmount): Promise<PlotIntent>;
   predict(marketId: string, optionId: string, amount: PlotAmount): Promise<PlotIntent>;
@@ -24,13 +25,14 @@ function integer(value: string): bigint {
   return BigInt(value);
 }
 /** Estimate includes the new stake in both the selected side and the pool. */
-export function estimatePayout(market: PlotMarket, optionId: string, amount: PlotAmount): PlotAmount {
+export function estimatePayout(market: PlotMarket, optionId: string, amount: PlotAmount, existingStake: PlotAmount = '0'): PlotAmount {
   const stake = integer(amount);
+  const ownStake = stake + integer(existingStake);
   const option = market.options.find(item => item.id === optionId);
   if (!option) throw new Error('Opción desconocida');
   const total = market.options.reduce((sum, item) => sum + integer(item.stake), 0n) + stake;
   const selected = integer(option.stake) + stake;
   if (selected === 0n) return '0';
   const net = total - total * 200n / 10000n - total * 200n / 10000n;
-  return (stake * net / selected).toString();
+  return (ownStake * net / selected).toString();
 }
