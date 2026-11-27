@@ -14,7 +14,7 @@ test('RPC adapter rejects wrong genesis and requires finalized evidence', async 
     async sendRawTransaction() { return 'signature'; },
   } as unknown as Connection;
   await assert.rejects(devnetSponsorRpc(connection), /not devnet/);
-  genesis = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
+  genesis = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
   const rpc = await devnetSponsorRpc(connection);
   const signer = Keypair.generate();
   const message = new Transaction({feePayer:signer.publicKey,recentBlockhash:Keypair.generate().publicKey.toBase58()}).add(SystemProgram.transfer({fromPubkey:signer.publicKey,toPubkey:Keypair.generate().publicKey,lamports:1})).serializeMessage();

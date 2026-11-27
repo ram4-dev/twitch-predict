@@ -1,7 +1,7 @@
 import { Connection, Message } from '@solana/web3.js';
 import type { SponsorDependencies } from './sponsor.js';
 
-const DEVNET_GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
+const DEVNET_GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
 /** Call once at startup and use the returned methods only with this verified connection. */
 export async function devnetSponsorRpc(connection: Connection): Promise<Pick<SponsorDependencies, 'fee' | 'send' | 'outcome' | 'finalizedBlockHeight'>> {
   if (await connection.getGenesisHash() !== DEVNET_GENESIS) throw new Error('Sponsor RPC is not devnet');
