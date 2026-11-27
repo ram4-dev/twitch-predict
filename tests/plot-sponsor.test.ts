@@ -31,6 +31,8 @@ test('persistent sponsor binds messages, serializes budgets and retries identica
     assert.equal(a.id,b.id);
     await assert.rejects(service.prepare({...req,parameters:{amount:'400'}}),/Idempotency/);
     await assert.rejects(service.prepare({...req,idempotencyKey:'two'}),/budget/);
+    const unsigned = Transaction.from(Buffer.from(a.transaction,'base64'));
+    await assert.rejects(service.submit('u',a.id,unsigned.serialize({requireAllSignatures:false,verifySignatures:false}).toString('base64')),/no firmó/);
     const tx = Transaction.from(Buffer.from(a.transaction,'base64')); tx.partialSign(user);
     const revoked = new PlotSponsor(pool,sponsor,{...policy,programId:Keypair.generate().publicKey},deps);
     await assert.rejects(revoked.submit('u',a.id,tx.serialize({requireAllSignatures:false}).toString('base64')),/not allowed/);
@@ -52,6 +54,8 @@ test('persistent sponsor binds messages, serializes budgets and retries identica
     await assert.rejects(expanded.submit('u',pending.id,tx.serialize({requireAllSignatures:false}).toString('base64')),/terminal/);
     const replacement = await expanded.prepare({...req,idempotencyKey:'replacement'});
     assert.notEqual(replacement.id,pending.id);
+    const limited = new PlotSponsor(pool,sponsor,{...policy,maxGlobal:100n,maxPerUser:100n,maxRequestsPerHour:1},deps);
+    await assert.rejects(limited.prepare({...req,idempotencyKey:'rate'}),/budget/);
     const badProgram = new PlotSponsor(pool,sponsor,{...policy,programId:Keypair.generate().publicKey,maxGlobal:100n,maxPerUser:100n},deps);
     await assert.rejects(badProgram.prepare({...req,idempotencyKey:'bad-program'}),/not allowed/);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
