@@ -63,6 +63,9 @@ async function main() {
     const resolve = () => program.methods.resolveMarket(0).accountsStrict({resolver: admin.publicKey, config, market, mint: mint.publicKey, treasury: admin.publicKey, streamer: streamer.publicKey, treasuryAta: t, streamerAta: st, mintAuthority, tokenProgram}).rpc();
     await assert.rejects(resolve());
     while ((await connection.getBlockTime(await connection.getSlot('confirmed'))) < now + 8) await new Promise(r => setTimeout(r, 500));
+    await assert.rejects(program.methods.resolveMarket(0).accountsStrict({resolver: admin.publicKey, config, market, mint: mint.publicKey, treasury: admin.publicKey, streamer: streamer.publicKey, treasuryAta: t, streamerAta: t, mintAuthority, tokenProgram}).rpc());
+    assert.equal((await spl.getAccount(connection, t, 'confirmed', tokenProgram)).amount, 0n);
+    assert.equal((await program.account.market.fetch(market)).state, 1);
     await resolve(); await assert.rejects(resolve());
     const claim = user => program.methods.claim().accountsStrict({owner: user.publicKey, config, market, position: pos(user.publicKey), mint: mint.publicKey, destination: user === alice ? a : b, mintAuthority, tokenProgram}).signers([user]).rpc();
     await claim(alice); await assert.rejects(claim(alice)); await claim(bob);
