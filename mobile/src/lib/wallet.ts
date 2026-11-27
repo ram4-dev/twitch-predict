@@ -94,7 +94,7 @@ export function walletProvider(kind: WalletKind): WalletProvider & { connect(): 
     },
     async disconnect() {
       await SecureStore.deleteItemAsync(tokenKey);
-      await SeekerConnect.disconnect();
+      if (kind === "seeker") await SeekerConnect.disconnect();
       key = undefined;
     },
   };

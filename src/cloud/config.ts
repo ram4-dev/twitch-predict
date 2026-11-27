@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 const manifest=JSON.parse(readFileSync('extension/manifest.json','utf8')); 
 export function cloudConfig(env:NodeJS.ProcessEnv=process.env){
  const origin=new URL(env.AUTH_ORIGIN??'');
- const localTest=env.PLOT_E2E_LOCAL_ORIGIN==='true'&&env.PLOT_TEST_NETWORK==='localnet'&&origin.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(origin.hostname);
+ const localTest=env.PLOT_E2E_LOCAL_ORIGIN==='true'&&['localnet','devnet'].includes(env.PLOT_TEST_NETWORK??'')&&origin.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(origin.hostname);
  if((origin.protocol!=='https:'&&!localTest)||origin.origin!==env.AUTH_ORIGIN||origin.username||origin.password)throw new Error('AUTH_ORIGIN debe ser un origen HTTPS canónico');
  const channels=(env.PLOT_CHANNELS??'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
  if(channels.some(c=>! /^[a-z0-9_]{1,40}$/.test(c)))throw new Error('PLOT_CHANNELS inválido');

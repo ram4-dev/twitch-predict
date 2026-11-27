@@ -12,7 +12,7 @@ import {TwitchProjection,reconcileTwitchMarkets} from './plot/twitch.js';
 import {createPlotRuntimeFromEnv} from './plot/runtime.js';
 const config=cloudConfig(),documents=new Documents(config.database,config.namespace),owner=randomUUID();
 await documents.migrate();
-const plotRuntime=process.env.PLOT_ONCHAIN_WORKER_ENABLED==='true'?await createPlotRuntimeFromEnv(documents,process.env):null;
+const plotRuntime=process.env.PLOT_ONCHAIN_WORKER_ENABLED==='true'?await createPlotRuntimeFromEnv(documents,process.env).catch(()=>{console.error('PLOT test runtime configuration or RPC unavailable');process.exit(1);}):null;
 if(process.env.PLOT_ONCHAIN_WORKER_ENABLED==='true'&&!plotRuntime)throw new Error('PLOT_ONCHAIN_ENABLED required for worker');
 const bot=new CloudTwitchBot(documents,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
 let stopping=false,lost=false,lastPlotSubscriptionCheck=0;

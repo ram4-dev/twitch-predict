@@ -17,6 +17,7 @@ import {TwitchProjection} from './twitch.js';
 import {twitchMarketHash,twitchOutcomeHash} from './identity.js';
 import {SolanaPlotAdapter,verifiedTestConnection,testRpcTransport} from './solana.js';
 import type {PlotActor,PlotRouterDependencies} from './router.js';
+import {verifyTestProgramBinary} from './program-verification.js';
 
 type RuntimeOptions={connection:Connection;genesis:string;program:PublicKey;mint:PublicKey;payment:Keypair;resolver:Keypair;sponsor:Keypair;idl:PlotIdl;sponsorPool:Pool;policy:SponsorPolicy;chain:SolanaPlotAdapter;allowMockConfirmation:boolean};
 const discriminator=(name:string)=>createHash('sha256').update(`global:${name}`).digest().subarray(0,8);
@@ -64,7 +65,12 @@ export async function createPlotRuntimeFromEnv(documents:Documents,env:NodeJS.Pr
  const payment=secretKey(env,'PLOT_PAYMENT_KEYPAIR'),resolver=secretKey(env,'PLOT_RESOLVER_KEYPAIR'),sponsor=secretKey(env,'PLOT_SPONSOR_KEYPAIR');
  if(new Set([payment.publicKey.toBase58(),resolver.publicKey.toBase58(),sponsor.publicKey.toBase58()]).size!==3)throw new Error('Plot authorities must be distinct');
  execFileSync(process.execPath,['scripts/check-plot-idl.mjs','programs/plot/idl/plot.json'],{stdio:'ignore'});
- const idl=JSON.parse(readFileSync('programs/plot/idl/plot.json','utf8')) as PlotIdl;if(idl.address!==program.toBase58())throw new Error('Program ID and IDL mismatch');
+ const idl=JSON.parse(readFileSync('programs/plot/idl/plot.json','utf8')) as PlotIdl;
+ if(idl.address!==program.toBase58()){
+  await verifyTestProgramBinary(connection,program,required(env,'PLOT_TEST_PROGRAM_BINARY_SHA256'));
+  idl.address=program.toBase58();
+ }
+
  const sponsorUrl=required(env,'PLOT_SPONSOR_DATABASE_URL'),appUrl=new URL(required(env,'DATABASE_URL')),sponsorDb=new URL(sponsorUrl);
  if(!['postgres:','postgresql:'].includes(sponsorDb.protocol)||appUrl.hostname===sponsorDb.hostname&&appUrl.port===sponsorDb.port&&appUrl.pathname===sponsorDb.pathname)throw new Error('Sponsor requires a separate database');
  const sponsorPool=new Pool({connectionString:sponsorUrl,max:5,application_name:'plot-sponsor-test'});sponsorPool.on('error',()=>console.error('Sponsor database interrupted'));

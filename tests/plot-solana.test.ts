@@ -54,3 +54,13 @@ test('PDAs and identity hashes match Anchor f6bb39d published vectors',()=>{
  assert.equal(a.market(marketHash).toBase58(),'ENfRt2ry5Eo57v33mdM4H8597ZJ1JPa5chgU4hCSLZDa');
  assert.equal(a.payment(paymentHash).toBase58(),'AMiB8JdEeUYRZQEsJe4LAxrhCYfUsFLjjc9ifXx3uKpb');
 });
+
+test('test program override requires the exact finalized upgradeable binary',async()=>{
+ const {verifyTestProgramBinary}=await import('../src/cloud/plot/program-verification.js');
+ const loader=new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111'),program=k(),dataAddress=k(),binary=Buffer.from('verified-test-binary');
+ const programData=Buffer.alloc(45+binary.length);programData.writeUInt32LE(3);binary.copy(programData,45);
+ const programAccount=Buffer.alloc(36);programAccount.writeUInt32LE(2);dataAddress.toBuffer().copy(programAccount,4);
+ const rpc={async getAccountInfo(address:PublicKey){return address.equals(program)?{...account(loader,programAccount),executable:true}:account(loader,programData);}};
+ const expected=createHash('sha256').update(binary).digest('hex');await verifyTestProgramBinary(rpc,program,expected);
+ await assert.rejects(verifyTestProgramBinary(rpc,program,'00'.repeat(32)));
+});
