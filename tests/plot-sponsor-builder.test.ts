@@ -17,12 +17,15 @@ test('builder derives accounts, verifies ownership and bounds rent for sponsored
   const mintData=Buffer.alloc(82);mintData[45]=1;
   const tokenData=Buffer.alloc(165);mint.toBuffer().copy(tokenData,0);owner.toBuffer().copy(tokenData,32);tokenData.writeBigUInt64LE(600n,64);tokenData[108]=1;
   const info=(data:Buffer,ownerKey:PublicKey)=>({data,owner:ownerKey,lamports:1,executable:false,rentEpoch:0});
-  const connection={async getMultipleAccountsInfo(){return [info(c,program),info(m,program),null,info(mintData,tokenProgram),info(tokenData,tokenProgram)];},async getSlot(){return 1;},async getBlockTime(){return 1000;},async getLatestBlockhash(){return {blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:200};},async getMinimumBalanceForRentExemption(size:number){assert.equal(size,92);return 1234;}} as unknown as Connection;
-  let authorized=true;
-  const build=createPlotSponsorBuilder({connection,idl,program,mint,sponsor,ownsWallet:async()=>authorized,authorizeMarket:async()=>true});
+  const connection={async getGenesisHash(){return 'test-genesis';},async getMultipleAccountsInfo(){return [info(c,program),info(m,program),null,info(mintData,tokenProgram),info(tokenData,tokenProgram)];},async getSlot(){return 1;},async getBlockTime(){return 1000;},async getLatestBlockhash(){return {blockhash:Keypair.generate().publicKey.toBase58(),lastValidBlockHeight:200};},async getMinimumBalanceForRentExemption(size:number){assert.equal(size,92);return 1234;}} as unknown as Connection;
+  let authorized=true, marketAllowed=true;
+  const build=createPlotSponsorBuilder({connection,expectedGenesis:'test-genesis',idl,program,mint,sponsor,ownsWallet:async()=>authorized,authorizeMarket:async()=>marketAllowed});
   const req={userId:'u',idempotencyKey:'k',wallet:owner.toBase58(),operation:'place_prediction' as const,parameters:{marketIdentity:identity.toString('hex'),option:1,amount:'600',sequence:'0'}};
+  const wrongNetwork=createPlotSponsorBuilder({connection,expectedGenesis:'wrong',idl,program,mint,sponsor,ownsWallet:async()=>true,authorizeMarket:async()=>true});
+  await assert.rejects(wrongNetwork(req),/network genesis/);
   const built=await build(req); assert.equal(built.rentLamports,1234n);assert.equal(built.newAccounts,1);assert.ok(built.transaction.feePayer?.equals(sponsor));
   authorized=false;await assert.rejects(build(req),/not linked/);authorized=true;
+  marketAllowed=false; await assert.rejects(build(req),/Market not authorized/); marketAllowed=true;
   await assert.rejects(build({...req,parameters:{...req.parameters,amount:'601'}}),/unavailable/);
   m[446]=1;await assert.rejects(build(req),/unavailable/);
 });

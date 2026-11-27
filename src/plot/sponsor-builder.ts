@@ -17,9 +17,11 @@ function integer(value: unknown): bigint {
 }
 /** Only instantiate with a separately genesis-verified connection and server-owned
  * session-to-wallet lookup. Account decoding is pinned to the f6bb39d IDL. */
-export function createPlotSponsorBuilder(options: {connection:Connection; idl:PlotIdl; program:PublicKey; mint:PublicKey; sponsor:PublicKey; ownsWallet:(userId:string,wallet:PublicKey)=>Promise<boolean>; authorizeMarket:(userId:string,identity:Buffer,operation:SponsorRequest['operation'])=>Promise<boolean>}): SponsorDependencies['build'] {
-  const {connection,idl,program,mint,sponsor,ownsWallet,authorizeMarket} = options;
+export function createPlotSponsorBuilder(options: {connection:Connection; expectedGenesis:string; idl:PlotIdl; program:PublicKey; mint:PublicKey; sponsor:PublicKey; ownsWallet:(userId:string,wallet:PublicKey)=>Promise<boolean>; authorizeMarket:(userId:string,identity:Buffer,operation:SponsorRequest['operation'])=>Promise<boolean>}): SponsorDependencies['build'] {
+  const {connection,expectedGenesis,idl,program,mint,sponsor,ownsWallet,authorizeMarket} = options;
+  if (!expectedGenesis) throw new Error('Expected genesis is required');
   return async (request: SponsorRequest) => {
+    if (await connection.getGenesisHash() !== expectedGenesis) throw new Error('Unexpected network genesis');
     const owner = new PublicKey(request.wallet);
     if (!await ownsWallet(request.userId,owner)) throw new Error('Wallet not linked to session');
     if (!request.parameters || typeof request.parameters !== 'object' || Array.isArray(request.parameters)) throw new Error('Invalid parameters');
