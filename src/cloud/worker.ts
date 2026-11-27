@@ -12,7 +12,7 @@ import {TwitchProjection} from './plot/twitch.js';
 const config=cloudConfig(),documents=new Documents(config.database,config.namespace),owner=randomUUID();
 await documents.migrate();
 const bot=new CloudTwitchBot(documents,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
-let stopping=false,lost=false;
+let stopping=false,lost=false,lastPlotSubscriptionCheck=0;
 process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
 // Chat has its own lease and cadence, so a slow prediction source cannot delay replies.
 const chatLoop=(async()=>{
@@ -44,7 +44,7 @@ while(!stopping){
     const source=new TwitchSource(points);
     const mirror=new ByteTwitchMirror('',byte,source,Date.now,documents);await mirror.load();
     if(process.env.PLOT_ONCHAIN_TWITCH_ENABLED==='true'&&!lost&&!stopping){
-     try{if(process.env.PLOT_TWITCH_EVENTSUB_REGISTER==='true')await ensurePredictionSubscriptions({clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',userToken:process.env.PLOT_TWITCH_USER_TOKEN??'',secret:process.env.PLOT_TWITCH_EVENTSUB_SECRET??'',callback:`${config.origin}/api/plot/v1/twitch/eventsub`});
+     try{if(process.env.PLOT_TWITCH_EVENTSUB_REGISTER==='true'&&Date.now()-lastPlotSubscriptionCheck>=300000){await ensurePredictionSubscriptions({clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',userToken:process.env.PLOT_TWITCH_USER_TOKEN??'',secret:process.env.PLOT_TWITCH_EVENTSUB_SECRET??'',callback:`${config.origin}/api/plot/v1/twitch/eventsub`});lastPlotSubscriptionCheck=Date.now();}
      const projection=new TwitchProjection(documents.pool,documents.namespace);
      const source=new HelixPredictionSource(documents.pool,documents.namespace,process.env.TWITCH_CLIENT_ID??'',process.env.PLOT_TWITCH_USER_TOKEN??'');
      for(const event of await source.poll()){if(lost||stopping)break;await projection.ingest(event);}
