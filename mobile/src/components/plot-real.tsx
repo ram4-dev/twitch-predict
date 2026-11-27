@@ -14,6 +14,7 @@ import { PlotAccountClient, plotTransport, type PlotAccount } from '../lib/plot-
 import { PlotHttpReadClient, type PlotReadMarket } from '../lib/plot-read-client';
 import { PlotHttpIntentApi, PlotIntentController, type IntentState } from '../lib/plot-intent-client';
 import { PlotWalletSigner } from '../lib/plot-transaction-signer';
+import { plotEstimate } from '../lib/plot-estimate';
 import { accountFinalized, claimAvailable, predictionAvailable } from '../lib/plot-action-guards';
 import { PlotPurchaseClient, type PlotPurchase } from '../lib/plot-purchase-client';
 
@@ -58,10 +59,10 @@ export function PlotReal() {
    </View>}
    {intent&&!pending&&<Copy>Última operación: {intent.stage==='confirmed'?'confirmada':intent.stage==='expired_absent'?'vencida sin envío':'fallida'}</Copy>}
    <Title>Mercados</Title>{markets.length===0&&<Copy>No hay mercados disponibles.</Copy>}
-   {markets.map(m=>{const position=account?.positions.find(p=>p.marketId===m.id), open=predictionAvailable(account,m);return <View key={m.id} style={styles.panel}>
+   {markets.map(m=>{const position=account?.positions.find(p=>p.marketId===m.id), open=predictionAvailable(account,m), estimate=selected[m.id]?plotEstimate(m,selected[m.id],amount,position?.optionId===selected[m.id]?position.stake:'0'):null;return <View key={m.id} style={styles.panel}>
     <Copy style={styles.section}>{m.title??'Mercado sin título confirmado'}</Copy><Copy>Solana: {m.chainStatus??'confirmando'} · Twitch: {m.twitchStatus}</Copy>{m.winnerId&&<Copy>Resultado Twitch: ganó {m.options.find(o=>o.id===m.winnerId)?.label??m.winnerId}; perdió {m.options.filter(o=>o.id!==m.winnerId).map(o=>o.label??o.id).join(', ')}</Copy>}
     {m.options.map(o=><Action key={o.id} title={`${o.label??o.id}${selected[m.id]===o.id?' · elegida':''}`} secondary={selected[m.id]!==o.id} disabled={!open||busy||pending} onPress={()=>setSelected({...selected,[m.id]:o.id})}/>)}
-    {open&&<><Copy>Monto en PLOT</Copy><TextInput accessibilityLabel={`Monto PLOT ${m.id}`} keyboardType="number-pad" value={amount} onChangeText={setAmount} style={styles.input}/><Copy>Estimación no disponible: faltan las reglas de comisión verificadas.</Copy><Action title="Preparar predicción" disabled={busy||pending||!signingConfigured||!selected[m.id]} onPress={()=>{void run(()=>preparePrediction(m));}}/></>}
+    {open&&<><Copy>Monto en PLOT</Copy><TextInput accessibilityLabel={`Monto PLOT ${m.id}`} keyboardType="number-pad" value={amount} onChangeText={setAmount} style={styles.input}/><Copy>{estimate?`Cobro total estimado: ${estimate.payout} PLOT · Neto estimado: ${estimate.net} PLOT`:'Estimación no disponible hasta confirmar opción, monto y comisiones.'}</Copy><Action title="Preparar predicción" disabled={busy||pending||!signingConfigured||!selected[m.id]} onPress={()=>{void run(()=>preparePrediction(m));}}/></>}
     {position&&<><Copy>Tu opción: {m.options.find(o=>o.id===position.optionId)?.label??position.optionId} · Apuesta: {position.stake} PLOT</Copy><Copy>{!confirmed||m.chainStatus!==position.chainStatus||position.payout===null?'Cobro y neto: confirmando':`Cobro total: ${position.payout} PLOT · Neto: ${(BigInt(position.payout)-BigInt(position.stake)).toString()} PLOT`}</Copy><Copy>Comisión streamer: {m.streamerFee===null?'confirmando':`${m.streamerFee} PLOT`} · Tesorería: {m.treasuryFee===null?'confirmando':`${m.treasuryFee} PLOT`}</Copy><Action title={position.claimed?'Cobrado':'Preparar cobro'} disabled={busy||pending||!signingConfigured||!claimAvailable(account,m)} onPress={()=>{void run(()=>prepareClaim(m));}}/></>}
    </View>;})}
   </>}
