@@ -13,3 +13,9 @@ test('rejects incompatible or speculative chain data instead of treating it as c
  assert.throws(() => parsePlotMarkets({ markets:[{...market, chainStatus:'resolved'}] }));
  assert.throws(() => parsePlotMarkets({ markets:[{...market, options:[{id:'yes',label:'Sí',stake:'600'}]}] }));
 });
+
+test('accepts verified indices and amounts without inferring fees', () => {
+ const verified={...market,chainStatus:'open',options:[{id:'yes',label:'Sí',optionIndex:0,stake:'600'},{id:'no',label:'No',optionIndex:1,stake:'400'}]};
+ assert.equal(parsePlotMarkets({markets:[verified]})[0].options[0].stake,'600');
+ assert.throws(()=>parsePlotMarkets({markets:[{...verified,options:[verified.options[0],{...verified.options[1],optionIndex:0}]}]}));
+});

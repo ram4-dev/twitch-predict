@@ -2,20 +2,18 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Action, Copy, Notice, Screen, Title, styles } from '../../components/ui';
-import { PlotLiveMarkets } from '../../components/plot-live-markets';
-import { usePlot } from '../../lib/state';
+import { PlotReal } from '../../components/plot-real';
 import { PlotFixtureClient } from '../../lib/plot-fixture-client';
 import { estimatePayout, type PlotIntent, type PlotSnapshot, type PlotPort } from '../../lib/plot-onchain';
 
 const fixture = new PlotFixtureClient(AsyncStorage);
 export default function PlotDemo() {
   const [mode, setMode] = useState<'choose' | 'fixture' | 'read'>('choose');
-  const { base } = usePlot();
   if (mode === 'fixture') return <PlotFixtureScreen client={fixture} />;
   return <Screen>
     <Title>PLOT</Title>
     <Notice>Los puntos PLOT se mantienen separados de Byte y del saldo retirable.</Notice>
-    {mode === 'choose' ? <><Action title="Consultar mercados" onPress={() => setMode('read')} /><Action title="Abrir simulación local" secondary onPress={() => setMode('fixture')} /></> : <><Action title="Cambiar modo" secondary onPress={() => setMode('choose')} /><PlotLiveMarkets base={base} /></>}
+    {mode === 'choose' ? <><Action title="Consultar mercados" onPress={() => setMode('read')} /><Action title="Abrir simulación local" secondary onPress={() => setMode('fixture')} /></> : <><Action title="Cambiar modo" secondary onPress={() => setMode('choose')} /><PlotReal /></>}
   </Screen>;
 }
 export function PlotFixtureScreen({ client }: { client: PlotPort }) {
