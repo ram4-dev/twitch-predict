@@ -19,7 +19,10 @@ import {CloudTwitchBot} from './twitch-bot.js';
 import {proposalsRouter, type ProposalActorResolver} from '../proposals-router.js';
 import {ProposalService} from '../proposals-service.js';
 import {cloudConfig} from './config.js';
-export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
+import {plotRouter,marketReadHandler,type PlotRouterDependencies} from './plot/router.js';
+import {EventSubAdapter} from './plot/twitch-adapter.js';
+import {TwitchProjection} from './plot/twitch.js';
+export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env,plot?:PlotRouterDependencies){
  const config=cloudConfig(env),app=express(),channelSearch=new TwitchChannelSearch();app.disable('x-powered-by');app.set('trust proxy',false);
  const bot=new CloudTwitchBot(documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
  // Plan 2 mount: the bot derives viewer !plot crear to the proposal service (same aggregate + Documents).
@@ -41,13 +44,22 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
   if(origin&&origin!==config.origin&&!extensionOrigins.has(origin??'')){res.status(403).json({error:'Origen no autorizado'});return;}
   // Native clients have no Origin. A foreign browser cannot send state-changing requests or read responses.
   if(req.get('sec-fetch-site')==='cross-site'&&!extensionOrigins.has(origin??'')&&!['/auth/twitch/callback','/auth/twitch/bot/callback'].includes(req.path)){res.status(403).json({error:'Sitio no autorizado'});return;}
-  if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
+  if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type, Idempotency-Key');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.sendStatus(204);return;}next();
  });
  app.get('/api/live/markets',(_req,res)=>liveMarkets.subscribe(res));
  app.post('/api/twitch/bot/webhook',express.raw({type:'application/json',limit:'64kb'}),async(req,res)=>{
   try{if(!Buffer.isBuffer(req.body)){res.sendStatus(400);return;}const headers=Object.fromEntries(['id','timestamp','signature','type'].map(name=>{const key=`twitch-eventsub-message-${name}`;return [key,req.get(key)??''];}));const result=await bot.webhook(headers,req.body);res.status(result.status).type('text/plain').send(result.body);}catch{res.sendStatus(400);}
  });
+ if(env.PLOT_ONCHAIN_TWITCH_ENABLED==='true'){
+  const eventsub=new EventSubAdapter(env.PLOT_TWITCH_EVENTSUB_SECRET??'',new TwitchProjection(documents.pool,documents.namespace));
+  app.post('/api/plot/v1/twitch/eventsub',express.raw({type:'application/json',limit:'64kb'}),async(req,res)=>{
+   try{if(!Buffer.isBuffer(req.body)){res.sendStatus(400);return;}
+    const headers=Object.fromEntries(['id','timestamp','signature','type'].map(name=>{const key=`twitch-eventsub-message-${name}`;return [key,req.get(key)??''];}));
+    const response=await eventsub.handle(headers,req.body);res.status(response.status).type('text/plain').send(response.body);
+   }catch{res.sendStatus(400);}
+  });
+ }
  app.use(express.json({limit:'16kb'}));
  const bearer=(req:express.Request)=>req.get('authorization')?.replace(/^Bearer /,'')??'';
  const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>|unknown)=>async(req:express.Request,res:express.Response)=>{
@@ -82,6 +94,9 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env){
    res.locals.context={points,byte,mirror,auth:new CloudAuth(points,documents),twitch:new CloudTwitchAuth(points,documents,{clientId:env.TWITCH_CLIENT_ID??'',clientSecret:env.TWITCH_CLIENT_SECRET??'',origin:config.origin})};next();
   }catch{res.status(503).json({error:'La base de Plot no está disponible'});}
  });
+ if(env.PLOT_ONCHAIN_TWITCH_ENABLED==='true')app.get('/api/plot/v1/markets',marketReadHandler(documents.pool,documents.namespace,plot?.chainMarketRead));
+ if(plot?.intentsRouter)app.use('/api/plot/v1/intents',plot.intentsRouter);
+ if(plot)app.use('/api/plot/v1',plotRouter(plot));
  const context=(res:express.Response)=>res.locals.context as {points:Points;byte:ByteService;mirror:ByteTwitchMirror;auth:CloudAuth;twitch:CloudTwitchAuth};
  app.get('/api/auth/config',(_req,res)=>res.json({origin:config.origin}));
  app.post('/api/auth/extension/start',route(async(req,res)=>{

@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-27",
+  "network": "devnet",
+  "scope": "Android emulator API 36; official fakewallet v2.2.1; simulated payment; synthetic Twitch identity and test resolver cancellation",
+  "appApkSha256": "177cc08ed3db794600d3d0eb1cdc194b7f0d2ba398062bdb348925ebe2d1b0d9",
+  "walletApkSha256": "ba0b09ef332ef74dcf80144376cfd08607fbfc7d706391a852dc35953ea088af",
+  "program": "6sj6Mq8obPN8yBbsU2fd68aNoVpjjXF8UPhsT3QQxr3C",
+  "mint": "BTvdvF5UUeL7Et8VDH9WfaWfrAcAVSoKkD6rfZNPpVQE",
+  "wallet": "BCDjWWmqJgmvayBcX9zGRh1iHwEHXAsA4TGv9GWuTzhe",
+  "tokenAccount": "9fmKJ991iLYEcg9y5zj1tpvfuKGrLondzLnPNo4W2p7c",
+  "initial": {
+    "solLamports": "0",
+    "associatedTokenAccountExists": false
+  },
+  "final": {
+    "solLamports": "0",
+    "plot": "600",
+    "net": "0",
+    "treasuryFee": "0",
+    "streamerFee": "0"
+  },
+  "events": [
+    {
+      "stage": "create-market",
+      "signature": "4E8TtjwE5SdLNc6KRuqwbTZRRzrLVH4HkscxZn5TRPRCeLFyTJHi4Z1iYXDKADMBz9LUsp7nTJDEYP1cngDdC6jY"
+    },
+    {
+      "stage": "mock-purchase-credit",
+      "signature": "CWCKJeLznbq3FXPuEvjSWUG9tKMwWwUSrLLSSRHZQhaQQN7vwZPaArpEAs4gJpT5651mcKZx5koPcUSvustfEBL"
+    },
+    {
+      "stage": "prediction-600",
+      "signature": "RkVxywz4K1cTpcX3AgKr8FwLrfXhgLWnYtTpCPKGLXqEoufLh25ZGdPuBd48fccyWCDrtV6ijCCye3GH1wPtA43"
+    },
+    {
+      "stage": "cancel-test-resolver",
+      "signature": "yTesE1a2Uyp2MrTzUa3o7wPSbKaeTYroo54sTvTJ3pCsvNUHC7Yi7DBo4KutqdsKGuHPkf2wUGEko9goMhEpqTw"
+    },
+    {
+      "stage": "claim-refund-600",
+      "signature": "4oNvBRHp7ZB9SbV1eHHqahuoeCdNLkzBsnfcErrJjPJbbBca3KVfL1w7QxBHgaumEmYSnNDfag3m8tHn8Mvw19JJ"
+    }
+  ],
+  "verification": "Purchase, prediction, cancellation and claim checked independently via finalized RPC with no transaction errors; app displayed balance 600, claim completed, net 0 and fees 0.",
+  "limitations": [
+    "No Android resolved-winner 600/400 scenario",
+    "No real Twitch EventSub",
+    "Simulated payment",
+    "APK built from working tree with wallet disconnect fix"
+  ],
+  "sourceBaseCommit": "ffb9c6ce100452fdc4466d788d8e3e0ae5927c73",
+  "walletSourceGitBlob": "bf6f899bbc4bd4cfce6afb0bd4c25efaee6bcdc6",
+  "finalizedSlots": [
+    526916818,
+    526917077,
+    526917146,
+    526917399
+  ],
+  "walletFixCommit": "38cbb28"
+}

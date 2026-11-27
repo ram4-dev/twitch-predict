@@ -43,6 +43,7 @@ export default function Navigation() {
                       index: "Streams",
                       history: "Mis apuestas",
                       settings: "Conexión",
+                      "plot-demo": "PLOT prueba",
                     } as Record<string, string>
                   )[route.name]
                 }
@@ -55,6 +56,7 @@ export default function Navigation() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="history" />
       <Tabs.Screen name="settings" />
+      <Tabs.Screen name="plot-demo" />
     </Tabs>
   );
 }

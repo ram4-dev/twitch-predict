@@ -1,0 +1,145 @@
+{
+  "network": "devnet",
+  "program": "6sj6Mq8obPN8yBbsU2fd68aNoVpjjXF8UPhsT3QQxr3C",
+  "mint": "BTvdvF5UUeL7Et8VDH9WfaWfrAcAVSoKkD6rfZNPpVQE",
+  "testWallets": [
+    "8SuRfnfjftP9ZPGVDGYLkyixhy8SgUx93Z7R6NjuKwTS",
+    "AdXCnr66YRcN74t83LjBsfKrn7HQXZ2rp6ms6PqbeCSA"
+  ],
+  "streamer": "FhGSEGSVPQ6oNDVjqh62XxFZsDzYSLPZM18F1NcJ2xKu",
+  "events": [
+    {
+      "stage": "initialized",
+      "signature": null
+    },
+    {
+      "stage": "credit-alice-600",
+      "signature": "5QpVHuQKkExyCN55Veqwe1S4KCbjNTFncGGxP4TrAvtbmgb5n928XDGeHBRypy5z7BJNXpLSUGXuJvCW9AKrV5oT"
+    },
+    {
+      "stage": "credit-bob-400",
+      "signature": "4drTRsLSWaw3GyZNVeBvBvAv6oegtddi6qGwhcWbCPigpEdwQ9qtDJm7HMoif5LDEiju4JbiTMZF5dwByMnJH73G"
+    },
+    {
+      "stage": "create-resolved",
+      "signature": "3hRfNZNtG7LfCVz8THxqpbve54ekJ5oL6jeNNCUoKQXn2u3woRDHH6u7oqVxNTUhESDdpdov2pfbueXNbaD6NDJY"
+    },
+    {
+      "stage": "bet-alice",
+      "signature": "4nmMCv8qkUNik7J2PpUC1H14TiVXVVsCfSbzNkKHkPwAd6pkNRnMYrRpLNsp5X6CHeemKfRHsPEZnsRzn7Knwxpj"
+    },
+    {
+      "stage": "bet-bob",
+      "signature": "3TzshAq6vY275h3NTo8ozYnUjKs7JdkBKw6rb8u2Lpk7CHL9SDcVzMF3V4u4ak6nYEN8cneKnUPCJnuk8Wb6QKjS"
+    },
+    {
+      "stage": "lock-resolved",
+      "signature": "5GyLxgj67FYxNTLMi3E8wPACnJyk7g3Sw7abDuz3cWDD2QiAXQR7BmWpRWPHsQ958ekGPJ7szKRtnZ5Wui962NQe"
+    },
+    {
+      "stage": "resolve",
+      "signature": "65wQY4uswYUbqkw2BrMPtx9DZ2DKuhbEAe8LRQ4Sc8FAHKfa5ctqK4QbgStTBupnQR2QuKqv2zxqT9D9jJTSUktk"
+    },
+    {
+      "stage": "claim-winner",
+      "signature": "24j4X756xxAzfxnVteb5kZee8MmqAZP7Q4BYKr2u4BLmYjTqh6TqNdiY1Nm7ryHGcdAYsUDbXzcvJK57ox2t9TRT"
+    },
+    {
+      "stage": "credit-bob-400-again",
+      "signature": "5tSiCi7omEU3yfBSaX3EJ8R2LiGHHixJGhxbGKT7LFMDC7zXeHfPdSFW6heJGfNBuAVomx7V7GPPET53PCUJ7Et3"
+    },
+    {
+      "stage": "create-canceled",
+      "signature": "3UXrMqR73PfycATmbVaBEemeGZ5Mh4EmTctPmn3nVdnvtiCpTQL4598w4fFZD9bfWTYmJr4E3tcVwgSh3Qte7QgL"
+    },
+    {
+      "stage": "cancel-bet-a",
+      "signature": "2igeVYTA8S6MemVxSeLMKvzDkf6znDGP4tz79ahjTRPpFQdusTxxd15GH3hjs5ZjFjBXZTt3HUafKztdqdxkh8HR"
+    },
+    {
+      "stage": "cancel-bet-b",
+      "signature": "3w8vpBMa9NM1PL42foSehrHhEKjjK7a49HNKP3Rtpm3N6W48ymFfnZNRH3dudtkq3Tcd5DGdfuKRJh7fXNgvgXkJ"
+    },
+    {
+      "stage": "cancel",
+      "signature": "4B5RevFGu2AHRbCUseRStBu3ympyJC2EC98c2JNLPaA8fa1m35QJ13KSfYdea3W7UHJELDjQuSNxfWGsX7dBY7z"
+    },
+    {
+      "stage": "refund-a",
+      "signature": "3XVacNDoA148DSjF3sw79sRRGyu3YbPd2YgNhvaWvJbj2vLZx3b9AnCHuYJ6hnDv3NzRDe5p19a3SHKSekp4Uxhz"
+    },
+    {
+      "stage": "refund-b",
+      "signature": "3ZSXUiTdhkzNhVyFD6dzwztPpaNd2vBEndZSMALzThU8b21NQD2VWZZJVR9dSHFVpjtmgwq5KXmzHJ39xwwtJeAs"
+    },
+    {
+      "stage": "completed",
+      "signature": null
+    }
+  ],
+  "date": "2026-11-27",
+  "scope": "Devnet HTTP and PostgreSQL; simulated payment and synthetic Twitch identities",
+  "config": "5n9iVuJTMmt9Kw6P35pZLhEsQv63v5JHAWLnxjtjonbi",
+  "programData": "3FT4LtrjBcxTd4UfDW7SvT4tfqLZMrpFE2FgfXaeVEu6",
+  "deploymentSignature": "nBT6uoHmSHavyPSXQh3duoNF6Y9VkFCDpf8CuJiF7y5Fwdd82R8coHBSWeJ6AMzY6w4UFnax1ndZqRJB7Uw3Trs",
+  "genesis": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "mintVerification": {
+    "tokenProgram": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "nontransferable": true,
+    "decimals": 0,
+    "freezeAuthority": null,
+    "mintAuthority": "F1QdhS2vgnzjEmuxXqkRcgT8ukxLX6XEmToUiJ2ddmvi"
+  },
+  "independentVerification": {
+    "all15SignaturesFinalizedWithoutError": true,
+    "resolvedTransactionTokenDeltas": {
+      "treasury": "20",
+      "streamer": "20"
+    },
+    "winnerClaimDelta": "960",
+    "canceledMarketClaimDeltas": [
+      "600",
+      "400"
+    ],
+    "finalBalances": [
+      "960",
+      "400",
+      "20",
+      "20"
+    ],
+    "participantSolLamports": [
+      "0",
+      "0"
+    ],
+    "transactionSlots": {
+      "resolve": 526911840,
+      "claim-winner": 526911851,
+      "cancel": 526911916,
+      "refund-a": 526911927,
+      "refund-b": 526911939
+    }
+  },
+  "limitations": [
+    "Synthetic Twitch events, not live EventSub",
+    "Simulated payments",
+    "Separate from Android proof"
+  ],
+  "funding": {
+    "unit": "SOL de prueba",
+    "perAuthority": "0.02",
+    "transfers": [
+      {
+        "role": "payment",
+        "signature": "31gmFjQuKQebmHPHppj3sfWqeiXFzFMXmcboDMHuRA88oUTdp3ezzoVkAKREBpJNYNKnV2PnPqoX6ii6gy1wm1Uq"
+      },
+      {
+        "role": "resolver",
+        "signature": "UAAHEEGEubKzwcxuDwxvQvtxzDqmyBLbQNhDTXh34Qp9ZJpb7LFkXrf9r5fJo7FUoHebnBXRhTLwmjokEQWRUVs"
+      },
+      {
+        "role": "sponsor",
+        "signature": "3zgdAaW3hBGg7moR7DejTD8CXm38ofxtgFoyH9Drba1CFraCdNtJq5v9Q7e8i6UzsovPAZXhcQ4eD3KURcUcgiUy"
+      }
+    ]
+  }
+}
