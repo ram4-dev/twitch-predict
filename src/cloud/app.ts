@@ -44,7 +44,7 @@ export function cloudApp(documents:Documents,env:NodeJS.ProcessEnv=process.env,p
   if(origin&&origin!==config.origin&&!extensionOrigins.has(origin??'')){res.status(403).json({error:'Origen no autorizado'});return;}
   // Native clients have no Origin. A foreign browser cannot send state-changing requests or read responses.
   if(req.get('sec-fetch-site')==='cross-site'&&!extensionOrigins.has(origin??'')&&!['/auth/twitch/callback','/auth/twitch/bot/callback'].includes(req.path)){res.status(403).json({error:'Sitio no autorizado'});return;}
-  if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
+  if(origin){res.set('Access-Control-Allow-Origin',origin);res.vary('Origin');res.set('Access-Control-Allow-Headers','Authorization, Content-Type, Idempotency-Key');res.set('Access-Control-Allow-Methods','GET, POST, OPTIONS');}
   if(req.method==='OPTIONS'){res.sendStatus(204);return;}next();
  });
  app.get('/api/live/markets',(_req,res)=>liveMarkets.subscribe(res));

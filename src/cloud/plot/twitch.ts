@@ -5,7 +5,7 @@ export type TwitchEvent={id:string;broadcaster:string;prediction:string;kind:'lo
 /** Implementations authenticate EventSub/OAuth or query Helix before returning events. */
 export interface VerifiedTwitchSource { poll():Promise<TwitchEvent[]> }
 /** Commands must be idempotent and reconciled against chain state by their implementation. */
-export interface PlotMarketChain { lock(broadcaster:string,prediction:string):Promise<void>; resolve(broadcaster:string,prediction:string,winner:string):Promise<void>; cancel(broadcaster:string,prediction:string):Promise<void> }
+export interface PlotMarketChain { lock(broadcaster:string,prediction:string):Promise<void|string>; resolve(broadcaster:string,prediction:string,winner:string):Promise<void|string>; cancel(broadcaster:string,prediction:string):Promise<void|string> }
 export class TwitchProjection {
  constructor(private pool:Pool,private namespace:string){}
  async register(actor:{wallet:string|null;twitch:{id:string}|null},input:{broadcaster:string;prediction:string;outcomes:string[];closesAt:string;timeoutAt:string}){
@@ -43,9 +43,16 @@ export async function reconcileTwitchMarkets(pool:Pool,namespace:string,chain:Re
  for(const m of rows){
   const state=await chain.read(m.broadcaster,m.prediction);
   if(state.phase==='resolved'||state.phase==='canceled')continue;
-  if(now>=new Date(m.timeout_at).getTime()||m.phase==='canceled'){await chain.cancel(m.broadcaster,m.prediction);continue;}
-  if(state.phase==='open'&&(m.phase==='locked'||m.phase==='resolved'||now>=new Date(m.closes_at).getTime())){await chain.lock(m.broadcaster,m.prediction);continue;}
-  if(state.phase==='locked'&&m.phase==='resolved'&&now>=new Date(m.closes_at).getTime())await chain.resolve(m.broadcaster,m.prediction,m.winner);
+  let operation:'lock'|'cancel'|'resolve'|null=null,decision='';
+  if(now>=new Date(m.timeout_at).getTime()||m.phase==='canceled'){operation='cancel';decision='cancel';}
+  else if(state.phase==='open'&&(m.phase==='locked'||m.phase==='resolved'||now>=new Date(m.closes_at).getTime())){operation='lock';decision='lock';}
+  else if(state.phase==='locked'&&m.phase==='resolved'&&now>=new Date(m.closes_at).getTime()){operation='resolve';decision=m.winner;}
+  if(!operation)continue;
+  // A persisted attempt is never retransmitted while its outcome is ambiguous.
+  const claim=await pool.query('INSERT INTO plot_private.plot_chain_commands(namespace,broadcaster,prediction,operation,decision) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING operation',[namespace,m.broadcaster,m.prediction,operation,decision]);
+  if(!claim.rowCount)continue;
+  const signature=operation==='lock'?await chain.lock(m.broadcaster,m.prediction):operation==='cancel'?await chain.cancel(m.broadcaster,m.prediction):await chain.resolve(m.broadcaster,m.prediction,decision);
+  if(signature)await pool.query('UPDATE plot_private.plot_chain_commands SET signature=$5 WHERE namespace=$1 AND broadcaster=$2 AND prediction=$3 AND operation=$4',[namespace,m.broadcaster,m.prediction,operation,signature]);
  }
 }
 /** Caller supplies only events authenticated by its EventSub/Helix adapter. */

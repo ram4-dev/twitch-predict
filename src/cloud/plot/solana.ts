@@ -16,6 +16,10 @@ export function plotAddresses(program:PublicKey){
  const config=pda([Buffer.from('config')]);return {config,mintAuthority:pda([Buffer.from('mint_authority')]),payment:(key:string)=>pda([Buffer.from('payment'),config.toBuffer(),seed(key)]),position:(market:PublicKey,owner:PublicKey)=>pda([Buffer.from('position'),market.toBuffer(),owner.toBuffer()]),market:(identity:string)=>pda([Buffer.from('market'),config.toBuffer(),seed(identity)])};
 }
 export function token2022Ata(owner:PublicKey,mint:PublicKey){return PublicKey.findProgramAddressSync([owner.toBuffer(),TOKEN_2022.toBuffer(),mint.toBuffer()],ASSOCIATED_TOKEN)[0];}
+/** Associated Token Program idempotent creation; payer covers the Token-2022 ATA rent. */
+export function createToken2022AtaInstruction(payer:PublicKey,owner:PublicKey,mint:PublicKey){
+ return new TransactionInstruction({programId:ASSOCIATED_TOKEN,keys:[meta(payer,true,true),meta(token2022Ata(owner,mint),false,true),meta(owner),meta(mint),meta(SystemProgram.programId),meta(TOKEN_2022)],data:Buffer.from([1])});
+}
 export function creditInstruction(args:{program:PublicKey;authority:PublicKey;mint:PublicKey;owner:PublicKey;key:string;amount:string}){
  const {program,authority,mint,owner,key}=args,a=plotAddresses(program);
  return new TransactionInstruction({programId:program,keys:[meta(authority,true,true),meta(a.config),meta(mint,false,true),meta(owner),meta(token2022Ata(owner,mint),false,true),meta(a.mintAuthority),meta(a.payment(key),false,true),meta(TOKEN_2022),meta(SystemProgram.programId)],data:Buffer.concat([hash('global:credit_points'),seed(key),amountBytes(args.amount)])});
@@ -32,7 +36,7 @@ function checkedAccount(account:AccountInfo<Buffer>|null,program:PublicKey,name:
 }
 export type MarketBinding={identity:string; optionHashes:Record<string,string>};
 /** No network or key is selected here. The integrator supplies a verified RPC and authority-specific sender. */
-export interface PlotSolanaTransport { account(address:PublicKey):Promise<AccountInfo<Buffer>|null>; send(instruction:TransactionInstruction,authority:'payment'|'resolver'):Promise<string> }
+export interface PlotSolanaTransport { account(address:PublicKey):Promise<AccountInfo<Buffer>|null>; send(instruction:TransactionInstruction,authority:'payment'|'resolver'):Promise<string>; sendMany?(instructions:TransactionInstruction[],authority:'payment'|'resolver'):Promise<string> }
 export class SolanaPlotAdapter implements PlotChain,ReconciledPlotMarketChain {
  constructor(private transport:PlotSolanaTransport,private config:{program:PublicKey;mint:PublicKey;paymentAuthority:PublicKey;resolver:PublicKey;binding:(broadcaster:string,prediction:string)=>Promise<MarketBinding>}){}
  private async assertConfig(){
@@ -44,9 +48,14 @@ export class SolanaPlotAdapter implements PlotChain,ReconciledPlotMarketChain {
   const data=checkedAccount(await this.transport.account(plotAddresses(this.config.program).payment(key)),this.config.program,'PaymentReceipt',113);if(!data)return null;
   if(data[8]!==1||!data.subarray(81,113).equals(seed(key)))throw new Error('Invalid PaymentReceipt');
   const mint=new PublicKey(data.subarray(41,73));if(!mint.equals(this.config.mint))throw new Error('PaymentReceipt mint mismatch');
-  return {key,wallet:new PublicKey(data.subarray(9,41)).toBase58(),amount:data.readBigUInt64LE(73).toString(),signature:null,finalized:true};
+  const owner=new PublicKey(data.subarray(9,41)),ata=await this.transport.account(token2022Ata(owner,mint));
+  if(!ata||!ata.owner.equals(TOKEN_2022)||ata.data.length<165||!ata.data.subarray(0,32).equals(mint.toBuffer())||!ata.data.subarray(32,64).equals(owner.toBuffer())||![1,2].includes(ata.data[108]))throw new Error('Invalid PaymentReceipt destination');
+  return {key,wallet:owner.toBase58(),amount:data.readBigUInt64LE(73).toString(),signature:null,finalized:true};
  }
- async submitCredit(input:{key:string;wallet:string;amount:string}){await this.assertConfig();return this.transport.send(creditInstruction({program:this.config.program,authority:this.config.paymentAuthority,mint:this.config.mint,owner:new PublicKey(input.wallet),...input}), 'payment');}
+ async submitCredit(input:{key:string;wallet:string;amount:string}){
+  await this.assertConfig();if(!this.transport.sendMany)throw new Error('Atomic ATA and credit transport required');
+  const owner=new PublicKey(input.wallet);return this.transport.sendMany([createToken2022AtaInstruction(this.config.paymentAuthority,owner,this.config.mint),creditInstruction({program:this.config.program,authority:this.config.paymentAuthority,mint:this.config.mint,owner,...input})],'payment');
+ }
  private async market(broadcaster:string,prediction:string){
   await this.assertConfig();
   const binding=await this.config.binding(broadcaster,prediction),a=plotAddresses(this.config.program),data=checkedAccount(await this.transport.account(a.market(binding.identity)),this.config.program,'Market',449);
@@ -95,13 +104,13 @@ export class SolanaPlotAdapter implements PlotChain,ReconciledPlotMarketChain {
   }
   return {wallet:owner.toBase58(),balance,positions,readStatus:'finalized' as const};
  }
- async lock(broadcaster:string,prediction:string){const m=await this.market(broadcaster,prediction);await this.transport.send(changeMarketInstruction({program:this.config.program,actor:this.config.resolver,identity:m.binding.identity,operation:'lock_market'}),'resolver');}
- async cancel(broadcaster:string,prediction:string){const m=await this.market(broadcaster,prediction);await this.transport.send(changeMarketInstruction({program:this.config.program,actor:this.config.resolver,identity:m.binding.identity,operation:'cancel_market'}),'resolver');}
+ async lock(broadcaster:string,prediction:string){const m=await this.market(broadcaster,prediction);return this.transport.send(changeMarketInstruction({program:this.config.program,actor:this.config.resolver,identity:m.binding.identity,operation:'lock_market'}),'resolver');}
+ async cancel(broadcaster:string,prediction:string){const m=await this.market(broadcaster,prediction);return this.transport.send(changeMarketInstruction({program:this.config.program,actor:this.config.resolver,identity:m.binding.identity,operation:'cancel_market'}),'resolver');}
  async resolve(broadcaster:string,prediction:string,winner:string){
   const m=await this.market(broadcaster,prediction),expected=seed(m.binding.optionHashes[winner]??'');let option=-1;
   for(let i=0;i<m.count;i++)if(m.data.subarray(105+i*32,137+i*32).equals(expected)){option=i;break;}
   if(option<0)throw new Error('Winner mapping mismatch');
-  await this.transport.send(resolveInstruction({program:this.config.program,resolver:this.config.resolver,identity:m.binding.identity,mint:this.config.mint,treasury:new PublicKey(m.data.subarray(378,410)),streamer:new PublicKey(m.data.subarray(410,442)),winner:option}),'resolver');
+  return this.transport.send(resolveInstruction({program:this.config.program,resolver:this.config.resolver,identity:m.binding.identity,mint:this.config.mint,treasury:new PublicKey(m.data.subarray(378,410)),streamer:new PublicKey(m.data.subarray(410,442)),winner:option}),'resolver');
  }
 }
 /** Explicit opt-in. Local RPC must be loopback; devnet requires its genesis hash. */
@@ -124,9 +133,10 @@ export function finalizedRpcTransport(connection:Connection,send:PlotSolanaTrans
 /** Opens only an explicitly selected and genesis-verified test cluster; callers supply test-only keys. */
 export async function testRpcTransport(args:{url:string;network:'localnet'|'devnet';expectedLocalGenesis?:string;payment:Keypair;resolver:Keypair}):Promise<PlotSolanaTransport>{
  const connection=await verifiedTestConnection(args.url,args.network,args.expectedLocalGenesis);
- return finalizedRpcTransport(connection,async(instruction,authority)=>{
+ const sendMany:NonNullable<PlotSolanaTransport['sendMany']>=async(instructions,authority)=>{
   const signer=args[authority],{blockhash}=await connection.getLatestBlockhash('finalized');
-  const transaction=new Transaction({feePayer:signer.publicKey,recentBlockhash:blockhash}).add(instruction);transaction.sign(signer);
+  const transaction=new Transaction({feePayer:signer.publicKey,recentBlockhash:blockhash}).add(...instructions);transaction.sign(signer);
   return connection.sendRawTransaction(transaction.serialize(),{skipPreflight:false,maxRetries:0});
- });
+ };
+ return {...finalizedRpcTransport(connection,(instruction,authority)=>sendMany([instruction],authority)),sendMany};
 }

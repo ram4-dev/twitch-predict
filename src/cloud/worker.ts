@@ -8,9 +8,12 @@ import {cloudConfig} from './config.js';
 import {Documents} from './documents.js';
 import {CloudTwitchBot} from './twitch-bot.js';
 import {HelixPredictionSource,ensurePredictionSubscriptions} from './plot/twitch-adapter.js';
-import {TwitchProjection} from './plot/twitch.js';
+import {TwitchProjection,reconcileTwitchMarkets} from './plot/twitch.js';
+import {createPlotRuntimeFromEnv} from './plot/runtime.js';
 const config=cloudConfig(),documents=new Documents(config.database,config.namespace),owner=randomUUID();
 await documents.migrate();
+const plotRuntime=process.env.PLOT_ONCHAIN_WORKER_ENABLED==='true'?await createPlotRuntimeFromEnv(documents,process.env):null;
+if(process.env.PLOT_ONCHAIN_WORKER_ENABLED==='true'&&!plotRuntime)throw new Error('PLOT_ONCHAIN_ENABLED required for worker');
 const bot=new CloudTwitchBot(documents,{clientId:process.env.TWITCH_CLIENT_ID??'',clientSecret:process.env.TWITCH_CLIENT_SECRET??'',origin:config.origin});
 let stopping=false,lost=false,lastPlotSubscriptionCheck=0;
 process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
@@ -50,6 +53,7 @@ while(!stopping){
      for(const event of await source.poll()){if(lost||stopping)break;await projection.ingest(event);}
      }catch{console.error('PLOT Twitch reconciliation unavailable; retrying');}
     }
+    if(plotRuntime&&!lost&&!stopping)try{await reconcileTwitchMarkets(documents.pool,documents.namespace,plotRuntime.chain);}catch{console.error('PLOT chain reconciliation unavailable; attempt retained');}
     // Configured channels seed the list; authenticated viewers can enqueue any valid channel.
     await documents.update('byte-twitch',()=>({version:1,channels:[] as string[],mirrors:{}}),s=>{s.channels=[...new Set([...s.channels,...config.channels])];});
     if(!lost&&!stopping){if(process.env.POINTS_PAYMENTS_ENABLED==='true'){for(const channel of config.channels)if(!points.channels().includes(channel))await points.watch(channel);await source.sync();}else await mirror.sync();}
@@ -62,4 +66,4 @@ while(!stopping){
  }catch{console.error('Worker cycle failed; durable reservations retained');}
  if(!stopping)await delay(5000);
 }
-await chatLoop;await documents.release('twitch-worker',owner).catch(()=>{});await documents.close();
+await chatLoop;await documents.release('twitch-worker',owner).catch(()=>{});await Promise.all([documents.close(),plotRuntime?.close()]);

@@ -28,7 +28,7 @@ test('Twitch rejects unverified broadcaster and deduplicates late events', {skip
   await p.ingest(end);await p.ingest(end);await p.ingest({...end,id:'lock',kind:'lock',winner:undefined});
   const {rows}=await d.pool.query('SELECT phase,winner FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);assert.deepEqual(rows[0],{phase:'resolved',winner:'yes'});
   await assert.rejects(p.ingest({...end,winner:'no'}));
- }finally{await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
+ }finally{await d.pool.query('DELETE FROM plot_private.plot_chain_commands WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
 });
 
 test('HTTP order, duplicate confirmation and reconciliation through cloud app', {skip:!url||!process.env.PORTLESS_URL},async()=>{
@@ -57,9 +57,9 @@ test('worker locks before resolving and cancels on timeout with Twitch offline',
   let phase:'open'|'locked'|'resolved'|'canceled'='open';const actions:string[]=[];
   const chain={async read(){return {phase};},async lock(){actions.push('lock');phase='locked';},async resolve(){actions.push('resolve');phase='resolved';},async cancel(){actions.push('cancel');phase='canceled';}};
   await reconcileTwitchMarkets(d.pool,d.namespace,chain);await reconcileTwitchMarkets(d.pool,d.namespace,chain);assert.deepEqual(actions,['lock','resolve']);
-  phase='open';await assert.rejects(runTwitchCycle({async poll(){throw new Error('offline');}},p,d.pool,d.namespace,chain));assert.equal(phase,'locked');
+  phase='open';await assert.rejects(runTwitchCycle({async poll(){throw new Error('offline');}},p,d.pool,d.namespace,chain));assert.equal(phase,'open'); // Ambiguous prior lock is never re-sent.
   phase='open';await reconcileTwitchMarkets(d.pool,d.namespace,chain,Date.parse('2100-01-01'));assert.equal(phase,'canceled');
- }finally{await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
+ }finally{await d.pool.query('DELETE FROM plot_private.plot_chain_commands WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
 });
 
 test('signed EventSub HTTP and nullable mobile market DTO', {skip:!url||!process.env.PORTLESS_URL},async()=>{
@@ -89,7 +89,7 @@ test('Helix requires scoped broadcaster token and preserves labels without treat
   const source=new HelixPredictionSource(d.pool,d.namespace,'client','fixture-token',request),events=await source.poll();assert.equal(events[0].winner,'yes');await p.ingest(events[0]);
   const {rows}=await d.pool.query('SELECT title,outcome_labels FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);assert.deepEqual(rows[0],{title:'Match',outcome_labels:{yes:'Sí',no:'No'}});
   await assert.rejects(new HelixPredictionSource(d.pool,d.namespace,'other','fixture-token',request).poll());
- }finally{await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
+ }finally{await d.pool.query('DELETE FROM plot_private.plot_chain_commands WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_events WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
 });
 
 test('market HTTP enriches only verified option mappings', {skip:!url||!process.env.PORTLESS_URL},async()=>{
@@ -101,4 +101,13 @@ test('market HTTP enriches only verified option mappings', {skip:!url||!process.
   const response=await fetch(`${process.env.PORTLESS_URL}/api/plot/v1/markets`),result=await response.json() as {markets:{chainStatus:string;treasuryFee:string;options:{optionIndex:number;stake:string}[]}[]};
   assert.equal(result.markets[0].chainStatus,'resolved');assert.equal(result.markets[0].treasuryFee,'20');assert.deepEqual(result.markets[0].options.map(o=>[o.optionIndex,o.stake]),[[0,'600'],[1,'400']]);
  }finally{app.locals.liveMarkets.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
+});
+
+test('chain worker persists ambiguous command and does not retransmit after restart', {skip:!url},async()=>{
+ const {reconcileTwitchMarkets}=await import('../src/cloud/plot/twitch.js');const d=new Documents(url!,`plot_test_${randomUUID()}`);await d.migrate();try{
+  const p=new TwitchProjection(d.pool,d.namespace);await p.register({wallet:'w',twitch:{id:'b'}},{broadcaster:'b',prediction:'p',outcomes:['yes','no'],closesAt:'2020-01-01T00:00:00Z',timeoutAt:'2099-01-01T00:00:00Z'});
+  let attempts=0;const chain={async read(){return {phase:'open' as const};},async lock(){attempts++;throw new Error('ambiguous');},async resolve(){},async cancel(){}};
+  await assert.rejects(reconcileTwitchMarkets(d.pool,d.namespace,chain));await reconcileTwitchMarkets(d.pool,d.namespace,chain);assert.equal(attempts,1);
+  const rows=await d.pool.query('SELECT operation,signature FROM plot_private.plot_chain_commands WHERE namespace=$1',[d.namespace]);assert.deepEqual(rows.rows,[{operation:'lock',signature:null}]);
+ }finally{await d.pool.query('DELETE FROM plot_private.plot_chain_commands WHERE namespace=$1',[d.namespace]);await d.pool.query('DELETE FROM plot_private.plot_twitch_markets WHERE namespace=$1',[d.namespace]);await d.close();}
 });

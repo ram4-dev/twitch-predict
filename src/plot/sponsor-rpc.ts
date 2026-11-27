@@ -15,7 +15,7 @@ export function sponsorRpc(connection:Connection): Pick<SponsorDependencies, 'fe
       if (result.value === null || !Number.isSafeInteger(result.value) || result.value <= 0) throw new Error('Unable to estimate fee');
       return BigInt(result.value);
     },
-    async send(raw) { await connection.sendRawTransaction(raw, { skipPreflight: false, maxRetries: 0 }); },
+    async send(raw) { await connection.sendRawTransaction(raw, { skipPreflight: false, preflightCommitment: 'confirmed', maxRetries: 0 }); },
     async outcome(signature) {
       const result = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
       const status = result.value[0];

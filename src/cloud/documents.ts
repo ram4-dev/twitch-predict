@@ -14,7 +14,7 @@ export class Documents {
   // pg emits pool errors outside request promises. Report no connection strings or upstream bodies.
   this.pool.on('error',()=>console.error('Database pool connection interrupted'));
  }
- async migrate(){await this.transaction(async client=>{await client.query("SELECT pg_advisory_xact_lock(173918, 1)");await client.query(readFileSync('migrations/001-cloud.sql','utf8'));await client.query(readFileSync('migrations/002-plot-onchain.sql','utf8'));await client.query(readFileSync('migrations/003-plot-twitch-read.sql','utf8'));});}
+ async migrate(){await this.transaction(async client=>{await client.query("SELECT pg_advisory_xact_lock(173918, 1)");await client.query(readFileSync('migrations/001-cloud.sql','utf8'));await client.query(readFileSync('migrations/002-plot-onchain.sql','utf8'));await client.query(readFileSync('migrations/003-plot-twitch-read.sql','utf8'));await client.query(readFileSync('migrations/004-plot-commands.sql','utf8'));});}
  private async transaction<T>(work:(client:PoolClient)=>Promise<T>):Promise<T>{
   const inherited=this.context.getStore();if(inherited)return work(inherited);
   const client=await this.pool.connect();
