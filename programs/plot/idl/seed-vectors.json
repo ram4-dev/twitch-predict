@@ -2,6 +2,7 @@
   "program": "8mL78rx2dZufBaBiMnFQG2hCzENKd7euRWurZtp8gEpc",
   "marketHash": "6927e138b0220443bd0f9503f759f9fe3250423d7009796d2dfc98ccf3dae4a4",
   "paymentHash": "1280aa2200c55e307f1bfb790c81441cc8d6397bb73aad9fd39ecc944498758a",
+  "outcomeHash": "6dd45e7b18c7b149a932946229fef86ba782c98c87e31ae27ac23fd046dfd198",
   "config": {
     "address": "4zuNoPr5GjhnCHKGfPvdz4yEzCaujskpEbtEZiXLHL3X",
     "bump": 254
