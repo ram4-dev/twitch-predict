@@ -47,6 +47,7 @@ async function main() {
     const a = await ata(alice.publicKey), b = await ata(bob.publicKey), t = await ata(admin.publicKey), st = await ata(streamer.publicKey);
     const receipt = n => pda(Buffer.from('payment'), config.toBuffer(), Buffer.from(bytes(n)));
     const credit = (owner, destination, n, amount) => program.methods.creditPoints(bytes(n), new BN(amount)).accountsStrict({paymentAuthority: admin.publicKey, config, mint: mint.publicKey, owner, destination, mintAuthority, receipt: receipt(n), tokenProgram, systemProgram}).rpc();
+    await assert.rejects(program.methods.creditPoints(bytes(9), new BN(1)).accountsStrict({paymentAuthority: bob.publicKey, config, mint: mint.publicKey, owner: alice.publicKey, destination: a, mintAuthority, receipt: receipt(9), tokenProgram, systemProgram}).signers([bob]).rpc());
     await credit(alice.publicKey, a, 1, 600); await credit(bob.publicKey, b, 2, 400); await credit(alice.publicKey, a, 1, 600);
     await assert.rejects(credit(alice.publicKey, a, 1, 601));
     await assert.rejects(spl.transfer(connection, admin, a, b, alice, 1, [], undefined, tokenProgram));
