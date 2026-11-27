@@ -95,7 +95,15 @@ async function main() {
     await program.methods.resolveMarket(5).accountsStrict({resolver: admin.publicKey, config, market: market3, mint: mint.publicKey, treasury: admin.publicKey, streamer: streamer.publicKey, treasuryAta: t, streamerAta: st, mintAuthority, tokenProgram}).rpc();
     await program.methods.claim().accountsStrict({owner: alice.publicKey, config, market: market3, position: position3, mint: mint.publicKey, destination: a, mintAuthority, tokenProgram}).signers([alice]).rpc();
     assert.equal(await balance(a), 1560n);
-    console.log('PASS: Token-2022, idempotent credit, zero-SOL sponsor, rollback, resolution, fees, cancellation and zero-winner refund');
+    const identity4 = bytes(8), market4 = pda(Buffer.from('market'), config.toBuffer(), Buffer.from(identity4));
+    const now4 = await connection.getBlockTime(await connection.getSlot('confirmed'));
+    await assert.rejects(program.methods.createMarket(identity4, [bytes(10)], new BN(now4 + 5), new BN(now4 + 10), streamer.publicKey).accountsStrict({operator: admin.publicKey, config, market: market4, systemProgram}).rpc());
+    await assert.rejects(program.methods.createMarket(identity4, [bytes(10), bytes(10)], new BN(now4 + 5), new BN(now4 + 10), streamer.publicKey).accountsStrict({operator: admin.publicKey, config, market: market4, systemProgram}).rpc());
+    await program.methods.createMarket(identity4, [bytes(10), bytes(11)], new BN(now4 + 5), new BN(now4 + 10), streamer.publicKey).accountsStrict({operator: admin.publicKey, config, market: market4, systemProgram}).rpc();
+    while ((await connection.getBlockTime(await connection.getSlot('confirmed'))) < now4 + 10) await new Promise(r => setTimeout(r, 500));
+    await program.methods.cancelMarket().accountsStrict({actor: bob.publicKey, config, market: market4}).signers([bob]).rpc();
+    assert.equal((await program.account.market.fetch(market4)).state, 3);
+    console.log('PASS: Token-2022, idempotent credit, zero-SOL sponsor, rollback, resolution, fees, cancellation, timeout and zero-winner refund');
   } finally { if (connection) connection._rpcWebSocket.close(); if (validator.exitCode === null && validator.signalCode === null) { validator.kill('SIGTERM'); await new Promise(resolve => validator.once('exit', resolve)); } rmSync(ledger, { recursive: true, force: true }); }
 }
 main().catch(e => { console.error(e); process.exitCode = 1; });
