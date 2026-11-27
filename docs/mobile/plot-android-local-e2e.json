@@ -1,0 +1,33 @@
+{
+  "scope": "isolated local Solana validator and simulated payment; not devnet",
+  "date": "2026-11-27",
+  "android": {
+    "emulator": "API 36 arm64",
+    "expoSdk": "55",
+    "wallet": "official fakewallet v2.2.1",
+    "walletApkSha256": "ba0b09ef332ef74dcf80144376cfd08607fbfc7d706391a852dc35953ea088af",
+    "appApkSha256": "cb1067a79c3028e5062b58b3e5e747466c267f2e8b293aa58ca8824e6d006185"
+  },
+  "revisions": {
+    "mobile": "c7609242c9208e01a357e8676e2a1ca8b32c7066",
+    "provider": "7e414d73c178a887d74ed7131d45c3f19660d0ff",
+    "anchor": "c413e5aebd56f053e6835d8d918d987801ff7360"
+  },
+  "walletPublicKey": "YF4TDobsFTxMoJa8gGZMae6w5xsbqkLg9jZG2maywnp",
+  "program": "8mL78rx2dZufBaBiMnFQG2hCzENKd7euRWurZtp8gEpc",
+  "mint": "76jqMLFxz4VHMCNbuQVopoM52ydgVP16gk7KHHGqXU1F",
+  "checks": [
+    "SIWS login signed in Android wallet",
+    "simulated purchase credited 600 PLOT",
+    "600 PLOT prediction signed and finalized",
+    "market canceled by local-only test control",
+    "600 PLOT refund claim signed and finalized",
+    "final balance 600 PLOT, net 0, streamer and treasury fees 0",
+    "wallet SOL balance finalized 0"
+  ],
+  "predictionSignature": "2VXTcBu77RCFNwSiPWVf7gHB43g147fbq23mcThH5kkQn44D5RpSD444TVDNirnos1qe8pwauwS6e1VvuGyUxtbR",
+  "claimSignature": "H4xCQdMzBssGxt79jpyKRJdLyVBjVuN8HCQ6NWnBLSyUw64cPZ87U19N4QPDm8nshdhiwKwSdK2g5yp254TWm6f",
+  "signatureVerification": "Both signatures queried from the local validator with searchTransactionHistory: finalized, err null.",
+  "limitations": "The 600/400 resolved winner case was validated by the backend team locally, not in this Android run. A separate earlier prepared intention survived force-stop but its blockhash expired during the interruption; its ambiguous submitted state was preserved and was not retried.",
+  "method": "Android UI driven by uiautomator2 and explicit test harness signal; local RPC and sponsor database were checked separately. The script is provided for reproduction but was assembled after the observed run."
+}
