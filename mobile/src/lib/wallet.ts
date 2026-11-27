@@ -7,6 +7,7 @@ import { SeekerConnect } from "@solana-mobile/seeker-connect-react-native";
 import * as SecureStore from "expo-secure-store";
 import { Buffer } from "buffer";
 import type { WalletProvider } from "../../../src/byte-bet-core";
+import { requireTransactionSigner, validateWalletTransaction } from "../../../src/plot-wallet-validation";
 export type WalletKind = "mwa" | "seeker";
 const tokenKey = "plot.mwa.authorization";
 let identity = {
@@ -45,6 +46,10 @@ export function walletProvider(kind: WalletKind): WalletProvider {
       return { publicKey: key };
     },
     async signTransaction(tx: Transaction) {
+      if (!key) throw new Error("Conectá la wallet antes de firmar.");
+      const signer = key;
+      requireTransactionSigner(tx, signer);
+      const message = Uint8Array.from(tx.serializeMessage());
       if (kind === "seeker") {
         const [bytes] = await SeekerConnect.signTransactions([
           tx.serialize({
@@ -52,13 +57,16 @@ export function walletProvider(kind: WalletKind): WalletProvider {
             verifySignatures: false,
           }),
         ]);
-        return Transaction.from(bytes);
+        const signed = Transaction.from(bytes);
+        validateWalletTransaction(message, signed, signer);
+        return signed;
       }
       return transact(async (wallet) => {
         const account = await authorize(wallet);
-        if (!account.equals(tx.feePayer!))
+        if (!account.equals(signer))
           throw new Error("La wallet cambió. Volvé a conectar.");
         const [signed] = await wallet.signTransactions({ transactions: [tx] });
+        validateWalletTransaction(message, signed, signer);
         return signed;
       });
     },
