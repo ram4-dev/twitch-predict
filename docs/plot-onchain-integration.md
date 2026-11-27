@@ -21,7 +21,7 @@ pg_ctl -D "$PLOT_PG_DIR/data" stop -m fast
 
 El usuario PostgreSQL debe poder crear y borrar la base temporal de sponsor. El ensayo automático firma un desafío SIWS, compra 600 PLOT simulados con una wallet sin SOL ni ATA, crea la ATA y acredita en una transacción, apuesta 400 mediante sponsor y verifica la cancelación y el claim. `scripts/plot-validator-e2e.mjs` prueba además los constructores contra el validador y el caso 600/400 con cobro 960 y comisiones 20/20. No usar estos resultados como prueba devnet.
 
-La regresión ejecutada en la rama integrada incluyó `npm run check` (233 aprobadas, 27 omitidas sin las bases opcionales), `npm run check:mobile`, ocho pruebas cloud con PostgreSQL y ocho pruebas HTTP/PostgreSQL de PLOT. El harness completo pasó en un validador local. Las pruebas omitidas no cuentan como aprobadas. `node scripts/check-plot-idl.mjs programs/plot/idl/plot.json` verifica los campos y cuentas que consume el adaptador; repetirlo con el IDL generado antes de habilitar la red.
+La regresión ejecutada en la rama integrada incluyó `npm run check` (233 aprobadas, 27 omitidas sin las bases opcionales), `npm run check:mobile`, ocho pruebas cloud con PostgreSQL y ocho pruebas HTTP/PostgreSQL de PLOT. El harness completo pasó en un validador local. También pasaron cuatro pruebas Rust de liquidación, `cargo fmt --check` y Clippy con advertencias como errores. Las pruebas omitidas no cuentan como aprobadas. `node scripts/check-plot-idl.mjs programs/plot/idl/plot.json` verifica los campos y cuentas que consume el adaptador; repetirlo con el IDL generado antes de habilitar la red.
 
 ## Android local
 
