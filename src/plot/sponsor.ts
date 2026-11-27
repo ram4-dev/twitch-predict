@@ -116,6 +116,12 @@ export class PlotSponsor {
     if (result.status === 'submitted') await this.deps.send(result.raw);
     return result.signature;
   }
+  async getIntent(userId: string, id: string): Promise<{ id: string; status: string; signature: string | null; lastValidBlockHeight: number }> {
+    const q = await this.pool.query('SELECT id,status,signature,block_height FROM plot_sponsor_intents WHERE id=$1 AND user_id=$2',[id,userId]);
+    if (!q.rowCount) throw new Error('Intent not found');
+    const row = q.rows[0];
+    return { id: row.id, status: row.status, signature: row.signature, lastValidBlockHeight: Number(row.block_height) };
+  }
   async expireUnsigned(userId: string, id: string): Promise<string> {
     const height = await this.deps.finalizedBlockHeight();
     if (!Number.isSafeInteger(height) || height < 0) throw new Error('Invalid finalized block height');
