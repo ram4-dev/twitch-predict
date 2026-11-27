@@ -155,6 +155,7 @@ pub mod plot {
         }
         let m = &mut ctx.accounts.market;
         m.config = ctx.accounts.config.key();
+        m.rules_version = 1;
         m.identity = identity;
         m.creator = ctx.accounts.operator.key();
         m.option_count = option_ids.len() as u8;
@@ -461,6 +462,7 @@ pub struct Claim<'info> {
 #[derive(InitSpace)]
 pub struct Market {
     pub config: Pubkey,
+    pub rules_version: u8,
     pub identity: [u8; 32],
     pub creator: Pubkey,
     pub option_ids: [[u8; 32]; 6],

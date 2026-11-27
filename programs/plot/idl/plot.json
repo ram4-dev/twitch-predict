@@ -1358,6 +1358,10 @@
             "type": "pubkey"
           },
           {
+            "name": "rules_version",
+            "type": "u8"
+          },
+          {
             "name": "identity",
             "type": {
               "array": [
