@@ -27,8 +27,8 @@ const freePort = () => new Promise((resolve, reject) => { const s = net.createSe
 async function main() {
   const port = await freePort();
   let faucet; do { faucet = await freePort(); } while (Math.abs(faucet - port) <= 1);
-  const validator = spawn('solana-test-validator', ['--ledger', ledger, '--rpc-port', String(port), '--faucet-port', String(faucet), '--upgradeable-program', programId.toBase58(), path.join(root, 'onchain/target/deploy/plot.so'), admin.publicKey.toBase58(), '--quiet'], { stdio: ['ignore', 'ignore', 'pipe'] });
-  let logs = ''; validator.stderr.on('data', c => { logs += c; });
+  const validator = spawn('solana-test-validator', ['--ledger', ledger, '--rpc-port', String(port), '--faucet-port', String(faucet), '--upgradeable-program', programId.toBase58(), path.join(root, 'onchain/target/deploy/plot.so'), admin.publicKey.toBase58(), '--quiet'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let logs = ''; validator.stderr.on('data', c => { logs += c; }); validator.stdout.on('data', c => { logs += c; });
   let connection;
   try {
     connection = new web3.Connection(`http://127.0.0.1:${port}`, 'confirmed');
@@ -50,7 +50,10 @@ async function main() {
     await assert.rejects(program.methods.creditPoints(bytes(9), new BN(1)).accountsStrict({paymentAuthority: bob.publicKey, config, mint: mint.publicKey, owner: alice.publicKey, destination: a, mintAuthority, receipt: receipt(9), tokenProgram, systemProgram}).signers([bob]).rpc());
     await credit(alice.publicKey, a, 1, 600); await credit(bob.publicKey, b, 2, 400); await credit(alice.publicKey, a, 1, 600);
     await assert.rejects(credit(alice.publicKey, a, 1, 601));
-    await assert.rejects(spl.transfer(connection, admin, a, b, alice, 1, [], undefined, tokenProgram));
+    let transferError;
+    try { await spl.transfer(connection, admin, a, b, alice, 1, [], undefined, tokenProgram); } catch (error) { transferError = error; }
+    assert.ok(transferError, 'transfer must fail');
+    assert.match((await transferError.getLogs(connection)).join('\n'), /Transfer is disabled for this mint/);
     const now = (await connection.getBlockTime(await connection.getSlot('confirmed')));
     const identity = bytes(3), market = pda(Buffer.from('market'), config.toBuffer(), Buffer.from(identity));
     await program.methods.createMarket(identity, [bytes(10), bytes(11)], new BN(now + 8), new BN(now + 60), streamer.publicKey).accountsStrict({operator: admin.publicKey, config, market, systemProgram}).rpc();
