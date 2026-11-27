@@ -32,11 +32,9 @@ test('a retired /onboarding link still lands on the app with its query intact',a
   await expect(page.getByRole('region',{name:'Iniciar sesión'})).toBeVisible();
 });
 
-test('google unconfigured renders unavailable notice and no broken button',async({page})=>{
+test('sign-in offers Twitch and a clear Phantom action without Google or extra wallet copy',async({page})=>{
   await page.goto('/app');
-  // This isolated server has no GOOGLE_CLIENT_ID: the provider must never look functional.
-  const config=await page.evaluate(async()=>(await fetch('/api/google/config')).json()) as {configured:boolean};
-  test.expect(config.configured).toBe(false);
-  await expect(page.getByText('Google todavía no está disponible.')).toBeVisible();
-  await expect(page.getByRole('button',{name:'Continuar con Google'})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Continuar con Twitch'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Instalar Phantom'})).toBeVisible();
+  await expect(page.getByText(/Google|La firma de acceso|Después de instalarla/)).toHaveCount(0);
 });

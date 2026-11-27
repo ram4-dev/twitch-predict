@@ -33,25 +33,13 @@ test('all branded surfaces load the canonical logo without cropping at compact a
     }
   }
 });
-for(const mode of ['offchain','byte'])test(`${mode}: sign-in units match the active transport`,async({page})=>{
+for(const mode of ['offchain','byte'])test(`${mode}: sign-in keeps provider actions without extra wallet copy`,async({page})=>{
   await page.route('**/api/health',route=>route.fulfill({json:{marketMode:mode}}));
-  // The signed-out app entry is the only place the betting currency is announced to a new visitor.
   for(const path of ['/app','/app#profile']){
     await page.goto(path);
-    if(mode==='byte')await expect(page.locator('.auth-note')).toContainText('Las apuestas usan SOL de devnet.');
-    else{
-      await expect(page.locator('.auth-note')).toContainText('Los puntos son internos y de prueba.');
-      await expect(page.getByText('SOL devnet',{exact:true})).toHaveCount(0);
-      await expect(page.getByText('Las apuestas usan SOL de devnet.',{exact:false})).toHaveCount(0);
-    }
+    await expect(page.getByRole('button',{name:'Continuar con Twitch'})).toBeVisible();
+    await expect(page.locator('.auth-note')).toHaveCount(0);
   }
-});
-test('unknown transport does not claim a betting currency',async({page})=>{
-  await page.route('**/api/health',route=>route.fulfill({status:503,json:{error:'Unavailable'}}));
-  await page.goto('/app#profile');
-  // Without a known transport the sign-in card must not announce either currency.
-  await expect(page.locator('.auth-note')).toHaveText('La firma de acceso no envía una transacción.');
-  await expect(page.getByText(/SOL de devnet|internos y de prueba/,{exact:false})).toHaveCount(0);
 });
 test('static support pages retain their logo without JavaScript',async({browser})=>{
   const context=await browser.newContext({javaScriptEnabled:false,viewport:{width:360,height:600}});

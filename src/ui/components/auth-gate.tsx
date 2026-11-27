@@ -1,10 +1,9 @@
 import {PhantomHandoff} from './phantom-handoff.js';
-import {useBettingMode,BettingModeNotice} from './betting-mode.js';
 import {useEffect,useRef,useState} from 'react';
 import {PlotMascot} from './plot.js';
 import {Button} from './button.js';
 import {ArrowRight,Check,Loader2} from 'lucide-react';
-import {TwitchIcon,GoogleIcon} from '../brand-icons.js';
+import {TwitchIcon,PhantomIcon} from '../brand-icons.js';
 
 type Provider={isPhantom?:boolean;connect():Promise<{publicKey:{toString():string}}>;signMessage(message:Uint8Array,display:string):Promise<{signature:Uint8Array;publicKey?:{toString():string}}>};
 type Login={token:string;account:{wallet?:string;id:string};handoff?:{flowId:string;extensionId:string;code:string}};
@@ -48,12 +47,8 @@ export async function connectProvider(provider:'twitch'|'google'|'phantom',optio
 }
 /** The one sign-in surface. It used to live on /onboarding; the app renders it inline. */
 export function AuthGate({onSignedIn}:{onSignedIn:()=>Promise<void>|void}){
- const mode=useBettingMode();
  const flowId=useRef(extensionFlow()).current;
  const [phase,setPhase]=useState('ready'),[error,setError]=useState(''),[installed,setInstalled]=useState(!!phantomWallet()?.isPhantom),[login,setLogin]=useState<Login>(),[flowReady,setFlowReady]=useState(!flowId);
- // Social-first entry: Twitch is the primary access, Google appears only when the server has it configured.
- const [googleConfigured,setGoogleConfigured]=useState<boolean|null>(null);
- useEffect(()=>{let active=true;void request<{configured:boolean}>('/api/google/config').then(c=>{if(active)setGoogleConfigured(c.configured);}).catch(()=>{if(active)setGoogleConfigured(false);});return()=>{active=false;};},[]);
  const social=async(social:'twitch'|'google')=>{
   setError('');setPhase('connecting');
   try{
@@ -119,12 +114,9 @@ export function AuthGate({onSignedIn}:{onSignedIn:()=>Promise<void>|void}){
   <p>Entrá con Twitch para tener tus puntos y apuestas desde el chat, la extensión y el panel.</p>
   <div className="auth-social" role="group" aria-label="Formas de entrar">
    <Button className="auth-primary" disabled={busy} onClick={()=>void social('twitch')}>{phase==='connecting'?<Loader2 size={16} className="animate-spin"/>:<TwitchIcon size={18}/>}<span>{phase==='connecting'?'Abriendo Twitch…':'Continuar con Twitch'}</span>{phase==='connecting'?null:<ArrowRight size={16}/>}</Button>
-   {!flowId&&googleConfigured!==false&&<Button variant="outline" disabled={busy||googleConfigured===null} onClick={()=>void social('google')}>{googleConfigured===null?<Loader2 size={16} className="animate-spin"/>:<GoogleIcon size={18}/>}<span>{googleConfigured===null?'Google…':'Continuar con Google'}</span></Button>}
-   {!flowId&&googleConfigured===false&&<p className="auth-secondary" aria-disabled="true">Google todavía no está disponible.</p>}
   </div>
-  {flowId?(installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={false}/><p className="auth-secondary">Después de instalarla, volvé acá para conectar tu wallet.</p><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>)
-   :installed?<Button variant="outline" disabled={busy} onClick={()=>void connect()}>Conectar Phantom</Button>:<PhantomHandoff className="auth-secondary"/>}
+  {flowId?(installed?<Button className="auth-primary" disabled={busy||!flowReady} onClick={()=>void connect()}>{busy?<Loader2 size={16} className="animate-spin"/>:null}{labels[phase]}{!busy&&<ArrowRight size={16}/>}</Button>:<><PhantomHandoff className="auth-primary" allowMobile={false}/><Button variant="ghost" onClick={()=>location.reload()}>Ya la instalé · volver a detectar</Button></>)
+   :installed?<Button className="auth-phantom" variant="outline" disabled={busy} onClick={()=>void connect()}><PhantomIcon size={20}/><span>{labels[phase]}</span><ArrowRight size={16}/></Button>:<PhantomHandoff className="auth-phantom" showIcon/>}
   {error&&<p className="auth-error" role="alert">{error}</p>}
-  <BettingModeNotice mode={mode}/>
  </section>;
 }
