@@ -31,8 +31,9 @@ test('reads verified receipt and finalized balances and settlement from program 
  assert.deepEqual(await adapter.findPaymentReceipt(key),{key,wallet:owner.toBase58(),amount:'600',signature:null,finalized:true});
  assert.equal(await adapter.submitCredit({key,wallet:owner.toBase58(),amount:'600'}),'credit-signature');assert.equal(sent.shift()?.slice(0,16),'8c2b79f6b050a7b0');
  assert.deepEqual(await adapter.read('b','p'),{phase:'resolved',winner:'yes'});
- assert.deepEqual(await adapter.marketView('b','p'),{chainStatus:'resolved',options:[{id:'yes',optionIndex:0,stake:'600'},{id:'no',optionIndex:1,stake:'400'}],streamerFee:'20',treasuryFee:'20'});
+ assert.deepEqual(await adapter.marketView('b','p'),{chainStatus:'resolved',options:[{id:'yes',optionIndex:0,stake:'600'},{id:'no',optionIndex:1,stake:'400'}],treasuryBps:200,streamerBps:200,streamerFee:'20',treasuryFee:'20'});
  const result=await adapter.account(owner.toBase58(),[{broadcaster:'b',prediction:'p'}]);assert.equal(result.balance,'100');assert.equal(result.positions[0].payout,'960');assert.equal(result.positions[0].optionIndex,0);assert.equal(result.positions[0].sequence,'0');
+ market.writeUInt16LE(10001,442);await assert.rejects(adapter.marketView('b','p'));market.writeUInt16LE(200,442);
  market[446]=3;assert.equal((await adapter.account(owner.toBase58(),[{broadcaster:'b',prediction:'p'}])).positions[0].payout,'600');
  await adapter.resolve('b','p','yes');assert.equal(sent[0],'9b1750ad2e4a17ef00');
  receipt[81]=0;await assert.rejects(adapter.findPaymentReceipt(key));

@@ -13,7 +13,7 @@ export interface PlotRouterDependencies {
  payments:PaymentReconciler;
  intentsRouter?:import('express').Router;
  accountRead?:(wallet:string)=>Promise<unknown>;
- chainMarketRead?:(broadcaster:string,prediction:string)=>Promise<{chainStatus:string;options:{id:string;optionIndex:number;stake:string}[];streamerFee:string|null;treasuryFee:string|null}>;
+ chainMarketRead?:(broadcaster:string,prediction:string)=>Promise<{chainStatus:string;options:{id:string;optionIndex:number;stake:string}[];streamerBps:number;treasuryBps:number;streamerFee:string|null;treasuryFee:string|null}>;
  twitch?:TwitchProjection;
  read?:{pool:Pool;namespace:string};
  mock:PostgresMockPaymentProvider;
@@ -62,7 +62,7 @@ export function marketReadHandler(pool:Pool,namespace:string,chainMarketRead?:Pl
   const markets=await Promise.all(rows.map(async m=>{
    let chain:Awaited<ReturnType<NonNullable<PlotRouterDependencies['chainMarketRead']>>>|null=null;
    if(chainMarketRead)try{const candidate=await chainMarketRead(m.broadcaster,m.prediction);const ids=candidate.options.map(o=>o.id);if(ids.length===m.outcomes.length&&new Set(ids).size===ids.length&&m.outcomes.every((id:string)=>ids.includes(id)))chain=candidate;}catch{/* Source unavailable: never infer chain state. */}
-   return {id:`${m.broadcaster}:${m.prediction}`,broadcasterId:m.broadcaster,predictionId:m.prediction,marketIdentity:twitchMarketHash(m.broadcaster,m.prediction),title:m.title,options:m.outcomes.map((id:string)=>{const option=chain?.options.find(o=>o.id===id);return {id,label:m.outcome_labels?.[id]??null,stake:option?.stake??null,optionIndex:option?.optionIndex??null};}),twitchStatus:m.phase,winnerId:m.winner,chainStatus:chain?.chainStatus??null,streamerFee:chain?.streamerFee??null,treasuryFee:chain?.treasuryFee??null,closesAt:m.closes_at.toISOString(),timeoutAt:m.timeout_at.toISOString()};
+   return {id:`${m.broadcaster}:${m.prediction}`,broadcasterId:m.broadcaster,predictionId:m.prediction,marketIdentity:twitchMarketHash(m.broadcaster,m.prediction),title:m.title,options:m.outcomes.map((id:string)=>{const option=chain?.options.find(o=>o.id===id);return {id,label:m.outcome_labels?.[id]??null,stake:option?.stake??null,optionIndex:option?.optionIndex??null};}),twitchStatus:m.phase,winnerId:m.winner,chainStatus:chain?.chainStatus??null,streamerBps:chain?.streamerBps??null,treasuryBps:chain?.treasuryBps??null,streamerFee:chain?.streamerFee??null,treasuryFee:chain?.treasuryFee??null,closesAt:m.closes_at.toISOString(),timeoutAt:m.timeout_at.toISOString()};
   }));res.json({markets});
  }catch{res.status(503).json({error:'Mercados no disponibles'});}};
 }

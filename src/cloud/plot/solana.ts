@@ -81,7 +81,8 @@ export class SolanaPlotAdapter implements PlotChain,ReconciledPlotMarketChain {
   }
   if(new Set(options.map(o=>o.id)).size!==m.count||Object.keys(m.binding.optionHashes).length!==m.count)throw new Error('Option mapping mismatch');
   const gross=m.data.readBigUInt64LE(362),treasuryBps=BigInt(m.data.readUInt16LE(442)),streamerBps=BigInt(m.data.readUInt16LE(444));
-  return {chainStatus:phase,options,streamerFee:phase==='resolved'?(gross*streamerBps/10000n).toString():phase==='canceled'?'0':null,treasuryFee:phase==='resolved'?(gross*treasuryBps/10000n).toString():phase==='canceled'?'0':null};
+  if(treasuryBps+streamerBps>10000n)throw new Error('Invalid market fees');
+  return {chainStatus:phase,options,treasuryBps:Number(treasuryBps),streamerBps:Number(streamerBps),streamerFee:phase==='resolved'?(gross*streamerBps/10000n).toString():phase==='canceled'?'0':null,treasuryFee:phase==='resolved'?(gross*treasuryBps/10000n).toString():phase==='canceled'?'0':null};
  }
  async account(wallet:string,markets:{broadcaster:string;prediction:string}[]){
   await this.assertConfig();const owner=new PublicKey(wallet),addresses=plotAddresses(this.config.program);
