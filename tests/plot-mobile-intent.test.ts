@@ -57,3 +57,8 @@ test('authenticated transport keeps idempotency header and sends bearer only to 
  await new PlotHttpIntentApi(transport).prepare('key',request);
  assert.equal(actualUrl,'https://fixture.invalid/api/plot/v1/intents'); assert.equal(headers.authorization,'Bearer fixture-token'); assert.equal(headers['Idempotency-Key'],'key');
 });
+test('the pending request is a snapshot, not a mutable reference', async () => {
+ const local:PlotRequest = {...request,parameters:{...request.parameters}}; let observed='';
+ const api:PlotIntentApi={async prepare(_key,r){observed=r.parameters.amount!;return {id:'i',transaction:'YWJj',lastValidBlockHeight:4,status:'prepared'};},async submit(){},async reconcile(){return 'confirmed';}};
+ const c=new PlotIntentController(storage(),api,{async sign(){return 'c2ln';}},'snapshot'); const started=c.start('key',local); local.parameters.amount='1'; await started; assert.equal(observed,'600');
+});

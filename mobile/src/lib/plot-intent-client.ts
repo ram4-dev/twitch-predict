@@ -44,10 +44,12 @@ export class PlotIntentController {
   private async load(): Promise<IntentState | null> { const raw = await this.store.getItem(this.storageKey); return raw ? JSON.parse(raw) as IntentState : null; }
   private save(state: IntentState) { return this.store.setItem(this.storageKey, JSON.stringify(state)); }
   state() { return this.run(() => this.load()); }
-  start(key: string, request: PlotRequest) { return this.run(async () => {
-    validateRequest(request); if (!key || key.length > 128) throw new Error('Clave de intención inválida.');
+  start(key: string, request: PlotRequest) {
+    const snapshot = JSON.parse(JSON.stringify(request)) as PlotRequest;
+    return this.run(async () => {
+    validateRequest(snapshot); if (!key || key.length > 128) throw new Error('Clave de intención inválida.');
     const previous = await this.load(); if (previous && !['confirmed','failed','expired_absent'].includes(previous.stage)) throw new Error('Hay una operación pendiente de reconciliación.');
-    const state: IntentState = { key, request, stage: 'preparing' }; await this.save(state); return this.prepareSaved(state);
+    const state: IntentState = { key, request: snapshot, stage: 'preparing' }; await this.save(state); return this.prepareSaved(state);
   }); }
   private async prepareSaved(state: IntentState) {
     const prepared = await this.api.prepare(state.key, state.request);
