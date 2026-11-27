@@ -32,7 +32,7 @@ test('wallet signer requires matching signer and unchanged message', async () =>
  await assert.rejects(()=>bad.sign(encoded,user.publicKey.toBase58()));
 });
 test('account rejects another wallet and preserves confirming amounts', () => {
- const data={wallet:'wallet',balance:null,readStatus:'confirming',positions:[{marketId:'m',optionId:'y',stake:'600',payout:null,claimed:false,chainStatus:'open'}]};
+ const data={wallet:'wallet',balance:null,readStatus:'confirming',positions:[{marketId:'m',optionId:'y',optionIndex:0,sequence:'0',stake:'600',payout:null,claimed:false,chainStatus:'open'}]};
  assert.equal(parsePlotAccount(data,'wallet').balance,null); assert.throws(()=>parsePlotAccount(data,'other'));
  assert.throws(()=>parsePlotAccount({...data,balance:'-1'},'wallet'));
 });

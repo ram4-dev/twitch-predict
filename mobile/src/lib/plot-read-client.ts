@@ -1,7 +1,7 @@
 /** Public Twitch projection. Chain fields are deliberately nullable until reconciled. */
 export type PlotReadMarket = {
-  id: string; broadcasterId: string; predictionId: string; title: string | null;
-  options: { id: string; label: string | null; stake: null }[];
+  id: string; broadcasterId: string; predictionId: string; marketIdentity: string; title: string | null;
+  options: { id: string; label: string | null; optionIndex: number | null; stake: null }[];
   twitchStatus: 'open' | 'locked' | 'resolved' | 'canceled';
   winnerId: string | null; chainStatus: null; streamerFee: null; treasuryFee: null;
   closesAt: string; timeoutAt: string;
@@ -13,7 +13,7 @@ const nullableText = (v: unknown) => v === null || typeof v === 'string';
 export function parsePlotMarkets(body: unknown): PlotReadMarket[] {
   if (!record(body) || !Array.isArray(body.markets)) throw new Error('Respuesta de mercados PLOT inválida.');
   return body.markets.map((value: unknown) => {
-    if (!record(value) || typeof value.id !== 'string' || typeof value.broadcasterId !== 'string' || typeof value.predictionId !== 'string' || !nullableText(value.title) || !nullableText(value.winnerId) || !['open', 'locked', 'resolved', 'canceled'].includes(String(value.twitchStatus)) || value.chainStatus !== null || value.streamerFee !== null || value.treasuryFee !== null || typeof value.closesAt !== 'string' || typeof value.timeoutAt !== 'string' || !Array.isArray(value.options) || value.options.length < 2 || value.options.length > 6 || !value.options.every((o: unknown) => record(o) && typeof o.id === 'string' && nullableText(o.label) && o.stake === null)) throw new Error('Datos de mercado PLOT incompatibles.');
+    if (!record(value) || typeof value.id !== 'string' || typeof value.broadcasterId !== 'string' || typeof value.predictionId !== 'string' || typeof value.marketIdentity !== 'string' || !/^[0-9a-f]{64}$/.test(value.marketIdentity) || !nullableText(value.title) || !nullableText(value.winnerId) || !['open', 'locked', 'resolved', 'canceled'].includes(String(value.twitchStatus)) || value.chainStatus !== null || value.streamerFee !== null || value.treasuryFee !== null || typeof value.closesAt !== 'string' || typeof value.timeoutAt !== 'string' || !Array.isArray(value.options) || value.options.length < 2 || value.options.length > 6 || !value.options.every((o: unknown) => record(o) && typeof o.id === 'string' && nullableText(o.label) && o.optionIndex === null && o.stake === null)) throw new Error('Datos de mercado PLOT incompatibles.');
     return value as PlotReadMarket;
   });
 }

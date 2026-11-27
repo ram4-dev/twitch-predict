@@ -7,7 +7,7 @@ import type { IntentState } from '../lib/plot-intent-client';
 /** Authenticated screen fragment; the caller supplies a verified session and operation handlers. */
 export function PlotAccountView({ account, intent, busy, onReconcile, onClaim }: { account: PlotAccount; intent: IntentState | null; busy: boolean; onReconcile: () => void; onClaim: (marketId: string) => void }) {
   const pending = !!intent && !['confirmed','failed','expired_absent'].includes(intent.stage);
-  const confirmed = account.readStatus === 'finalized';
+  const confirmed = account.readStatus === 'finalized' && account.balance !== null;
   return <>
     <Title>Tu cuenta PLOT</Title>
     <Copy>Saldo PLOT: {confirmed && account.balance !== null ? `${account.balance} PLOT` : 'confirmando'}</Copy>
