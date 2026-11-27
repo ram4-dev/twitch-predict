@@ -32,6 +32,8 @@ test('persistent sponsor binds messages, serializes budgets and retries identica
     await assert.rejects(service.prepare({...req,parameters:{amount:'400'}}),/Idempotency/);
     await assert.rejects(service.prepare({...req,idempotencyKey:'two'}),/budget/);
     const tx = Transaction.from(Buffer.from(a.transaction,'base64')); tx.partialSign(user);
+    const revoked = new PlotSponsor(pool,sponsor,{...policy,programId:Keypair.generate().publicKey},deps);
+    await assert.rejects(revoked.submit('u',a.id,tx.serialize({requireAllSignatures:false}).toString('base64')),/not allowed/);
     const altered = Transaction.from(tx.serialize({requireAllSignatures:false})); altered.instructions[0].data[8] = 2;
     await assert.rejects(service.submit('u',a.id,altered.serialize({requireAllSignatures:false,verifySignatures:false}).toString('base64')),/modificó/);
     await assert.rejects(service.submit('other',a.id,tx.serialize({requireAllSignatures:false}).toString('base64')),/not found/);

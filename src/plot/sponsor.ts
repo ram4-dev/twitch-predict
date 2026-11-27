@@ -39,15 +39,20 @@ export class PlotSponsor {
   async initialize(): Promise<void> {
     await this.pool.query(`CREATE TABLE IF NOT EXISTS plot_sponsor_intents (
       id text PRIMARY KEY, user_id text NOT NULL, idempotency_key text NOT NULL, request_hash text NOT NULL,
-      wallet text NOT NULL, message bytea NOT NULL, unsigned_tx bytea NOT NULL, block_height bigint NOT NULL,
+      wallet text NOT NULL, operation text, message bytea NOT NULL, unsigned_tx bytea NOT NULL, block_height bigint NOT NULL,
       fee bigint NOT NULL, rent bigint NOT NULL, new_accounts integer NOT NULL, status text NOT NULL,
       signed_tx bytea, signature text, created_at timestamptz NOT NULL DEFAULT now(),
       UNIQUE(user_id, idempotency_key))`);
+    await this.pool.query('ALTER TABLE plot_sponsor_intents ADD COLUMN IF NOT EXISTS operation text');
   }
   private async locked<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
     const c = await this.pool.connect();
     try { await c.query('BEGIN'); await c.query("SELECT pg_advisory_xact_lock(hashtext('plot_sponsor_v1'))"); const result = await fn(c); await c.query('COMMIT'); return result; }
     catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
+  }
+  private validateInstruction(tx: Transaction, operation: SponsorOperation): void {
+    const discriminator = this.policy.discriminators[operation];
+    if (!discriminator || discriminator.length !== 8 || tx.instructions.length !== 1 || !tx.instructions[0].programId.equals(this.policy.programId) || !tx.instructions[0].data.subarray(0, 8).equals(discriminator)) throw new Error('Program or instruction not allowed');
   }
   async prepare(request: SponsorRequest): Promise<PreparedIntent> {
     if (!request.userId || request.userId.length > 256 || !request.idempotencyKey || request.idempotencyKey.length > 128 || !['place_prediction','claim'].includes(request.operation)) throw new Error('Invalid request');
@@ -67,7 +72,7 @@ export class PlotSponsor {
       const built = await this.deps.build(request);
       const tx = built.transaction;
       if (!tx.feePayer?.equals(this.sponsor.publicKey) || !tx.recentBlockhash || !Number.isSafeInteger(built.lastValidBlockHeight) || built.lastValidBlockHeight < 1) throw new Error('Invalid transaction lifetime or fee payer');
-      if (tx.instructions.length !== 1 || !tx.instructions[0].programId.equals(this.policy.programId) || this.policy.discriminators[request.operation].length !== 8 || !tx.instructions[0].data.subarray(0, 8).equals(this.policy.discriminators[request.operation])) throw new Error('Program or instruction not allowed');
+      this.validateInstruction(tx, request.operation);
       requireTransactionSigner(tx, wallet);
       const required = tx.compileMessage().accountKeys.slice(0, tx.compileMessage().header.numRequiredSignatures);
       if (required.length !== 2 || !required.some(k => k.equals(wallet)) || !required.some(k => k.equals(this.sponsor.publicKey))) throw new Error('Unexpected signers');
@@ -82,7 +87,7 @@ export class PlotSponsor {
       const cost = fee + built.rentLamports, row = usage.rows[0];
       if (BigInt(row.global) + cost > this.policy.maxGlobal || BigInt(row.personal) + cost > this.policy.maxPerUser || Number(row.recent) >= this.policy.maxRequestsPerHour || BigInt(row.accounts_global) + BigInt(built.newAccounts) > BigInt(this.policy.maxAccountsGlobal) || BigInt(row.accounts_personal) + BigInt(built.newAccounts) > BigInt(this.policy.maxAccountsPerUser)) throw new Error('Sponsor budget exceeded');
       const id = randomUUID(), raw = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-      await c.query(`INSERT INTO plot_sponsor_intents (id,user_id,idempotency_key,request_hash,wallet,message,unsigned_tx,block_height,fee,rent,new_accounts,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'prepared')`, [id,request.userId,request.idempotencyKey,requestHash,wallet.toBase58(),message,raw,built.lastValidBlockHeight,fee.toString(),built.rentLamports.toString(),built.newAccounts]);
+      await c.query(`INSERT INTO plot_sponsor_intents (id,user_id,idempotency_key,request_hash,wallet,operation,message,unsigned_tx,block_height,fee,rent,new_accounts,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'prepared')`, [id,request.userId,request.idempotencyKey,requestHash,wallet.toBase58(),request.operation,message,raw,built.lastValidBlockHeight,fee.toString(),built.rentLamports.toString(),built.newAccounts]);
       return { id, transaction: raw.toString('base64'), lastValidBlockHeight: built.lastValidBlockHeight, status: 'prepared' };
     });
   }
@@ -92,6 +97,10 @@ export class PlotSponsor {
       const q = await c.query('SELECT * FROM plot_sponsor_intents WHERE id=$1 AND user_id=$2 FOR UPDATE',[id,userId]);
       if (!q.rowCount) throw new Error('Intent not found');
       const row = q.rows[0];
+      if (!['place_prediction', 'claim'].includes(row.operation)) throw new Error('Intent requires migration');
+      const prepared = Transaction.from(row.unsigned_tx);
+      if (!prepared.feePayer?.equals(this.sponsor.publicKey)) throw new Error('Sponsor changed');
+      this.validateInstruction(prepared, row.operation);
       if (row.signed_tx) return { raw: row.signed_tx as Buffer, signature: row.signature as string, status: row.status as string };
       if (row.status !== 'prepared') throw new Error('Intent is terminal');
       const tx = Transaction.from(Buffer.from(userTransaction,'base64'));
